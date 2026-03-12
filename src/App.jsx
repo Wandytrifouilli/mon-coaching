@@ -212,7 +212,6 @@ const Shell=({children,css:c})=>(
   <div style={{background:IS_MOBILE?"#080808":"#111",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:IS_MOBILE?"flex-start":"center"}}>
     <style>{c}</style>
     {!IS_MOBILE&&<div style={{width:390,height:844,borderRadius:44,background:"#1a1a1a",boxShadow:"0 40px 120px #000a, inset 0 0 0 1px #333",padding:"12px",flexShrink:0,position:"relative"}}>
-      {/* Notch */}
       <div style={{position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",width:120,height:30,background:"#1a1a1a",borderRadius:"0 0 18px 18px",zIndex:10}}/>
       <div style={{width:"100%",height:"100%",borderRadius:34,overflow:"hidden",display:"flex",flexDirection:"column",background:G.bg}}>
         <div style={{height:44,flexShrink:0,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingBottom:6}}>
@@ -223,7 +222,7 @@ const Shell=({children,css:c})=>(
         </div>
       </div>
     </div>}
-    {IS_MOBILE&&<div style={{background:G.bg,width:"100%",maxWidth:430,minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:G.font,color:G.white}}>
+    {IS_MOBILE&&<div style={{background:G.bg,width:"100%",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:G.font,color:G.white}}>
       {children}
     </div>}
   </div>
@@ -238,25 +237,16 @@ function LoginScreen({onLogin}){
     <>
       <div style={{marginBottom:36,textAlign:"center"}} className="fu">
         <div style={{width:74,height:74,borderRadius:22,background:`linear-gradient(135deg,${G.goldLight}20,${G.gold}40)`,border:`1.5px solid ${G.gold}55`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 18px",fontSize:32}}>⚡</div>
-        <div style={{fontFamily:G.fontD,fontSize:36,fontWeight:800,color:G.white,letterSpacing:-1}}>COACH<span style={{color:G.goldLight}}>PRO</span></div>
+        <div style={{fontFamily:G.fontD,fontSize:36,fontWeight:800,color:G.white,letterSpacing:-1}}>WANDY<span style={{color:G.goldLight}}> COACH</span></div>
         <div style={{fontSize:11,color:G.grey,marginTop:5,letterSpacing:3,textTransform:"uppercase"}}>Espace personnel</div>
       </div>
       <div style={{width:"100%"}} className="fu">
         <Label>Code d'accès</Label>
-        <input value={code} onChange={e=>{setCode(e.target.value.toUpperCase());setErr(false);}} onKeyDown={e=>e.key==="Enter"&&attempt()} placeholder="Ex: SOPH2025"
+        <input value={code} onChange={e=>{setCode(e.target.value.toUpperCase());setErr(false);}} onKeyDown={e=>e.key==="Enter"&&attempt()} placeholder="Entre ton code..."
           style={{width:"100%",background:G.bg3,border:`1.5px solid ${err?G.red:G.border}`,borderRadius:10,padding:"14px 16px",color:G.white,fontSize:18,outline:"none",letterSpacing:3,textAlign:"center",marginBottom:8,transition:"border .2s"}}/>
         {err&&<div style={{color:G.red,fontSize:12,textAlign:"center",marginBottom:8}}>Code invalide — contacte ton coach.</div>}
         <div style={{height:8}}/>
         <Btn onClick={attempt} disabled={!code}>Accéder →</Btn>
-      </div>
-      <div style={{marginTop:32,padding:16,background:G.bg2,borderRadius:12,border:`1px solid ${G.border}`,width:"100%"}} className="fu">
-        <div style={{fontSize:10,color:G.greyDim,textAlign:"center",marginBottom:10,letterSpacing:1.5,textTransform:"uppercase"}}>Comptes démo</div>
-        {[["🎯 Coach","COACH2025","Accès complet"],["Sophie","SOPH2025","Cliente"],["Thomas","THOM2025","Client"]].map(([n,c,r])=>(
-          <div key={c} onClick={()=>{setCode(c);setErr(false);}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 4px",cursor:"pointer",borderBottom:`1px solid ${G.border}`}}>
-            <span style={{color:G.grey,fontSize:13}}>{n} <span style={{color:G.greyDim,fontSize:11}}>· {r}</span></span>
-            <span style={{color:G.goldLight,fontFamily:"monospace",letterSpacing:2,fontSize:13}}>{c}</span>
-          </div>
-        ))}
       </div>
     </>
   );
