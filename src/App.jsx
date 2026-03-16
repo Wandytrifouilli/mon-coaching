@@ -1383,13 +1383,16 @@ function parseRest(rest){
 function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,sessionLogs}){
   const [vidOpen,setVidOpen]=useState(false);
   const [histOpen,setHistOpen]=useState(false);
+  const [units,setUnits]=useState(ex.sets.map(()=>"kg"));
   const {timeLeft,running,start,stop}=useRestTimer();
   const allSetsDone=ex.sets.every(s=>s.done);
   const restSecs=parseRest(ex.rest||"");
-
   const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
 
-  // Récupère les 4 dernières séances où cet exercice a été fait
+  const UNITS=["kg","élastique","cal","m","km","reps"];
+
+  const setUnit=(si,u)=>setUnits(prev=>prev.map((x,i)=>i===si?u:x));
+
   const history=[];
   for(const log of (sessionLogs||[])){
     if(history.length>=4) break;
@@ -1412,7 +1415,6 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,sessionLogs}){
         </div>
       </div>
 
-      {/* Historique charges */}
       {histOpen&&history.length>0&&(
         <div style={{background:G.bg3,borderRadius:10,padding:12,marginBottom:12,border:`1px solid ${G.border}`}}>
           <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Historique récent</div>
@@ -1433,14 +1435,12 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,sessionLogs}){
         </div>
       )}
 
-      {/* Vidéo */}
       {vidOpen&&ex.videoUrl&&(
         <div style={{position:"relative",paddingBottom:"56.25%",borderRadius:8,overflow:"hidden",background:"#000",marginBottom:12}}>
           <iframe style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={ex.videoUrl} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
         </div>
       )}
 
-      {/* Chrono récupération */}
       {restSecs>0&&(
         <div style={{background:running?G.gold+"15":G.bg3,border:`1px solid ${running?G.gold+"55":G.border}`,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",transition:"all .3s"}}>
           <div>
@@ -1458,16 +1458,18 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,sessionLogs}){
         </div>
       )}
 
-      {/* Séries */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(100px,1fr))",gap:8}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
         {ex.sets.map((st,si)=>(
           <div key={si} style={{background:st.done?G.green+"18":G.bg3,borderRadius:9,padding:"10px 10px 8px",border:`1.5px solid ${st.done?G.green+"55":G.border}`,transition:"all .2s"}}>
             <div style={{fontSize:10,color:st.done?G.green:G.grey,fontWeight:700,letterSpacing:.8,marginBottom:6}}>SÉRIE {si+1} · {st.reps}</div>
-            <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:6}}>
               <input value={st.load} onChange={e=>onLoadChange(ei,si,e.target.value)} placeholder="—"
                 style={{flex:1,background:"transparent",border:"none",borderBottom:`1px solid ${G.border}`,color:st.done?G.green:G.white,fontSize:14,fontWeight:700,outline:"none",padding:"2px 0",textAlign:"center",minWidth:0}}/>
-              <span style={{fontSize:11,color:G.grey}}>kg</span>
             </div>
+            <select value={units[si]} onChange={e=>setUnit(si,e.target.value)}
+              style={{width:"100%",background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"4px 6px",color:st.done?G.green:G.grey,fontSize:11,outline:"none",marginBottom:6,cursor:"pointer"}}>
+              {UNITS.map(u=><option key={u} value={u}>{u}</option>)}
+            </select>
             <button onClick={()=>{onToggleDone(ei,si);if(!st.done&&restSecs>0)start(restSecs);}}
               style={{width:"100%",background:st.done?"transparent":G.goldLight+"18",color:st.done?G.green:G.goldLight,border:`1px solid ${st.done?G.green+"55":G.gold+"44"}`,borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
               {st.done?"✓ Fait":"Valider"}
