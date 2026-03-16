@@ -1571,6 +1571,7 @@ Règles importantes :
         })
       });
       const data=await res.json();
+      if(!res.ok) throw new Error(data.error||"Erreur serveur");
       const text=data.content?.[0]?.text||"Désolé, une erreur s'est produite.";
 
       // Cherche un bloc JSON dans la réponse
@@ -1591,7 +1592,7 @@ Règles importantes :
       const cleanText=text.replace(/```json[\s\S]*?```/g,"").trim();
       setMessages(p=>[...p,{role:"assistant",content:cleanText,programCreated}]);
     }catch(e){
-      setMessages(p=>[...p,{role:"assistant",content:"Erreur de connexion. Vérifie ta connexion internet et réessaie."}]);
+      setMessages(p=>[...p,{role:"assistant",content:`Erreur : ${e.message}`}]);
     }
     setLoading(false);
     scrollBottom();
