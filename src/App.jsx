@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
@@ -28,17 +28,128 @@ const css=`
 // SessionLog: { id, date, programId, weekIdx, dayIdx, dayLabel, exercises:[{exId, name, sets:[{reps,load}]}], notes, completed }
 
 const SEED_EX = [
+  // ── JAMBES ──
   {id:1,name:"Squat Barre",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/ultWZbUMPL8",notes:"Dos droit, genoux alignés"},
-  {id:2,name:"Développé Couché",muscle:"Pectoraux",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/rT7DgCr-3pg",notes:"Coudes à 45°"},
-  {id:3,name:"Tractions",muscle:"Dos",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/eGo4IYlbE5g",notes:"Pleine amplitude"},
+  {id:9,name:"Fentes Marchées",muscle:"Jambes",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/D7KaRcUTQeE",notes:"Genou arrière proche du sol"},
+  {id:11,name:"Leg Press",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/IZxyjW7MPJQ",notes:"Pieds écartés largeur épaules"},
+  {id:12,name:"Leg Extension",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/YyvSfVjQeL0",notes:"Extension complète, descente contrôlée"},
+  {id:13,name:"Leg Curl Allongé",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/1Tq3QdYUuHs",notes:"Hanches plaquées sur le banc"},
+  {id:14,name:"Squat Gobelet",muscle:"Jambes",equipment:"Kettlebell",videoUrl:"https://www.youtube.com/embed/MxsFDhcyFyE",notes:"Coudes entre les genoux en bas"},
+  {id:15,name:"Romanian Deadlift",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/JCXUYuzwNrM",notes:"Dos plat, hanches en arrière"},
+  {id:16,name:"Hip Thrust",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/xDmFkJxPzeM",notes:"Extension complète des hanches"},
+  {id:17,name:"Step Up",muscle:"Jambes",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/dQqApCGd5Ss",notes:"Genou à 90° en haut"},
+  {id:18,name:"Hack Squat",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/0tn5K9NlCfo",notes:"Descendre à 90°, genoux alignés"},
+  {id:19,name:"Mollets Debout",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/gwLzBJYoWlI",notes:"Amplitude maximale, pause en haut"},
+  {id:20,name:"Good Morning",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/YA-h3n9L4YU",notes:"Dos plat, légère flexion genoux"},
+  {id:21,name:"Wall Sit",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/y-wV4Venusw",notes:"Cuisses parallèles au sol"},
+  {id:22,name:"Box Jump",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/52r_Ul5k03g",notes:"Réception souple, genoux fléchis"},
+  {id:23,name:"Bulgarian Split Squat",muscle:"Jambes",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/2C-uNgKwPLE",notes:"Pied arrière surélevé, descente verticale"},
+
+  // ── PECTORAUX ──
+  {id:2,name:"Développé Couché",muscle:"Pectoraux",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/rT7DgCr-3pg",notes:"Coudes à 45°, amplitude complète"},
+  {id:24,name:"Développé Couché Haltères",muscle:"Pectoraux",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/VmB1G1K7v94",notes:"Rotation des poignets en haut"},
+  {id:25,name:"Développé Incliné Barre",muscle:"Pectoraux",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/jPLdzuHckI8",notes:"Inclinaison 30-45°, faisceau sup"},
+  {id:26,name:"Développé Incliné Haltères",muscle:"Pectoraux",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/8iPEnn-ltC8",notes:"Coudes légèrement fléchis en haut"},
+  {id:27,name:"Écarté Haltères Plat",muscle:"Pectoraux",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/eozdVDA78K0",notes:"Arc léger, ne pas descendre trop bas"},
+  {id:28,name:"Dips Pectoraux",muscle:"Pectoraux",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/2z8JmcrW-As",notes:"Penché en avant, coudes écartés"},
+  {id:29,name:"Pec Deck Machine",muscle:"Pectoraux",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/Z57CtFmRMxA",notes:"Contraction maximale en centre"},
+  {id:30,name:"Pompes",muscle:"Pectoraux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/IODxDxX7oi4",notes:"Corps gainé, coudes à 45°"},
+  {id:31,name:"Cable Crossover",muscle:"Pectoraux",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/taI4XduLpTk",notes:"Mains se croisent en bas du mouvement"},
+
+  // ── DOS ──
+  {id:3,name:"Tractions",muscle:"Dos",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/eGo4IYlbE5g",notes:"Pleine amplitude, sans élan"},
   {id:4,name:"Soulevé de Terre",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/op9kVnSso6Q",notes:"Barre proche du corps"},
-  {id:5,name:"Développé Militaire",muscle:"Épaules",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/2yjwXTZQDDI",notes:"Core serré"},
-  {id:6,name:"Curl Haltères",muscle:"Biceps",equipment:"Haltères",videoUrl:"",notes:"Supination en haut"},
-  {id:7,name:"Triceps Poulie",muscle:"Triceps",equipment:"Poulie",videoUrl:"",notes:"Coudes fixes"},
-  {id:8,name:"Gainage Planche",muscle:"Abdominaux",equipment:"Aucun",videoUrl:"",notes:"Bassin neutre"},
-  {id:9,name:"Fentes Marchées",muscle:"Jambes",equipment:"Haltères",videoUrl:"",notes:"Genou arrière bas"},
-  {id:10,name:"Rowing Barre",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/G8l_8chR5BE",notes:"Dos parallèle"},
+  {id:10,name:"Rowing Barre",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/G8l_8chR5BE",notes:"Dos parallèle au sol, coudes hauts"},
+  {id:32,name:"Tirage Vertical Poulie",muscle:"Dos",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/CAwf7n6Luuc",notes:"Coudes vers le bas, omoplate rétractées"},
+  {id:33,name:"Rowing Haltère Unilatéral",muscle:"Dos",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/roCP3W-lfKo",notes:"Dos plat, tirer vers la hanche"},
+  {id:34,name:"Tirage Horizontal Poulie",muscle:"Dos",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/GZbfZ033f74",notes:"Serrer les omoplates en fin de mouvement"},
+  {id:35,name:"Hyperextension",muscle:"Dos",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/ph3pddpKzzw",notes:"Extension sans dépasser la ligne du corps"},
+  {id:36,name:"Tirage Nuque Poulie",muscle:"Dos",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/eSYBCuBDDHo",notes:"Barre derrière la tête, coudes pointés vers le bas"},
+  {id:37,name:"Face Pull",muscle:"Dos",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/rep-qVOkqgk",notes:"Tirer vers le visage, coudes hauts"},
+  {id:38,name:"Shrugs Barre",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/cJRVVxmytaM",notes:"Élévation verticale, pas de rotation"},
+  {id:39,name:"Déficit Deadlift",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/bDFBSNNSjUs",notes:"Sur plateforme surélevée, amplitude accrue"},
+
+  // ── ÉPAULES ──
+  {id:5,name:"Développé Militaire",muscle:"Épaules",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/2yjwXTZQDDI",notes:"Core serré, regard droit"},
+  {id:40,name:"Élévations Latérales",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/3VcKaXpzqRo",notes:"Légère flexion des coudes, montée lente"},
+  {id:41,name:"Développé Arnold",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/6Z15_WdXmVw",notes:"Rotation des poignets pendant le mouvement"},
+  {id:42,name:"Oiseau Haltères",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/Z6n49aQTHFs",notes:"Buste penché, coudes légèrement fléchis"},
+  {id:43,name:"Upright Row",muscle:"Épaules",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/um3SX3fZSqc",notes:"Coudes au-dessus des poignets"},
+  {id:44,name:"Élévations Frontales",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/sOiBHNGlBzU",notes:"Montée jusqu'à hauteur des épaules"},
+  {id:45,name:"Développé Haltères Assis",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/qEwKCR5JCog",notes:"Dos droit contre le banc"},
+  {id:46,name:"Reverse Fly Poulie",muscle:"Épaules",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/ea7TXQMiMnE",notes:"Câbles croisés, bras légèrement fléchis"},
+
+  // ── BICEPS ──
+  {id:6,name:"Curl Haltères",muscle:"Biceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/sAq_ocpRh_I",notes:"Supination en haut du mouvement"},
+  {id:47,name:"Curl Barre",muscle:"Biceps",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/kwG2ipFRgfo",notes:"Coudes fixes le long du corps"},
+  {id:48,name:"Curl Incliné",muscle:"Biceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/soxrZlIl35U",notes:"Bras perpendiculaires au sol, longue portion"},
+  {id:49,name:"Curl Marteau",muscle:"Biceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/TwD-YGVP4Bk",notes:"Poignets neutres, brachial ciblé"},
+  {id:50,name:"Curl Poulie Basse",muscle:"Biceps",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/NFzTWp2qpiE",notes:"Tension constante, coude fixe"},
+  {id:51,name:"Curl Concentration",muscle:"Biceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/0AUGkch3tzc",notes:"Coude contre la cuisse, isolation maximale"},
+  {id:52,name:"Curl Barre EZ",muscle:"Biceps",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/zG2-v6RxOEo",notes:"Prise en supination, moins de stress poignets"},
+  {id:53,name:"Curl Spider",muscle:"Biceps",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/N0bLDTFcRug",notes:"Poitrine contre le banc incliné"},
+
+  // ── TRICEPS ──
+  {id:7,name:"Triceps Poulie",muscle:"Triceps",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/2-LAMcpzODU",notes:"Coudes fixes, extension complète"},
+  {id:54,name:"Dips Triceps",muscle:"Triceps",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/0326dy_-CzM",notes:"Corps droit, coudes le long du corps"},
+  {id:55,name:"Skull Crusher",muscle:"Triceps",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/d_KZxkY_0cM",notes:"Descendre vers le front, coudes fixes"},
+  {id:56,name:"Extension Triceps Haltère",muscle:"Triceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/YbX7Wd8jQ-Q",notes:"Coudes serrés, longue portion ciblée"},
+  {id:57,name:"Kickback Triceps",muscle:"Triceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/6SS6K3lAwZ8",notes:"Buste parallèle au sol, extension complète"},
+  {id:58,name:"Close Grip Bench Press",muscle:"Triceps",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/nEF0bv2FW94",notes:"Prise serrée, coudes le long du corps"},
+  {id:59,name:"Triceps Corde Poulie",muscle:"Triceps",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/kiuVA0gs3EI",notes:"Écarter la corde en bas du mouvement"},
+
+  // ── ABDOMINAUX ──
+  {id:8,name:"Gainage Planche",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/pSHjTRCQxIw",notes:"Bassin neutre, respiration continue"},
+  {id:60,name:"Crunch",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/Xyd_fa5zoEU",notes:"Mains derrière la tête, menton décollé"},
+  {id:61,name:"Relevé de Jambes",muscle:"Abdominaux",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/Pr1ieGZ5atk",notes:"Jambes tendues, montée lente"},
+  {id:62,name:"Ab Wheel",muscle:"Abdominaux",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/ZJOG6_5gNUI",notes:"Creuser le ventre, ne pas cambrer"},
+  {id:63,name:"Mountain Climbers",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/nmwgirgXLYM",notes:"Hanches basses, rythme rapide"},
+  {id:64,name:"Russian Twist",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/wkD8rjkodUI",notes:"Pieds décollés, rotation complète"},
+  {id:65,name:"Crunch Poulie Haute",muscle:"Abdominaux",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/AV5PGc8E4-4",notes:"Contracte les abdos vers les genoux"},
+  {id:66,name:"Planche Latérale",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/K2gOjwfj-lA",notes:"Hanches alignées, corps en planche"},
+  {id:67,name:"V-Sit",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/7UGzOJrKSqw",notes:"Corps en V, abdos contractés"},
+  {id:68,name:"Dead Bug",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/4XLEnwUr1d8",notes:"Dos plaqué au sol, mouvement lent"},
+
+  // ── CROSSFIT / FONCTIONNEL ──
+  {id:69,name:"Burpees",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/dZgVxmf6jkA",notes:"Réception souple, saut vertical complet"},
+  {id:70,name:"Kettlebell Swing",muscle:"Dos",equipment:"Kettlebell",videoUrl:"https://www.youtube.com/embed/YSxHifyI6s8",notes:"Propulsion des hanches, bras passifs"},
+  {id:71,name:"Thruster",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/L219ltL15zk",notes:"Squat + développé en un mouvement fluide"},
+  {id:72,name:"Wall Ball",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/fpUD0mcFp_0",notes:"Squat profond, lancer haut sur le mur"},
+  {id:73,name:"Box Jump",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/52r_Xl5k03g",notes:"Réception souple, extension complète"},
+  {id:74,name:"Clean & Jerk",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/oxYIjfNBsZ0",notes:"Puissance des hanches, saisie rapide"},
+  {id:75,name:"Snatch",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/9xQp2sldyts",notes:"Prise large, extension explosive"},
+  {id:76,name:"Power Clean",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/KjGvwQl8tis",notes:"Triple extension, amortissement actif"},
+  {id:77,name:"Toes to Bar",muscle:"Abdominaux",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/6dHvNBDMQY4",notes:"Élan contrôlé, toucher la barre avec les pieds"},
+  {id:78,name:"Double Under",muscle:"Jambes",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/82rd87EMTP4",notes:"Poignets souples, saut régulier"},
+  {id:79,name:"Rope Climb",muscle:"Dos",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/mMJpFrJEnc4",notes:"Prise alternée, jambes en appui"},
+  {id:80,name:"Push Press",muscle:"Épaules",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/iaBVSJm78ko",notes:"Légère flexion genoux, extension explosive"},
+  {id:81,name:"Rowing Ergomètre",muscle:"Dos",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/zBjCMFGkYOU",notes:"Jambes, hanches, bras dans l'ordre"},
+  {id:82,name:"Devil Press",muscle:"Pectoraux",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/aHPfuFmhiGE",notes:"Burpee + Snatch haltères combinés"},
+  {id:83,name:"Sandbag Carry",muscle:"Dos",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/iqKLjNBFjcA",notes:"Sac sur l'épaule, pas réguliers"},
+  {id:84,name:"GHD Sit-Up",muscle:"Abdominaux",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/1pbZ8mX3hDY",notes:"Amplitude complète, contrôle la descente"},
+  {id:85,name:"L-Sit",muscle:"Abdominaux",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/IUZJoSP66HI",notes:"Jambes parallèles au sol, bras tendus"},
+  {id:86,name:"Muscle Up",muscle:"Dos",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/bN5_V1OKlSY",notes:"Transition rapide traction → dips"},
+  {id:87,name:"Handstand Push-Up",muscle:"Épaules",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/4qeNMjmQNfM",notes:"Mains à largeur épaules, descente contrôlée"},
+  {id:88,name:"Ring Dips",muscle:"Pectoraux",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/MMnIVymOEXo",notes:"Anneaux stables, coudes le long du corps"},
+  {id:89,name:"Pistol Squat",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/vq5-vdgJc0I",notes:"Jambe tendue devant, descente lente"},
+  {id:90,name:"Farmers Walk",muscle:"Dos",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/Fkzk_RqlYig",notes:"Dos droit, pas réguliers et rapides"},
+  {id:91,name:"Battle Rope",muscle:"Épaules",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/dNE4ZCsHDoo",notes:"Genoux fléchis, ondes régulières"},
+  {id:92,name:"Turkish Get-Up",muscle:"Épaules",equipment:"Kettlebell",videoUrl:"https://www.youtube.com/embed/0bWRPC49-KI",notes:"Bras tendu, regard sur la cloche"},
+  {id:93,name:"Sumo Deadlift High Pull",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/g5kLayl1UQI",notes:"Prise étroite, extension + tirage"},
+  {id:94,name:"Push-Up Ring",muscle:"Pectoraux",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/7ueVPPVoqRQ",notes:"Anneaux instables, gainage maximal"},
+  {id:95,name:"Sled Push",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/bGIoSc1Cj8I",notes:"Corps incliné, pousser depuis les hanches"},
+  {id:96,name:"Air Squat",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/C_VtOYc6j5c",notes:"Genoux dans l'axe, talons au sol"},
+  {id:97,name:"Kettlebell Clean",muscle:"Dos",equipment:"Kettlebell",videoUrl:"https://www.youtube.com/embed/0Z0oBUPL0P8",notes:"Rotation du poignet en haut"},
+  {id:98,name:"Planche Push-Up",muscle:"Pectoraux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/IODxDxX7oi4",notes:"Position basse, corps gainé"},
+  {id:99,name:"Overhead Squat",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/RD_vUnqwqqI",notes:"Barre au-dessus de la tête, dos droit"},
+  {id:100,name:"Atlas Stone",muscle:"Dos",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/p4cn0TQOAPA",notes:"Soulever en serrant la pierre contre le corps"},
+  {id:101,name:"Bear Crawl",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/gBEAzBMdQ-8",notes:"Genoux à 5cm du sol, dos plat"},
+  {id:102,name:"Dumbbell Snatch",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/yhh_R2Nt_08",notes:"Extension explosive, verrouillage en haut"},
+  {id:103,name:"Inverted Row",muscle:"Dos",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/LK3E-40LRHE",notes:"Corps rigide, tirer le sternum vers la barre"},
+  {id:104,name:"Broad Jump",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/WGHBLObUUH0",notes:"Saut en longueur, réception souple"},
+  {id:105,name:"Ski Erg",muscle:"Dos",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/FY-N3pqBBMI",notes:"Traction vers le bas, hanches en arrière"},
 ];
+
 
 const mkEx = (exId,sets,reps,rest,load="")=>({exId,sets,reps,rest,targetLoad:load});
 const SEED_PROGRAMS = [
@@ -165,11 +276,44 @@ const Modal=({onClose,title,children})=>(
 );
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
+// ─── PERSISTANCE LOCALSTORAGE ─────────────────────────────────────────────────
+function useLocalStorage(key, seed){
+  const [val, setVal] = useState(()=>{
+    try{
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : seed;
+    }catch{ return seed; }
+  });
+  const set = (fn) => {
+    setVal(prev=>{
+      const next = typeof fn === "function" ? fn(prev) : fn;
+      try{ localStorage.setItem(key, JSON.stringify(next)); }catch{}
+      return next;
+    });
+  };
+  return [val, set];
+}
+
 export default function App(){
   const [auth,setAuth]=useState("login");
-  const [exercises,setExercises]=useState(SEED_EX);
-  const [programs,setPrograms]=useState(SEED_PROGRAMS);
-  const [clients,setClients]=useState(SEED_CLIENTS);
+  const [exercises,setExercises]=useLocalStorage("wc_exercises", SEED_EX);
+  const [programs,setPrograms]=useLocalStorage("wc_programs", SEED_PROGRAMS);
+  const [clients,setClients]=useLocalStorage("wc_clients", SEED_CLIENTS);
+
+  // Migration : ajoute les nouveaux exercices seed sans écraser les existants
+  useState(()=>{
+    const stored = localStorage.getItem("wc_exercises");
+    if(stored){
+      const existing = JSON.parse(stored);
+      const existingIds = new Set(existing.map(e=>e.id));
+      const newOnes = SEED_EX.filter(e=>!existingIds.has(e.id));
+      if(newOnes.length>0){
+        const merged = [...existing, ...newOnes];
+        localStorage.setItem("wc_exercises", JSON.stringify(merged));
+        setExercises(merged);
+      }
+    }
+  });
   const [currentClient,setCurrentClient]=useState(null);
   const [coachView,setCoachView]=useState("dashboard");
   const [selClient,setSelClient]=useState(null);
@@ -194,13 +338,15 @@ export default function App(){
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {coachView==="dashboard"&&<Dashboard clients={clients} programs={programs} exercises={exercises} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}} selP={p=>{setSelProgram(p);setCoachView("program-detail");}} onLogout={logout}/>}
         {coachView==="clients"&&<ClientsList clients={clients} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}}/>}
-        {coachView==="client-detail"&&selClient&&<ClientDetail client={clients.find(c=>c.id===selClient.id)||selClient} clients={clients} setClients={setClients} setSel={setSelClient} programs={programs} exercises={exercises} go={setCoachView} selP={p=>{setSelProgram(p);setCoachView("program-detail");}}/>}
+        {coachView==="client-detail"&&selClient&&<ClientDetail client={clients.find(c=>c.id===selClient.id)||selClient} clients={clients} setClients={setClients} setPrograms={setPrograms} setSel={setSelClient} programs={programs} exercises={exercises} go={setCoachView} selP={p=>{setSelProgram(p);setCoachView("program-detail");}}/>}
         {coachView==="new-client"&&<NewClient setClients={setClients} go={setCoachView}/>}
-        {coachView==="programs"&&<ProgramsList programs={programs} exercises={exercises} go={setCoachView} sel={p=>{setSelProgram(p);setCoachView("program-detail");}}/>}
-        {coachView==="program-detail"&&selProgram&&<ProgramDetail program={selProgram} exercises={exercises} go={setCoachView}/>}
+        {coachView==="programs"&&<ProgramsList programs={programs} setPrograms={setPrograms} setClients={setClients} exercises={exercises} go={setCoachView} sel={p=>{setSelProgram(p);setCoachView("program-detail");}} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
+        {coachView==="program-detail"&&selProgram&&<ProgramDetail program={programs.find(x=>x.id===selProgram.id)||selProgram} exercises={exercises} go={setCoachView} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
+        {coachView==="edit-program"&&selProgram&&<EditProgram program={programs.find(x=>x.id===selProgram.id)||selProgram} exercises={exercises} setPrograms={setPrograms} go={setCoachView} setSel={setSelProgram}/>}
         {coachView==="new-program"&&<NewProgram exercises={exercises} setPrograms={setPrograms} go={setCoachView}/>}
         {coachView==="exercises"&&<ExLib exercises={exercises} setExercises={setExercises} go={setCoachView}/>}
         {coachView==="new-exercise"&&<NewEx setExercises={setExercises} go={setCoachView}/>}
+        {coachView==="ai-coach"&&<AICoach exercises={exercises} setPrograms={setPrograms} go={setCoachView}/>}
       </div>
       <CoachNav view={coachView} setView={setCoachView}/>
     </Shell>
@@ -270,14 +416,15 @@ function LoginScreen({onLogin}){
 
 // ─── COACH NAV ────────────────────────────────────────────────────────────────
 function CoachNav({view,setView}){
-  const items=[{key:"dashboard",icon:"◈",label:"Accueil"},{key:"clients",icon:"◉",label:"Clients"},{key:"programs",icon:"▦",label:"Prog."},{key:"exercises",icon:"⊕",label:"Exercices"}];
-  const ak=v=>{if(["client-detail","new-client"].includes(v))return"clients";if(["program-detail","new-program"].includes(v))return"programs";if(v==="new-exercise")return"exercises";return v;};
+  const items=[{key:"dashboard",icon:"◈",label:"Accueil"},{key:"clients",icon:"◉",label:"Clients"},{key:"programs",icon:"▦",label:"Prog."},{key:"exercises",icon:"⊕",label:"Exercices"},{key:"ai-coach",icon:"✦",label:"IA Coach"}];
+  const ak=v=>{if(["client-detail","new-client"].includes(v))return"clients";if(["program-detail","new-program","edit-program"].includes(v))return"programs";if(v==="new-exercise")return"exercises";return v;};
   return(
     <nav style={{flexShrink:0,width:"100%",background:G.bg2,borderTop:`1px solid ${G.border}`,display:"flex",zIndex:100}}>
       {items.map(({key,icon,label})=>{
         const a=ak(view)===key;
-        return<button key={key} onClick={()=>setView(key)} style={{flex:1,padding:"12px 0 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:3,background:"none",border:"none",cursor:"pointer",color:a?G.goldLight:G.greyDim,fontSize:10,fontWeight:600,letterSpacing:.5,transition:"color .2s",borderTop:a?`2px solid ${G.goldLight}`:"2px solid transparent"}}>
-          <span style={{fontSize:18}}>{icon}</span><span>{label}</span>
+        const isAI=key==="ai-coach";
+        return<button key={key} onClick={()=>setView(key)} style={{flex:1,padding:"12px 0 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:3,background:"none",border:"none",cursor:"pointer",color:a?(isAI?G.goldLight:G.goldLight):isAI?G.gold+"88":G.greyDim,fontSize:10,fontWeight:600,letterSpacing:.5,transition:"color .2s",borderTop:a?`2px solid ${G.goldLight}`:"2px solid transparent"}}>
+          <span style={{fontSize:isAI?20:18}}>{icon}</span><span>{label}</span>
         </button>;
       })}
     </nav>
@@ -354,7 +501,7 @@ function ClientsList({clients,go,sel}){
 }
 
 // ─── CLIENT DETAIL (coach side) ───────────────────────────────────────────────
-function ClientDetail({client,clients,setClients,setSel,programs,exercises,go,selP}){
+function ClientDetail({client,clients,setClients,setPrograms,setSel,programs,exercises,go,selP}){
   const [tab,setTab]=useState("program");
   const [showLog,setShowLog]=useState(false);
   const [logForm,setLogForm]=useState({date:new Date().toISOString().split("T")[0],programId:"",weekIdx:"",dayIdx:"",completed:true,notes:""});
@@ -362,7 +509,14 @@ function ClientDetail({client,clients,setClients,setSel,programs,exercises,go,se
   const [editNut,setEditNut]=useState(false);
 
   const upd=fn=>{setClients(p=>p.map(c=>c.id===client.id?fn(c):c));setSel(fn(client));};
+  const removeProgram=pid=>upd(c=>({...c,programs:c.programs.filter(x=>x!==pid)}));
   const toggle=pid=>upd(c=>({...c,programs:c.programs.includes(pid)?c.programs.filter(x=>x!==pid):[...c.programs,pid]}));
+  const copyAndEdit=(p)=>{
+    const copy={...JSON.parse(JSON.stringify(p)),id:Date.now(),name:`${p.name} (${client.name.split(" ")[0]})`,_copy:true};
+    setPrograms(prev=>[...prev,copy]);
+    upd(c=>({...c,programs:[...c.programs.filter(x=>x!==p.id),copy.id]}));
+    selP(copy);
+  };
   const saveNut=()=>{upd(c=>({...c,nutrition:nutForm}));setEditNut(false);};
   const saveLog=()=>{
     const prog=programs.find(p=>p.id===Number(logForm.programId));
@@ -402,8 +556,11 @@ function ClientDetail({client,clients,setClients,setSel,programs,exercises,go,se
           {assigned.map(p=>(
             <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${G.border}`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <div style={{fontWeight:700}}>{p.name}</div>
-                <BtnSm variant="danger" onClick={()=>toggle(p.id)}>Retirer</BtnSm>
+                <div style={{fontWeight:700,flex:1}}>{p.name}{p._copy&&<span style={{fontSize:10,color:G.gold,marginLeft:8,fontWeight:400}}>copie perso</span>}</div>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <BtnSm onClick={()=>copyAndEdit(p)}>✏️</BtnSm>
+                  <BtnSm variant="danger" onClick={()=>toggle(p.id)}>Retirer</BtnSm>
+                </div>
               </div>
               <div style={{fontSize:12,color:G.grey,marginBottom:10}}>{p.weeks.length} semaine{p.weeks.length>1?"s":""} · {p.weeks[0]?.days.length||0} jours/sem</div>
               <BtnSm onClick={()=>selP(p)}>Voir le programme →</BtnSm>
@@ -524,20 +681,29 @@ function NewClient({setClients,go}){
 }
 
 // ─── PROGRAMS LIST ────────────────────────────────────────────────────────────
-function ProgramsList({programs,exercises,go,sel}){
+function ProgramsList({programs,setPrograms,setClients,exercises,go,sel,onEdit}){
+  const deleteProgram=(pid)=>{
+    setPrograms(p=>p.filter(x=>x.id!==pid));
+    setClients(cs=>cs.map(c=>({...c,programs:c.programs.filter(x=>x!==pid)})));
+  };
   return(
     <div style={{padding:"28px 20px 0"}} className="fu">
       <PageH title="PROGRAMMES" subtitle={`${programs.length} créés`} action={<BtnSm onClick={()=>go("new-program")}>+ Nouveau</BtnSm>}/>
+      {programs.length===0&&<Empty text="Aucun programme créé"/>}
       {programs.map((p,i)=>(
-        <div key={p.id} onClick={()=>sel(p)} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,cursor:"pointer",animationDelay:`${i*50}ms`}} className="fu">
+        <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,animationDelay:`${i*50}ms`}} className="fu">
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div>
+            <div style={{flex:1,cursor:"pointer"}} onClick={()=>sel(p)}>
               <div style={{fontWeight:700,fontSize:15,marginBottom:8}}>{p.name}</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 {[p.category,p.level,`${p.weeks.length} sem.`,`${p.weeks[0]?.days.length||0} j/sem`].filter(Boolean).map(t=><Tag key={t} text={t} color={G.grey}/>)}
               </div>
             </div>
-            <div style={{color:G.greyDim,fontSize:20}}>›</div>
+            <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:10}}>
+              <BtnSm onClick={()=>onEdit(p)}>✏️</BtnSm>
+              <BtnSm onClick={()=>sel(p)}>›</BtnSm>
+              <BtnSm variant="danger" onClick={()=>deleteProgram(p.id)}>✕</BtnSm>
+            </div>
           </div>
         </div>
       ))}
@@ -546,7 +712,7 @@ function ProgramsList({programs,exercises,go,sel}){
 }
 
 // ─── PROGRAM DETAIL (coach) ───────────────────────────────────────────────────
-function ProgramDetail({program,exercises,go}){
+function ProgramDetail({program,exercises,go,onEdit}){
   const [weekIdx,setWeekIdx]=useState(0);
   const [dayIdx,setDayIdx]=useState(0);
   const [playing,setPlaying]=useState(null);
@@ -555,8 +721,14 @@ function ProgramDetail({program,exercises,go}){
   return(
     <div style={{padding:"28px 20px 0"}} className="fu">
       <BackBtn onClick={()=>go("programs")} label="Programmes"/>
-      <PageH title={program.name} subtitle={`${program.weeks.length} semaine${program.weeks.length>1?"s":""}`}/>
-      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:G.fontD,fontSize:26,fontWeight:800,letterSpacing:-1}} className="gl">{program.name}</div>
+          <div style={{fontSize:12,color:G.grey,marginTop:6}}>{program.weeks.length} semaine{program.weeks.length>1?"s":""}</div>
+        </div>
+        <BtnSm onClick={()=>onEdit(program)}>✏️ Modifier</BtnSm>
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap",marginTop:10}}>
         {[program.category,program.level].filter(Boolean).map(t=><Tag key={t} text={t}/>)}
       </div>
 
@@ -767,6 +939,132 @@ function NewProgram({exercises,setPrograms,go}){
   );
 }
 
+// ─── EDIT PROGRAM ─────────────────────────────────────────────────────────────
+function EditProgram({program,exercises,setPrograms,go,setSel}){
+  const [form,setForm]=useState(JSON.parse(JSON.stringify(program)));
+  const [weekIdx,setWeekIdx]=useState(0);
+  const [dayIdx,setDayIdx]=useState(0);
+  const [picker,setPicker]=useState(false);
+  const [filter,setFilter]=useState("Tous");
+
+  const week=form.weeks[weekIdx];
+  const day=week?.days[dayIdx];
+  const filtered=exercises.filter(e=>filter==="Tous"||e.muscle===filter);
+
+  const addWeek=()=>{if(form.weeks.length>=12)return;const n=form.weeks.length+1;setForm(p=>({...p,weeks:[...p.weeks,{label:`Semaine ${n}`,days:[{label:"Séance A",exercises:[]}]}]}));setWeekIdx(form.weeks.length);setDayIdx(0);};
+  const removeWeek=wi=>{if(form.weeks.length<=1)return;setForm(p=>({...p,weeks:p.weeks.filter((_,i)=>i!==wi)}));setWeekIdx(Math.max(0,weekIdx-(wi<=weekIdx?1:0)));setDayIdx(0);};
+  const addDay=()=>{if(week.days.length>=7)return;const labels=["A","B","C","D","E","F","G"];const nd={label:`Séance ${labels[week.days.length]||week.days.length+1}`,exercises:[]};setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:[...w.days,nd]})}));setDayIdx(week.days.length);};
+  const removeDay=di=>{if(week.days.length<=1)return;setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.filter((_,j)=>j!==di)})}));setDayIdx(Math.max(0,dayIdx-(di<=dayIdx?1:0)));};
+  const updateLabel=(type,idx,val)=>{if(type==="week")setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==idx?w:{...w,label:val})}));else setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.map((d,j)=>j!==idx?d:{...d,label:val})})}));};
+  const toggleEx=ex=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.find(e=>e.exId===ex.id)?d.exercises.filter(e=>e.exId!==ex.id):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:""}]})})}));};
+  const updateExField=(exId,field,val)=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.map(e=>e.exId===exId?{...e,[field]:val}:e)})})}));};
+
+  const save=()=>{
+    setPrograms(p=>p.map(x=>x.id===form.id?form:x));
+    setSel(form);
+    go("program-detail");
+  };
+
+  return(
+    <div style={{padding:"28px 20px 0"}} className="fu">
+      <BackBtn onClick={()=>go("program-detail")} label="Programme"/>
+      <PageH title="MODIFIER LE PROGRAMME"/>
+      <Inp label="Nom du programme" value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <Inp label="Catégorie" value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))}/>
+        <div style={{marginBottom:14}}>
+          <Label>Niveau</Label>
+          <select value={form.level} onChange={e=>setForm(p=>({...p,level:e.target.value}))} style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"11px 14px",color:G.white,fontSize:13,outline:"none"}}>
+            {["Débutant","Intermédiaire","Avancé"].map(l=><option key={l}>{l}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div style={{marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <Label>Semaines ({form.weeks.length}/12)</Label>
+          {form.weeks.length<12&&<BtnSm onClick={addWeek}>+ Semaine</BtnSm>}
+        </div>
+        <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6}}>
+          {form.weeks.map((w,i)=>(
+            <button key={i} onClick={()=>{setWeekIdx(i);setDayIdx(0);}} style={{flexShrink:0,padding:"7px 12px",background:weekIdx===i?G.goldLight+"22":G.bg3,color:weekIdx===i?G.goldLight:G.grey,border:`1px solid ${weekIdx===i?G.goldLight+"55":G.border}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+              S{i+1}<span style={{marginLeft:4,fontSize:10,opacity:.6}}>({w.days.reduce((a,d)=>a+d.exercises.length,0)})</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{background:G.bg2,borderRadius:12,padding:16,border:`1px solid ${G.border}`,marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <input value={week?.label||""} onChange={e=>updateLabel("week",weekIdx,e.target.value)} style={{background:"transparent",border:"none",color:G.goldLight,fontSize:15,fontWeight:800,outline:"none",fontFamily:G.fontD,letterSpacing:.5,width:"55%"}}/>
+          <div style={{display:"flex",gap:6}}>
+            {form.weeks.length>1&&<BtnSm variant="danger" onClick={()=>removeWeek(weekIdx)}>✕ Sem.</BtnSm>}
+            {week&&week.days.length<7&&<BtnSm onClick={addDay}>+ Jour</BtnSm>}
+          </div>
+        </div>
+        {week&&<div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:6,marginBottom:12}}>
+          {week.days.map((d,i)=>(
+            <button key={i} onClick={()=>setDayIdx(i)} style={{flexShrink:0,padding:"5px 12px",background:dayIdx===i?G.bg4:G.bg3,color:dayIdx===i?G.white:G.grey,border:`1px solid ${dayIdx===i?G.border+"88":G.border}`,borderRadius:7,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+              {d.label}<span style={{marginLeft:4,fontSize:10,opacity:.6}}>({d.exercises.length})</span>
+            </button>
+          ))}
+        </div>}
+        {day&&<>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <input value={day.label} onChange={e=>updateLabel("day",dayIdx,e.target.value)} style={{background:"transparent",border:"none",color:G.white,fontSize:14,fontWeight:700,outline:"none",width:"55%"}}/>
+            <div style={{display:"flex",gap:6}}>
+              {week.days.length>1&&<BtnSm variant="danger" onClick={()=>removeDay(dayIdx)}>✕</BtnSm>}
+              <BtnSm onClick={()=>{setFilter("Tous");setPicker(true);}}>+ Exercices</BtnSm>
+            </div>
+          </div>
+          {day.exercises.length===0&&<div style={{textAlign:"center",padding:"16px 0",color:G.greyDim,fontSize:13}}>Aucun exercice</div>}
+          {day.exercises.map((pe,i)=>{
+            const ex=exercises.find(e=>e.id===pe.exId);
+            return(
+              <div key={pe.exId} style={{background:G.bg3,borderRadius:9,padding:12,marginBottom:8,border:`1px solid ${G.border}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <div style={{fontWeight:700,fontSize:13}}>{i+1}. {ex?.name}</div>
+                  <BtnSm variant="danger" onClick={()=>toggleEx(ex)}>✕</BtnSm>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
+                  {[["Séries","sets","number"],["Reps","reps","text"],["Repos","rest","text"],["Charge","targetLoad","text"]].map(([l,k,t])=>(
+                    <div key={k}>
+                      <div style={{fontSize:10,color:G.grey,letterSpacing:.8,textTransform:"uppercase",marginBottom:3}}>{l}</div>
+                      <input type={t} value={pe[k]} placeholder={k==="targetLoad"?"optionnel":""} onChange={e=>updateExField(pe.exId,k,t==="number"?Number(e.target.value):e.target.value)}
+                        style={{width:"100%",background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"6px 7px",color:G.white,fontSize:12,outline:"none"}}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </>}
+      </div>
+
+      <Btn onClick={save}>✓ Enregistrer les modifications</Btn>
+
+      {picker&&(
+        <Modal onClose={()=>setPicker(false)} title={`Exercices — ${day?.label||""}`}>
+          <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:12}}>
+            {MUSCLES.map(m=>(
+              <button key={m} onClick={()=>setFilter(m)} style={{flexShrink:0,padding:"5px 12px",background:filter===m?G.goldLight+"22":G.bg3,color:filter===m?G.goldLight:G.grey,border:`1px solid ${filter===m?G.goldLight+"44":G.border}`,borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>{m}</button>
+            ))}
+          </div>
+          {filtered.map(ex=>{
+            const sel=!!day?.exercises.find(e=>e.exId===ex.id);
+            return(
+              <div key={ex.id} onClick={()=>toggleEx(ex)} style={{background:sel?G.goldLight+"0d":G.bg3,borderRadius:10,padding:12,marginBottom:8,border:`1px solid ${sel?G.goldLight+"55":G.border}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{fontWeight:600,fontSize:14}}>{ex.name}</div><div style={{fontSize:11,color:G.grey,marginTop:2}}>{ex.muscle} · {ex.equipment}</div></div>
+                <div style={{width:22,height:22,borderRadius:6,border:`1.5px solid ${sel?G.goldLight:G.greyDim}`,background:sel?G.goldLight:"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:G.bg,fontSize:13,fontWeight:800}}>{sel?"✓":""}</div>
+              </div>
+            );
+          })}
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 // ─── EXERCISES LIBRARY ────────────────────────────────────────────────────────
 function ExLib({exercises,setExercises,go}){
   const [filter,setFilter]=useState("Tous");
@@ -858,7 +1156,7 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
   const startSession=(prog,weekIdx,day,dayIdx)=>{
     const exEntries=day.exercises.map(pe=>{
       const ex=exercises.find(e=>e.id===pe.exId);
-      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",muscle:ex?.muscle||"",sets:Array.from({length:pe.sets},()=>({reps:pe.reps,load:pe.targetLoad||"",done:false}))};
+      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",muscle:ex?.muscle||"",rest:pe.rest||"",sets:Array.from({length:pe.sets},()=>({reps:pe.reps,load:pe.targetLoad||"",done:false}))};
     });
     setSession({progId:prog.id,weekIdx,dayIdx,dayLabel:day.label,weekLabel:prog.weeks[weekIdx]?.label||"",exercises:exEntries,notes:""});
     setView("session-active");
@@ -894,7 +1192,7 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
         </div>
 
         {session.exercises.map((ex,ei)=>(
-          <ExerciseSessionCard key={ei} ex={ex} ei={ei} onLoadChange={updateLoad} onToggleDone={toggleDone}/>
+          <ExerciseSessionCard key={ei} ex={ex} ei={ei} onLoadChange={updateLoad} onToggleDone={toggleDone} sessionLogs={live.sessionLogs}/>
         ))}
 
         <Txa label="Notes de séance (optionnel)" placeholder="Ressenti, observations..." value={session.notes} onChange={e=>setSession(s=>({...s,notes:e.target.value}))}/>
@@ -1055,10 +1353,50 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
   );
 }
 
-// ─── EXERCISE SESSION CARD (needs own state for video toggle) ─────────────────
-function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone}){
+// ─── REST TIMER HOOK ──────────────────────────────────────────────────────────
+function useRestTimer(){
+  const [timeLeft,setTimeLeft]=useState(0);
+  const [running,setRunning]=useState(false);
+  const ref=useRef(null);
+  const start=(secs)=>{
+    clearInterval(ref.current);
+    setTimeLeft(secs);
+    setRunning(true);
+    ref.current=setInterval(()=>{
+      setTimeLeft(t=>{if(t<=1){clearInterval(ref.current);setRunning(false);return 0;}return t-1;});
+    },1000);
+  };
+  const stop=()=>{clearInterval(ref.current);setRunning(false);setTimeLeft(0);};
+  return{timeLeft,running,start,stop};
+}
+
+// Parse "90s", "2min", "45s" → secondes
+function parseRest(rest){
+  if(!rest)return 0;
+  const s=rest.toLowerCase().trim();
+  if(s.includes("min")){const p=s.replace("min","").trim().split(":").map(Number);return p.length===2?p[0]*60+p[1]:p[0]*60;}
+  if(s.includes("s"))return parseInt(s)||0;
+  return parseInt(s)||0;
+}
+
+// ─── EXERCISE SESSION CARD ────────────────────────────────────────────────────
+function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,sessionLogs}){
   const [vidOpen,setVidOpen]=useState(false);
+  const [histOpen,setHistOpen]=useState(false);
+  const {timeLeft,running,start,stop}=useRestTimer();
   const allSetsDone=ex.sets.every(s=>s.done);
+  const restSecs=parseRest(ex.rest||"");
+
+  const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+
+  // Récupère les 4 dernières séances où cet exercice a été fait
+  const history=[];
+  for(const log of (sessionLogs||[])){
+    if(history.length>=4) break;
+    const found=(log.exercises||[]).find(e=>e.exId===ex.exId);
+    if(found) history.push({date:log.date,dayLabel:log.dayLabel,sets:found.sets});
+  }
+
   return(
     <div style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:14,border:`1.5px solid ${allSetsDone?G.green+"55":G.border}`,transition:"border .3s"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
@@ -1068,24 +1406,70 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone}){
           {ex.muscle&&<div style={{marginTop:6}}><Tag text={ex.muscle} color={G.grey}/></div>}
         </div>
         <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:8}}>
+          {history.length>0&&<BtnSm onClick={()=>setHistOpen(!histOpen)} variant="ghost">{histOpen?"▼":"📊"}</BtnSm>}
           {ex.videoUrl&&<BtnSm onClick={()=>setVidOpen(!vidOpen)}>{vidOpen?"▼":"▶"}</BtnSm>}
           {allSetsDone&&<Tag text="✓" color={G.green}/>}
         </div>
       </div>
+
+      {/* Historique charges */}
+      {histOpen&&history.length>0&&(
+        <div style={{background:G.bg3,borderRadius:10,padding:12,marginBottom:12,border:`1px solid ${G.border}`}}>
+          <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Historique récent</div>
+          {history.map((h,hi)=>(
+            <div key={hi} style={{marginBottom:hi<history.length-1?10:0}}>
+              <div style={{fontSize:11,color:G.gold,marginBottom:5}}>{h.date}{h.dayLabel?` — ${h.dayLabel}`:""}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {h.sets.map((s,si)=>(
+                  <div key={si} style={{background:G.bg4,borderRadius:6,padding:"5px 10px",border:`1px solid ${G.border}`,textAlign:"center",minWidth:60}}>
+                    <div style={{fontSize:10,color:G.grey,marginBottom:2}}>S{si+1}</div>
+                    <div style={{fontSize:13,fontWeight:800,color:s.load?G.goldLight:G.greyDim}}>{s.load||"—"}</div>
+                    <div style={{fontSize:10,color:G.grey}}>{s.reps}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Vidéo */}
       {vidOpen&&ex.videoUrl&&(
         <div style={{position:"relative",paddingBottom:"56.25%",borderRadius:8,overflow:"hidden",background:"#000",marginBottom:12}}>
           <iframe style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={ex.videoUrl} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
         </div>
       )}
+
+      {/* Chrono récupération */}
+      {restSecs>0&&(
+        <div style={{background:running?G.gold+"15":G.bg3,border:`1px solid ${running?G.gold+"55":G.border}`,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",transition:"all .3s"}}>
+          <div>
+            <div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:2}}>Récupération</div>
+            <div style={{fontFamily:G.fontD,fontSize:running?28:16,fontWeight:800,color:running?(timeLeft<=10?G.red:G.goldLight):G.grey,transition:"all .3s",letterSpacing:-.5}}>
+              {running?fmt(timeLeft):`${restSecs}s`}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            {running
+              ?<button onClick={stop} style={{background:G.red+"22",color:G.red,border:`1px solid ${G.red}44`,borderRadius:8,padding:"8px 14px",fontWeight:700,fontSize:13,cursor:"pointer"}}>✕ Stop</button>
+              :<button onClick={()=>start(restSecs)} style={{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none",borderRadius:8,padding:"8px 16px",fontWeight:700,fontSize:13,cursor:"pointer"}}>▶ Go</button>
+            }
+          </div>
+        </div>
+      )}
+
+      {/* Séries */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(100px,1fr))",gap:8}}>
         {ex.sets.map((st,si)=>(
           <div key={si} style={{background:st.done?G.green+"18":G.bg3,borderRadius:9,padding:"10px 10px 8px",border:`1.5px solid ${st.done?G.green+"55":G.border}`,transition:"all .2s"}}>
             <div style={{fontSize:10,color:st.done?G.green:G.grey,fontWeight:700,letterSpacing:.8,marginBottom:6}}>SÉRIE {si+1} · {st.reps}</div>
             <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:8}}>
-              <input value={st.load} onChange={e=>onLoadChange(ei,si,e.target.value)} placeholder="—" style={{flex:1,background:"transparent",border:"none",borderBottom:`1px solid ${G.border}`,color:st.done?G.green:G.white,fontSize:14,fontWeight:700,outline:"none",padding:"2px 0",textAlign:"center",minWidth:0}}/>
+              <input value={st.load} onChange={e=>onLoadChange(ei,si,e.target.value)} placeholder="—"
+                style={{flex:1,background:"transparent",border:"none",borderBottom:`1px solid ${G.border}`,color:st.done?G.green:G.white,fontSize:14,fontWeight:700,outline:"none",padding:"2px 0",textAlign:"center",minWidth:0}}/>
               <span style={{fontSize:11,color:G.grey}}>kg</span>
             </div>
-            <button onClick={()=>onToggleDone(ei,si)} style={{width:"100%",background:st.done?"transparent":G.goldLight+"18",color:st.done?G.green:G.goldLight,border:`1px solid ${st.done?G.green+"55":G.gold+"44"}`,borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            <button onClick={()=>{onToggleDone(ei,si);if(!st.done&&restSecs>0)start(restSecs);}}
+              style={{width:"100%",background:st.done?"transparent":G.goldLight+"18",color:st.done?G.green:G.goldLight,border:`1px solid ${st.done?G.green+"55":G.gold+"44"}`,borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
               {st.done?"✓ Fait":"Valider"}
             </button>
           </div>
@@ -1115,6 +1499,161 @@ function ClientShell({children,active,onNav,onLogout}){
         })}
       </nav>
     </>
+  );
+}
+
+// ─── AI COACH ─────────────────────────────────────────────────────────────────
+function AICoach({exercises,setPrograms,go}){
+  const [messages,setMessages]=useState([
+    {role:"assistant",content:"Bonjour ! Je suis ton assistant IA Coach. Je peux créer des programmes d'entraînement complets directement dans ton application.\n\nDis-moi par exemple :\n• \"Crée un programme PPL 6 jours sur 4 semaines pour un client intermédiaire\"\n• \"Génère un full body débutant 3j/sem avec progression sur 8 semaines\"\n• \"Fais un programme de force sur 6 semaines axé squat et développé couché\""}
+  ]);
+  const [input,setInput]=useState("");
+  const [loading,setLoading]=useState(false);
+  const bottomRef=useRef(null);
+
+  const scrollBottom=()=>setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}),100);
+
+  const SYSTEM=`Tu es un assistant coach sportif expert intégré dans l'application Wandy Coach.
+Tu peux créer des programmes d'entraînement complets. Quand l'utilisateur te demande de créer un programme, tu dois OBLIGATOIREMENT répondre avec un JSON valide dans un bloc \`\`\`json ... \`\`\` en plus de ton message texte.
+
+La liste des exercices disponibles dans l'app (utilise leurs IDs exacts) :
+${exercises.map(e=>`- id:${e.id} "${e.name}" (${e.muscle}, ${e.equipment})`).join("\n")}
+
+Format JSON du programme :
+{
+  "action": "create_program",
+  "program": {
+    "name": "Nom du programme",
+    "category": "Force|PPL|Full Body|CrossFit|Cardio|etc",
+    "level": "Débutant|Intermédiaire|Avancé",
+    "weeks": [
+      {
+        "label": "Semaine 1 — Description",
+        "days": [
+          {
+            "label": "Séance A",
+            "exercises": [
+              {"exId": 1, "sets": 4, "reps": "8", "rest": "90s", "targetLoad": "60kg"}
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+
+Règles importantes :
+- Utilise uniquement les IDs d'exercices listés ci-dessus
+- Le champ "rest" accepte : "30s", "60s", "90s", "2min", "3min"
+- Le champ "targetLoad" est optionnel (laisse "" si pas de charge)
+- Crée toujours plusieurs semaines avec progression
+- Réponds en français, sois précis et professionnel
+- TOUJOURS inclure le JSON si tu crées un programme`;
+
+  const send=async()=>{
+    if(!input.trim()||loading)return;
+    const userMsg={role:"user",content:input.trim()};
+    const newMsgs=[...messages,userMsg];
+    setMessages(newMsgs);
+    setInput("");
+    setLoading(true);
+    scrollBottom();
+
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:4000,
+          system:SYSTEM,
+          messages:newMsgs.map(m=>({role:m.role,content:m.content}))
+        })
+      });
+      const data=await res.json();
+      const text=data.content?.[0]?.text||"Désolé, une erreur s'est produite.";
+
+      // Cherche un bloc JSON dans la réponse
+      const jsonMatch=text.match(/```json\s*([\s\S]*?)```/);
+      let programCreated=null;
+      if(jsonMatch){
+        try{
+          const parsed=JSON.parse(jsonMatch[1]);
+          if(parsed.action==="create_program"&&parsed.program){
+            const newProg={...parsed.program,id:Date.now()};
+            setPrograms(p=>[...p,newProg]);
+            programCreated=newProg;
+          }
+        }catch(e){console.error("JSON parse error",e);}
+      }
+
+      // Nettoie le JSON du message affiché
+      const cleanText=text.replace(/```json[\s\S]*?```/g,"").trim();
+      setMessages(p=>[...p,{role:"assistant",content:cleanText,programCreated}]);
+    }catch(e){
+      setMessages(p=>[...p,{role:"assistant",content:"Erreur de connexion. Vérifie ta connexion internet et réessaie."}]);
+    }
+    setLoading(false);
+    scrollBottom();
+  };
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",height:"100%",padding:"20px 0 0"}}>
+      {/* Header */}
+      <div style={{padding:"0 20px 16px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:40,height:40,borderRadius:12,background:`linear-gradient(135deg,${G.goldLight}22,${G.gold}44)`,border:`1px solid ${G.gold}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>✦</div>
+          <div>
+            <div style={{fontFamily:G.fontD,fontSize:18,fontWeight:800,letterSpacing:-.5}}>IA Coach</div>
+            <div style={{fontSize:11,color:G.grey}}>Création automatique de programmes</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:12}}>
+        {messages.map((m,i)=>(
+          <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.role==="user"?"flex-end":"flex-start"}}>
+            <div style={{maxWidth:"85%",background:m.role==="user"?`linear-gradient(135deg,${G.goldLight},${G.gold})`:G.bg3,color:m.role==="user"?G.bg:G.white,borderRadius:m.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px",padding:"12px 14px",fontSize:13,lineHeight:1.55,border:m.role==="user"?"none":`1px solid ${G.border}`,whiteSpace:"pre-wrap"}}>
+              {m.content}
+            </div>
+            {m.programCreated&&(
+              <div style={{marginTop:8,background:G.green+"15",border:`1px solid ${G.green}44`,borderRadius:12,padding:"10px 14px",maxWidth:"85%",display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:18}}>✓</span>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:G.green}}>Programme créé !</div>
+                  <div style={{fontSize:11,color:G.grey,marginTop:2}}>"{m.programCreated.name}" ajouté à ta bibliothèque</div>
+                </div>
+                <button onClick={()=>go("programs")} style={{marginLeft:"auto",background:G.green+"22",color:G.green,border:`1px solid ${G.green}44`,borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>Voir →</button>
+              </div>
+            )}
+          </div>
+        ))}
+        {loading&&(
+          <div style={{display:"flex",alignItems:"flex-start"}}>
+            <div style={{background:G.bg3,border:`1px solid ${G.border}`,borderRadius:"16px 16px 16px 4px",padding:"12px 16px",display:"flex",gap:6,alignItems:"center"}}>
+              {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:G.gold,animation:"pulse 1.2s ease infinite",animationDelay:`${i*0.2}s`}}/>)}
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef}/>
+      </div>
+
+      {/* Input */}
+      <div style={{padding:"12px 20px 16px",borderTop:`1px solid ${G.border}`,flexShrink:0}}>
+        <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
+          <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} placeholder="Décris le programme que tu veux créer..." rows={2}
+            style={{flex:1,background:G.bg3,border:`1px solid ${G.border}`,borderRadius:12,padding:"10px 14px",color:G.white,fontSize:13,outline:"none",resize:"none",lineHeight:1.5,fontFamily:G.font}}/>
+          <button onClick={send} disabled={!input.trim()||loading}
+            style={{background:input.trim()&&!loading?`linear-gradient(135deg,${G.goldLight},${G.gold})`:`${G.gold}33`,color:input.trim()&&!loading?G.bg:G.greyDim,border:"none",borderRadius:12,width:44,height:44,fontSize:20,cursor:input.trim()&&!loading?"pointer":"default",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
+            ↑
+          </button>
+        </div>
+        <div style={{fontSize:10,color:G.greyDim,marginTop:6,textAlign:"center"}}>Entrée pour envoyer · Maj+Entrée pour un retour à la ligne</div>
+      </div>
+
+      <style>{`@keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}`}</style>
+    </div>
   );
 }
 
