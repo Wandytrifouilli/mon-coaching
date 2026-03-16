@@ -222,7 +222,7 @@ const Shell=({children,css:c})=>(
         </div>
       </div>
     </div>}
-    {IS_MOBILE&&<div style={{background:G.bg,width:"100%",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:G.font,color:G.white}}>
+    {IS_MOBILE&&<div style={{background:G.bg,width:"100vw",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:G.font,color:G.white,margin:"0 auto"}}>
       {children}
     </div>}
   </div>
@@ -259,8 +259,10 @@ function LoginScreen({onLogin}){
           {loginContent}
         </div>
       </div>}
-      {IS_MOBILE&&<div style={{background:G.bg,width:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:28,fontFamily:G.font,color:G.white}}>
-        {loginContent}
+      {IS_MOBILE&&<div style={{background:G.bg,width:"100vw",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:"28px 24px",fontFamily:G.font,color:G.white}}>
+        <div style={{width:"100%",maxWidth:400}}>
+          {loginContent}
+        </div>
       </div>}
     </div>
   );
@@ -293,8 +295,8 @@ function Dashboard({clients,programs,exercises,go,sel,selP,onLogout}){
         </div>
         <button onClick={onLogout} style={{background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"7px 12px",color:G.grey,fontSize:12,cursor:"pointer"}}>Déconnexion</button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:28}}>
-        {[[clients.length,"Clients"],[programs.length,"Programmes"],[exercises.length,"Exercices"]].map(([v,l])=>(
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:28}}>
+        {[[clients.length,"Clients"],[exercises.length,"Exercices"]].map(([v,l])=>(
           <div key={l} style={{background:G.bg2,borderRadius:12,padding:"16px 10px",textAlign:"center",border:`1px solid ${G.border}`}}>
             <div style={{fontFamily:G.fontD,fontSize:34,fontWeight:800,color:G.goldLight,lineHeight:1}}>{v}</div>
             <div style={{fontSize:10,color:G.grey,letterSpacing:1,textTransform:"uppercase",marginTop:4}}>{l}</div>
@@ -967,7 +969,7 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
             <div style={{fontFamily:G.fontD,fontSize:30,fontWeight:800,letterSpacing:-1}} className="gl">{live.name.split(" ")[0].toUpperCase()}</div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:28}}>
-            {[[live.sessions,"Séances totales"],[assigned.length,"Programmes actifs"]].map(([v,l])=>(
+            {[[live.sessionLogs.filter(l=>l.completed).length,"Séances complétées"],[assigned.length,"Programmes actifs"]].map(([v,l])=>(
               <div key={l} style={{background:G.bg2,borderRadius:12,padding:"16px 14px",border:`1px solid ${G.border}`}}>
                 <div style={{fontFamily:G.fontD,fontSize:38,fontWeight:800,color:G.goldLight,lineHeight:1}}>{v}</div>
                 <div style={{fontSize:10,color:G.grey,letterSpacing:1,textTransform:"uppercase",marginTop:4}}>{l}</div>
