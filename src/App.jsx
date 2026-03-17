@@ -1627,9 +1627,19 @@ function useRestTimer(){
 }
 
 // ─── AUDIO HELPERS ────────────────────────────────────────────────────────────
+// Safari exige que l'AudioContext soit créé/repris pendant un geste utilisateur.
+// On le crée au clic "Go" via unlockAudio(), puis on le réutilise pour les bips.
+let _audioCtx=null;
+function unlockAudio(){
+  try{
+    if(!_audioCtx) _audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    if(_audioCtx.state==="suspended") _audioCtx.resume();
+  }catch(e){}
+}
 function playTone(freq,dur,vol=0.4){
   try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const ctx=_audioCtx;
+    if(!ctx||ctx.state==="suspended") return;
     const osc=ctx.createOscillator();
     const gain=ctx.createGain();
     osc.connect(gain);gain.connect(ctx.destination);
@@ -1731,7 +1741,7 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,onSensationChange,
           <div style={{display:"flex",gap:8}}>
             {running
               ?<button onClick={stop} style={{background:G.red+"22",color:G.red,border:`1px solid ${G.red}44`,borderRadius:8,padding:"8px 14px",fontWeight:700,fontSize:13,cursor:"pointer"}}>✕ Stop</button>
-              :<button onClick={()=>start(restSecs)} style={{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none",borderRadius:8,padding:"8px 16px",fontWeight:700,fontSize:13,cursor:"pointer"}}>▶ Go</button>
+              :<button onClick={()=>{unlockAudio();start(restSecs);}} style={{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none",borderRadius:8,padding:"8px 16px",fontWeight:700,fontSize:13,cursor:"pointer"}}>▶ Go</button>
             }
           </div>
         </div>
