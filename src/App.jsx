@@ -1030,6 +1030,15 @@ function NewProgram({exercises,setPrograms,go}){
     setForm(p=>({...p,weeks:p.weeks.filter((_,i)=>i!==wi)}));
     setWeekIdx(Math.max(0,weekIdx-(wi<=weekIdx?1:0)));setDayIdx(0);
   };
+  const duplicateWeek=()=>{
+    if(form.weeks.length>=12)return;
+    const copy=JSON.parse(JSON.stringify(form.weeks[weekIdx]));
+    copy.label=copy.label+" (copie)";
+    const nw=[...form.weeks];
+    nw.splice(weekIdx+1,0,copy);
+    setForm(p=>({...p,weeks:nw}));
+    setWeekIdx(weekIdx+1);setDayIdx(0);
+  };
   const addDay=()=>{
     if(week.days.length>=7)return;
     const labels=["A","B","C","D","E","F","G"];
@@ -1051,6 +1060,9 @@ function NewProgram({exercises,setPrograms,go}){
   };
   const updateExField=(exId,field,val)=>{
     setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.map(e=>e.exId===exId?{...e,[field]:val}:e)})})}));
+  };
+  const moveEx=(from,to)=>{
+    setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:(()=>{const a=[...d.exercises];const[item]=a.splice(from,1);a.splice(to,0,item);return a;})()})})}));
   };
   const totalEx=form.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.exercises.length,0),0);
   const create=()=>{setPrograms(p=>[...p,{...form,id:Date.now()}]);go("programs");};
@@ -1091,7 +1103,8 @@ function NewProgram({exercises,setPrograms,go}){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <input value={week?.label||""} onChange={e=>updateLabel("week",weekIdx,e.target.value)} style={{background:"transparent",border:"none",color:G.goldLight,fontSize:15,fontWeight:800,outline:"none",fontFamily:G.fontD,letterSpacing:.5,width:"55%"}}/>
           <div style={{display:"flex",gap:6}}>
-            {form.weeks.length>1&&<BtnSm variant="danger" onClick={()=>removeWeek(weekIdx)}>✕ Sem.</BtnSm>}
+            {form.weeks.length>1&&<BtnSm variant="danger" onClick={()=>removeWeek(weekIdx)}>✕</BtnSm>}
+            {form.weeks.length<12&&<BtnSm variant="ghost" onClick={duplicateWeek}>⧉ Dupliquer</BtnSm>}
             {week&&week.days.length<7&&<BtnSm onClick={addDay}>+ Jour</BtnSm>}
           </div>
         </div>
@@ -1122,7 +1135,11 @@ function NewProgram({exercises,setPrograms,go}){
               <div key={pe.exId} style={{background:G.bg3,borderRadius:9,padding:12,marginBottom:8,border:`1px solid ${G.border}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <div style={{fontWeight:700,fontSize:13}}>{i+1}. {ex?.name}</div>
-                  <BtnSm variant="danger" onClick={()=>toggleEx(ex)}>✕</BtnSm>
+                  <div style={{display:"flex",gap:4}}>
+                    {i>0&&<BtnSm variant="ghost" onClick={()=>moveEx(i,i-1)}>▲</BtnSm>}
+                    {i<day.exercises.length-1&&<BtnSm variant="ghost" onClick={()=>moveEx(i,i+1)}>▼</BtnSm>}
+                    <BtnSm variant="danger" onClick={()=>toggleEx(ex)}>✕</BtnSm>
+                  </div>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
                   {[["Séries","sets","number"],["Reps","reps","text"],["Repos","rest","text"],["Charge cible","targetLoad","text"]].map(([l,k,t])=>(
@@ -1182,11 +1199,13 @@ function EditProgram({program,exercises,setPrograms,go,setSel}){
 
   const addWeek=()=>{if(form.weeks.length>=12)return;const n=form.weeks.length+1;setForm(p=>({...p,weeks:[...p.weeks,{label:`Semaine ${n}`,days:[{label:"Séance A",exercises:[]}]}]}));setWeekIdx(form.weeks.length);setDayIdx(0);};
   const removeWeek=wi=>{if(form.weeks.length<=1)return;setForm(p=>({...p,weeks:p.weeks.filter((_,i)=>i!==wi)}));setWeekIdx(Math.max(0,weekIdx-(wi<=weekIdx?1:0)));setDayIdx(0);};
+  const duplicateWeek=()=>{if(form.weeks.length>=12)return;const copy=JSON.parse(JSON.stringify(form.weeks[weekIdx]));copy.label=copy.label+" (copie)";const nw=[...form.weeks];nw.splice(weekIdx+1,0,copy);setForm(p=>({...p,weeks:nw}));setWeekIdx(weekIdx+1);setDayIdx(0);};
   const addDay=()=>{if(week.days.length>=7)return;const labels=["A","B","C","D","E","F","G"];const nd={label:`Séance ${labels[week.days.length]||week.days.length+1}`,exercises:[]};setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:[...w.days,nd]})}));setDayIdx(week.days.length);};
   const removeDay=di=>{if(week.days.length<=1)return;setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.filter((_,j)=>j!==di)})}));setDayIdx(Math.max(0,dayIdx-(di<=dayIdx?1:0)));};
   const updateLabel=(type,idx,val)=>{if(type==="week")setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==idx?w:{...w,label:val})}));else setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.map((d,j)=>j!==idx?d:{...d,label:val})})}));};
   const toggleEx=ex=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.find(e=>e.exId===ex.id)?d.exercises.filter(e=>e.exId!==ex.id):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:""}]})})}));};
   const updateExField=(exId,field,val)=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.map(e=>e.exId===exId?{...e,[field]:val}:e)})})}));};
+  const moveEx=(from,to)=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:(()=>{const a=[...d.exercises];const[item]=a.splice(from,1);a.splice(to,0,item);return a;})()})})}));};
 
   const save=()=>{
     setPrograms(p=>p.map(x=>x.id===form.id?form:x));
@@ -1227,7 +1246,8 @@ function EditProgram({program,exercises,setPrograms,go,setSel}){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <input value={week?.label||""} onChange={e=>updateLabel("week",weekIdx,e.target.value)} style={{background:"transparent",border:"none",color:G.goldLight,fontSize:15,fontWeight:800,outline:"none",fontFamily:G.fontD,letterSpacing:.5,width:"55%"}}/>
           <div style={{display:"flex",gap:6}}>
-            {form.weeks.length>1&&<BtnSm variant="danger" onClick={()=>removeWeek(weekIdx)}>✕ Sem.</BtnSm>}
+            {form.weeks.length>1&&<BtnSm variant="danger" onClick={()=>removeWeek(weekIdx)}>✕</BtnSm>}
+            {form.weeks.length<12&&<BtnSm variant="ghost" onClick={duplicateWeek}>⧉ Dupliquer</BtnSm>}
             {week&&week.days.length<7&&<BtnSm onClick={addDay}>+ Jour</BtnSm>}
           </div>
         </div>
@@ -1253,7 +1273,11 @@ function EditProgram({program,exercises,setPrograms,go,setSel}){
               <div key={pe.exId} style={{background:G.bg3,borderRadius:9,padding:12,marginBottom:8,border:`1px solid ${G.border}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <div style={{fontWeight:700,fontSize:13}}>{i+1}. {ex?.name}</div>
-                  <BtnSm variant="danger" onClick={()=>toggleEx(ex)}>✕</BtnSm>
+                  <div style={{display:"flex",gap:4}}>
+                    {i>0&&<BtnSm variant="ghost" onClick={()=>moveEx(i,i-1)}>▲</BtnSm>}
+                    {i<day.exercises.length-1&&<BtnSm variant="ghost" onClick={()=>moveEx(i,i+1)}>▼</BtnSm>}
+                    <BtnSm variant="danger" onClick={()=>toggleEx(ex)}>✕</BtnSm>
+                  </div>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
                   {[["Séries","sets","number"],["Reps","reps","text"],["Repos","rest","text"],["Charge","targetLoad","text"]].map(([l,k,t])=>(
