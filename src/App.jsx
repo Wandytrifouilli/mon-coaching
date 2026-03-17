@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch } from "./firebase.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
@@ -276,48 +277,65 @@ const Modal=({onClose,title,children})=>(
 );
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
-// ─── PERSISTANCE LOCALSTORAGE ─────────────────────────────────────────────────
-function useLocalStorage(key, seed){
-  const [val, setVal] = useState(()=>{
-    try{
-      const stored = localStorage.getItem(key);
-      return stored ? JSON.parse(stored) : seed;
-    }catch{ return seed; }
-  });
-  const set = (fn) => {
-    setVal(prev=>{
-      const next = typeof fn === "function" ? fn(prev) : fn;
-      try{ localStorage.setItem(key, JSON.stringify(next)); }catch{}
+// ─── PERSISTANCE FIRESTORE ────────────────────────────────────────────────────
+function useFirestoreCollection(collectionName, seed){
+  const [data, setDataLocal] = useState([]);
+  const [ready, setReady] = useState(false);
+
+  useEffect(()=>{
+    const colRef = collection(db, collectionName);
+    const unsub = onSnapshot(colRef, async snap => {
+      if(snap.empty){
+        // Premier lancement : on seed Firestore par lots de 499
+        const BATCH_SIZE = 499;
+        for(let i = 0; i < seed.length; i += BATCH_SIZE){
+          const b = writeBatch(db);
+          seed.slice(i, i + BATCH_SIZE).forEach(item =>
+            b.set(doc(db, collectionName, String(item.id)), item)
+          );
+          await b.commit();
+        }
+        return;
+      }
+      setDataLocal(snap.docs.map(d => d.data()));
+      setReady(true);
+    });
+    return unsub;
+  }, [collectionName]); // eslint-disable-line
+
+  const setData = (updater) => {
+    setDataLocal(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      // Écriture diff vers Firestore
+      const prevMap = new Map(prev.map(x => [String(x.id), x]));
+      const nextIds = new Set(next.map(x => String(x.id)));
+      next.forEach(item => {
+        const p = prevMap.get(String(item.id));
+        if(!p || JSON.stringify(p) !== JSON.stringify(item))
+          setDoc(doc(db, collectionName, String(item.id)), item).catch(console.error);
+      });
+      prev.forEach(item => {
+        if(!nextIds.has(String(item.id)))
+          deleteDoc(doc(db, collectionName, String(item.id))).catch(console.error);
+      });
       return next;
     });
   };
-  return [val, set];
+
+  return [data, setData, ready];
 }
 
 export default function App(){
   const [auth,setAuth]=useState("login");
-  const [exercises,setExercises]=useLocalStorage("wc_exercises", SEED_EX);
-  const [programs,setPrograms]=useLocalStorage("wc_programs", SEED_PROGRAMS);
-  const [clients,setClients]=useLocalStorage("wc_clients", SEED_CLIENTS);
-
-  // Migration : ajoute les nouveaux exercices seed sans écraser les existants
-  useState(()=>{
-    const stored = localStorage.getItem("wc_exercises");
-    if(stored){
-      const existing = JSON.parse(stored);
-      const existingIds = new Set(existing.map(e=>e.id));
-      const newOnes = SEED_EX.filter(e=>!existingIds.has(e.id));
-      if(newOnes.length>0){
-        const merged = [...existing, ...newOnes];
-        localStorage.setItem("wc_exercises", JSON.stringify(merged));
-        setExercises(merged);
-      }
-    }
-  });
+  const [exercises,setExercises,exReady]=useFirestoreCollection("exercises", SEED_EX);
+  const [programs,setPrograms,pgReady]=useFirestoreCollection("programs", SEED_PROGRAMS);
+  const [clients,setClients,clReady]=useFirestoreCollection("clients", SEED_CLIENTS);
+  const dbReady = exReady && pgReady && clReady;
   const [currentClient,setCurrentClient]=useState(null);
   const [coachView,setCoachView]=useState("dashboard");
   const [selClient,setSelClient]=useState(null);
   const [selProgram,setSelProgram]=useState(null);
+  const [selClientForProgram,setSelClientForProgram]=useState(null);
 
   const login=code=>{
     if(code.toUpperCase()==="COACH2025"){setAuth("coach");return true;}
@@ -327,6 +345,16 @@ export default function App(){
   };
   const logout=()=>{setAuth("login");setCurrentClient(null);setCoachView("dashboard");};
 
+  if(!dbReady) return (
+    <Shell css={css}>
+      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+        <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,color:G.goldLight,letterSpacing:-1}}>MON COACHING</div>
+        <div style={{fontSize:13,color:G.grey}}>Connexion à la base de données…</div>
+        <div style={{width:40,height:40,border:`3px solid ${G.border}`,borderTop:`3px solid ${G.goldLight}`,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      </div>
+    </Shell>
+  );
   if(auth==="login") return <LoginScreen onLogin={login}/>;
   if(auth==="client") return (
     <Shell css={css}>
@@ -338,10 +366,10 @@ export default function App(){
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {coachView==="dashboard"&&<Dashboard clients={clients} programs={programs} exercises={exercises} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}} selP={p=>{setSelProgram(p);setCoachView("program-detail");}} onLogout={logout}/>}
         {coachView==="clients"&&<ClientsList clients={clients} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}}/>}
-        {coachView==="client-detail"&&selClient&&<ClientDetail client={clients.find(c=>c.id===selClient.id)||selClient} clients={clients} setClients={setClients} setPrograms={setPrograms} setSel={setSelClient} programs={programs} exercises={exercises} go={setCoachView} selP={p=>{setSelProgram(p);setCoachView("program-detail");}}/>}
+        {coachView==="client-detail"&&selClient&&<ClientDetail client={clients.find(c=>c.id===selClient.id)||selClient} clients={clients} setClients={setClients} setPrograms={setPrograms} setSel={setSelClient} programs={programs} exercises={exercises} go={setCoachView} selP={p=>{setSelProgram(p);setSelClientForProgram(clients.find(c=>c.id===selClient.id)||selClient);setCoachView("program-detail");}}/>}
         {coachView==="new-client"&&<NewClient setClients={setClients} go={setCoachView}/>}
-        {coachView==="programs"&&<ProgramsList programs={programs} setPrograms={setPrograms} setClients={setClients} exercises={exercises} go={setCoachView} sel={p=>{setSelProgram(p);setCoachView("program-detail");}} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
-        {coachView==="program-detail"&&selProgram&&<ProgramDetail program={programs.find(x=>x.id===selProgram.id)||selProgram} exercises={exercises} go={setCoachView} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
+        {coachView==="programs"&&<ProgramsList programs={programs} setPrograms={setPrograms} setClients={setClients} exercises={exercises} go={setCoachView} sel={p=>{setSelProgram(p);setSelClientForProgram(null);setCoachView("program-detail");}} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
+        {coachView==="program-detail"&&selProgram&&<ProgramDetail program={programs.find(x=>x.id===selProgram.id)||selProgram} exercises={exercises} go={setCoachView} client={selClientForProgram} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
         {coachView==="edit-program"&&selProgram&&<EditProgram program={programs.find(x=>x.id===selProgram.id)||selProgram} exercises={exercises} setPrograms={setPrograms} go={setCoachView} setSel={setSelProgram}/>}
         {coachView==="new-program"&&<NewProgram exercises={exercises} setPrograms={setPrograms} go={setCoachView}/>}
         {coachView==="exercises"&&<ExLib exercises={exercises} setExercises={setExercises} go={setCoachView}/>}
@@ -712,15 +740,16 @@ function ProgramsList({programs,setPrograms,setClients,exercises,go,sel,onEdit})
 }
 
 // ─── PROGRAM DETAIL (coach) ───────────────────────────────────────────────────
-function ProgramDetail({program,exercises,go,onEdit}){
+function ProgramDetail({program,exercises,go,onEdit,client}){
   const [weekIdx,setWeekIdx]=useState(0);
   const [dayIdx,setDayIdx]=useState(0);
   const [playing,setPlaying]=useState(null);
   const week=program.weeks[weekIdx];
   const day=week?.days[dayIdx];
+  const dayLog=client?.sessionLogs?.find(l=>l.programId===program.id&&l.weekIdx===weekIdx&&l.dayIdx===dayIdx&&l.completed);
   return(
     <div style={{padding:"28px 20px 0"}} className="fu">
-      <BackBtn onClick={()=>go("programs")} label="Programmes"/>
+      <BackBtn onClick={()=>go(client?"client-detail":"programs")} label={client?client.name.split(" ")[0]:"Programmes"}/>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
         <div style={{flex:1}}>
           <div style={{fontFamily:G.fontD,fontSize:26,fontWeight:800,letterSpacing:-1}} className="gl">{program.name}</div>
@@ -743,19 +772,32 @@ function ProgramDetail({program,exercises,go,onEdit}){
 
       {/* Day tabs */}
       {week&&<div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:20,marginTop:10}}>
-        {week.days.map((d,i)=>(
-          <button key={i} onClick={()=>{setDayIdx(i);setPlaying(null);}} style={{flexShrink:0,padding:"6px 14px",background:dayIdx===i?G.bg4:G.bg3,color:dayIdx===i?G.white:G.grey,border:`1px solid ${dayIdx===i?G.border+"88":G.border}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-            {d.label} <span style={{fontSize:11,opacity:.5}}>({d.exercises.length})</span>
-          </button>
-        ))}
+        {week.days.map((d,i)=>{
+          const done=client?.sessionLogs?.some(l=>l.programId===program.id&&l.weekIdx===weekIdx&&l.dayIdx===i&&l.completed);
+          return(
+            <button key={i} onClick={()=>{setDayIdx(i);setPlaying(null);}} style={{flexShrink:0,padding:"6px 14px",background:dayIdx===i?G.bg4:G.bg3,color:dayIdx===i?G.white:done?G.green:G.grey,border:`1px solid ${dayIdx===i?G.border+"88":done?G.green+"55":G.border}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+              {done&&<span style={{marginRight:4}}>✓</span>}{d.label} <span style={{fontSize:11,opacity:.5}}>({d.exercises.length})</span>
+            </button>
+          );
+        })}
       </div>}
 
+      {dayLog&&(
+        <div style={{background:G.green+"15",border:`1px solid ${G.green}44`,borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:20}}>✓</span>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:G.green}}>Séance complétée</div>
+            <div style={{fontSize:11,color:G.grey,marginTop:2}}>{dayLog.date}{dayLog.notes?` · "${dayLog.notes}"`:""}</div>
+          </div>
+        </div>
+      )}
       {day&&day.exercises.map((pe,i)=>{
         const ex=exercises.find(e=>e.id===pe.exId);
         if(!ex)return null;
         const key=`${weekIdx}-${dayIdx}-${i}`;
+        const clientEx=dayLog?.exercises?.find(e=>e.exId===pe.exId);
         return(
-          <div key={i} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${G.border}`}}>
+          <div key={i} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${clientEx?G.green+"44":G.border}`}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
               <div style={{flex:1}}>
                 <div style={{fontWeight:700,fontSize:15}}><span style={{color:G.gold,fontFamily:G.fontD,marginRight:8}}>{i+1}.</span>{ex.name}</div>
@@ -769,6 +811,23 @@ function ProgramDetail({program,exercises,go,onEdit}){
             {playing===key&&ex.videoUrl&&(
               <div style={{position:"relative",paddingBottom:"56.25%",borderRadius:8,overflow:"hidden",background:"#000",marginTop:10}}>
                 <iframe style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={ex.videoUrl} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
+              </div>
+            )}
+            {clientEx&&(
+              <div style={{marginTop:10,background:G.bg3,borderRadius:8,padding:10,border:`1px solid ${G.green}33`}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <div style={{fontSize:10,color:G.green,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Résultats client</div>
+                  {clientEx.sensation&&<span style={{fontSize:18}} title="Ressenti">{clientEx.sensation}</span>}
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {clientEx.sets.map((s,si)=>(
+                    <div key={si} style={{background:G.bg4,borderRadius:6,padding:"5px 10px",border:`1px solid ${G.border}`,textAlign:"center",minWidth:58}}>
+                      <div style={{fontSize:10,color:G.grey,marginBottom:2}}>S{si+1}</div>
+                      <div style={{fontSize:13,fontWeight:800,color:s.load?G.goldLight:G.greyDim}}>{s.load||"—"}</div>
+                      <div style={{fontSize:10,color:G.grey}}>{s.reps}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -1156,7 +1215,7 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
   const startSession=(prog,weekIdx,day,dayIdx)=>{
     const exEntries=day.exercises.map(pe=>{
       const ex=exercises.find(e=>e.id===pe.exId);
-      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",muscle:ex?.muscle||"",rest:pe.rest||"",sets:Array.from({length:pe.sets},()=>({reps:pe.reps,load:pe.targetLoad||"",done:false}))};
+      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",muscle:ex?.muscle||"",rest:pe.rest||"",sensation:"",sets:Array.from({length:pe.sets},()=>({reps:pe.reps,load:pe.targetLoad||"",done:false}))};
     });
     setSession({progId:prog.id,weekIdx,dayIdx,dayLabel:day.label,weekLabel:prog.weeks[weekIdx]?.label||"",exercises:exEntries,notes:""});
     setView("session-active");
@@ -1168,9 +1227,12 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
   const toggleDone=(exIdx,setIdx)=>{
     setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,done:!st.done})})}));
   };
+  const updateSensation=(exIdx,val)=>{
+    setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sensation:val})}));
+  };
 
   const completeSession=()=>{
-    const log={id:uid(),date:new Date().toISOString().split("T")[0],programId:session.progId,weekIdx:session.weekIdx,dayIdx:session.dayIdx,dayLabel:session.dayLabel,weekLabel:session.weekLabel,completed:true,notes:session.notes,exercises:session.exercises.map(ex=>({exId:ex.exId,name:ex.name,sets:ex.sets.map(s=>({reps:s.reps,load:s.load}))}))};
+    const log={id:uid(),date:new Date().toISOString().split("T")[0],programId:session.progId,weekIdx:session.weekIdx,dayIdx:session.dayIdx,dayLabel:session.dayLabel,weekLabel:session.weekLabel,completed:true,notes:session.notes,exercises:session.exercises.map(ex=>({exId:ex.exId,name:ex.name,sensation:ex.sensation||"",sets:ex.sets.map(s=>({reps:s.reps,load:s.load}))}))};
     setClients(p=>p.map(c=>c.id===live.id?{...c,sessions:c.sessions+1,sessionLogs:[log,...c.sessionLogs]}:c));
     setView("session-done");
   };
@@ -1192,7 +1254,7 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
         </div>
 
         {session.exercises.map((ex,ei)=>(
-          <ExerciseSessionCard key={ei} ex={ex} ei={ei} onLoadChange={updateLoad} onToggleDone={toggleDone} sessionLogs={live.sessionLogs}/>
+          <ExerciseSessionCard key={ei} ex={ex} ei={ei} onLoadChange={updateLoad} onToggleDone={toggleDone} onSensationChange={updateSensation} sessionLogs={live.sessionLogs}/>
         ))}
 
         <Txa label="Notes de séance (optionnel)" placeholder="Ressenti, observations..." value={session.notes} onChange={e=>setSession(s=>({...s,notes:e.target.value}))}/>
@@ -1380,7 +1442,7 @@ function parseRest(rest){
 }
 
 // ─── EXERCISE SESSION CARD ────────────────────────────────────────────────────
-function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,sessionLogs}){
+function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,onSensationChange,sessionLogs}){
   const [vidOpen,setVidOpen]=useState(false);
   const [histOpen,setHistOpen]=useState(false);
   const [units,setUnits]=useState(ex.sets.map(()=>"kg"));
@@ -1476,6 +1538,17 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,sessionLogs}){
             </button>
           </div>
         ))}
+      </div>
+      <div style={{marginTop:12}}>
+        <div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Ressenti</div>
+        <div style={{display:"flex",gap:6}}>
+          {[["😊","Facile"],["😐","Correct"],["😤","Difficile"],["💀","Épuisant"]].map(([emoji,label])=>(
+            <button key={emoji} onClick={()=>onSensationChange(ei,emoji)} title={label}
+              style={{flex:1,padding:"6px 0",background:ex.sensation===emoji?G.gold+"33":"transparent",border:`1px solid ${ex.sensation===emoji?G.gold:G.border}`,borderRadius:8,fontSize:18,cursor:"pointer",transition:"all .2s"}}>
+              {emoji}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -1696,7 +1769,10 @@ const LogCard=({log,programs})=>{
           <div style={{height:1,background:G.border,marginBottom:12}}/>
           {log.exercises.map((ex,i)=>(
             <div key={i} style={{marginBottom:12}}>
-              <div style={{fontWeight:600,fontSize:13,color:G.goldLight,marginBottom:8}}>{ex.name}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                <div style={{fontWeight:600,fontSize:13,color:G.goldLight}}>{ex.name}</div>
+                {ex.sensation&&<span style={{fontSize:16}} title="Ressenti">{ex.sensation}</span>}
+              </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(88px,1fr))",gap:6}}>
                 {ex.sets.map((s,j)=>(
                   <div key={j} style={{background:G.bg3,borderRadius:7,padding:"8px 10px",border:`1px solid ${G.border}`,textAlign:"center"}}>
