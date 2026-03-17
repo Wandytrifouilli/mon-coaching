@@ -1626,6 +1626,22 @@ function useRestTimer(){
   return{timeLeft,running,start,stop};
 }
 
+// ─── AUDIO HELPERS ────────────────────────────────────────────────────────────
+function playTone(freq,dur,vol=0.4){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    osc.connect(gain);gain.connect(ctx.destination);
+    osc.frequency.value=freq;osc.type="sine";
+    gain.gain.setValueAtTime(vol,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur);
+    osc.start(ctx.currentTime);osc.stop(ctx.currentTime+dur);
+  }catch(e){}
+}
+const playTick=()=>playTone(660,0.12,0.3);
+const playBeep=()=>{playTone(880,0.15,0.5);setTimeout(()=>playTone(1100,0.25,0.6),160);};
+
 // Parse "90s", "2min", "45s" → secondes
 function parseRest(rest){
   if(!rest)return 0;
@@ -1644,6 +1660,12 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,onSensationChange,
   const allSetsDone=ex.sets.every(s=>s.done);
   const restSecs=parseRest(ex.rest||"");
   const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+  const prevTL=useRef(0);
+  useEffect(()=>{
+    if(timeLeft>0&&timeLeft<=3&&running) playTick();
+    if(timeLeft===0&&prevTL.current>0) playBeep();
+    prevTL.current=timeLeft;
+  },[timeLeft]);
 
   const UNITS=["kg","élastique","cal","m","km","reps"];
 
@@ -1698,12 +1720,13 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,onSensationChange,
       )}
 
       {restSecs>0&&(
-        <div style={{background:running?G.gold+"15":G.bg3,border:`1px solid ${running?G.gold+"55":G.border}`,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",transition:"all .3s"}}>
-          <div>
-            <div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:2}}>Récupération</div>
-            <div style={{fontFamily:G.fontD,fontSize:running?28:16,fontWeight:800,color:running?(timeLeft<=10?G.red:G.goldLight):G.grey,transition:"all .3s",letterSpacing:-.5}}>
-              {running?fmt(timeLeft):`${restSecs}s`}
-            </div>
+        <div style={{background:running&&timeLeft<=3?G.red+"22":running?G.gold+"15":G.bg3,border:`1px solid ${running&&timeLeft<=3?G.red+"88":running?G.gold+"55":G.border}`,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",transition:"all .3s"}}>
+          <div style={{flex:1,textAlign:running&&timeLeft<=3?"center":"left"}}>
+            {!(running&&timeLeft<=3)&&<div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:2}}>Récupération</div>}
+            {running&&timeLeft<=3
+              ?<div style={{fontFamily:G.fontD,fontSize:72,fontWeight:900,color:G.red,lineHeight:1}}>{timeLeft}</div>
+              :<div style={{fontFamily:G.fontD,fontSize:running?28:16,fontWeight:800,color:running?G.goldLight:G.grey,transition:"all .3s",letterSpacing:-.5}}>{running?fmt(timeLeft):`${restSecs}s`}</div>
+            }
           </div>
           <div style={{display:"flex",gap:8}}>
             {running
