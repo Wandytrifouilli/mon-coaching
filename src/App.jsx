@@ -149,6 +149,17 @@ const SEED_EX = [
   {id:103,name:"Inverted Row",muscle:"Dos",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/LK3E-40LRHE",notes:"Corps rigide, tirer le sternum vers la barre"},
   {id:104,name:"Broad Jump",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/WGHBLObUUH0",notes:"Saut en longueur, réception souple"},
   {id:105,name:"Ski Erg",muscle:"Dos",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/FY-N3pqBBMI",notes:"Traction vers le bas, hanches en arrière"},
+
+  // ── PROGRAMME GROSSESSE ──
+  {id:106,name:"Deadlift Sumo Barre",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/WH1oJERG8eI",notes:"Stance large, pieds 45°, dos plat, poussée du sol — barre proche du corps"},
+  {id:107,name:"Cable Pull-Through",muscle:"Jambes",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/mNwlpNhQXrk",notes:"Câble bas entre les jambes, charnière hanche pure, fessiers contractés en haut"},
+  {id:108,name:"Pallof Press Câble",muscle:"Abdominaux",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/AH_QZLm_0-s",notes:"Debout, unilatéral, hauteur poitrine — résister à la rotation"},
+  {id:109,name:"Bird Dog Lestés",muscle:"Abdominaux",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/wiFNA3sqjCA",notes:"2 s de pause en extension complète, dos plat, genoux à 5 cm du sol"},
+  {id:110,name:"Activation Fessiers Élastique",muscle:"Jambes",equipment:"Élastique",videoUrl:"https://www.youtube.com/embed/Y20ABnLDHhQ",notes:"Clamshell, hip abduction, monster walk — 15 reps par mouvement"},
+  {id:111,name:"Band Pull Apart",muscle:"Épaules",equipment:"Élastique",videoUrl:"https://www.youtube.com/embed/HFv0e5JqULM",notes:"Bras tendus devant, écarter l'élastique à hauteur des épaules, omoplate rétractées"},
+  {id:112,name:"RDL Unilatéral Haltère",muscle:"Jambes",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/qH1lLrkXNRE",notes:"Vitesse lente, équilibre, dos plat — jambe d'appui légèrement fléchie"},
+  {id:113,name:"Planche sur Genoux",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/DHBMtGlXnmk",notes:"Gainage actif, stopper si doming abdominal visible"},
+  {id:114,name:"Vélo Stationnaire",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/JqaCVNKRWF4",notes:"FC < 140 bpm, cadence modérée, dos droit"},
 ];
 
 
@@ -180,6 +191,137 @@ const SEED_PROGRAMS = [
       {label:"Pull 2",exercises:[mkEx(3,3,"Max","60s"),mkEx(6,4,"12","60s"),mkEx(10,3,"12","60s","45kg")]},
       {label:"Legs 2",exercises:[mkEx(1,4,"8","90s","90kg"),mkEx(9,3,"12","60s")]},
     ]},
+  ]},
+
+  // ── PROGRAMME GROSSESSE (sans hip thrust) ──────────────────────────────────
+  {id:3,name:"Programme Grossesse",category:"Prénatal",level:"Tous niveaux",weeks:[
+
+    // ── T1 — Semaines 1 à 12 ──────────────────────────────────────────────
+    {label:"T1 — S1·S12",days:[
+      {label:"Lundi · Bas du corps",exercises:[
+        mkEx(110,2,"15","45s",""),
+        mkEx(1,4,"8","90s","73% 1RM"),
+        mkEx(106,4,"8","90s","70% 1RM"),
+        mkEx(107,4,"12","60s",""),
+        mkEx(11,3,"12","75s","65% 1RM"),
+        mkEx(108,3,"12/côté","60s",""),
+        mkEx(109,3,"10/côté","45s","2kg"),
+      ]},
+      {label:"Mardi · Cardio & Traction",exercises:[
+        mkEx(81,1,"20 min","","FC < 140 bpm"),
+        mkEx(3,4,"5","90s",""),
+        mkEx(32,4,"10","75s","70% 1RM"),
+        mkEx(34,3,"10","60s","67% 1RM"),
+        mkEx(37,3,"15","45s",""),
+        mkEx(52,3,"10","60s",""),
+        mkEx(90,3,"25 m","90s",""),
+      ]},
+      {label:"Jeudi · Haut du corps",exercises:[
+        mkEx(111,2,"15","45s",""),
+        mkEx(5,4,"8","90s","70% 1RM"),
+        mkEx(26,3,"10","75s","67% 1RM"),
+        mkEx(3,4,"5","90s",""),
+        mkEx(33,4,"8/côté","75s","67% 1RM"),
+        mkEx(34,3,"10","60s","65% 1RM"),
+        mkEx(40,3,"15","45s",""),
+        mkEx(59,3,"12","45s",""),
+        mkEx(48,3,"10","60s",""),
+      ]},
+      {label:"Vendredi · Full Body",exercises:[
+        mkEx(114,1,"15 min","","FC < 140 bpm"),
+        mkEx(1,3,"10","75s","65% 1RM"),
+        mkEx(106,3,"8","75s","62% 1RM"),
+        mkEx(103,3,"10","60s",""),
+        mkEx(45,3,"10","60s","65% 1RM"),
+        mkEx(112,3,"8/côté","60s",""),
+        mkEx(113,3,"40s","45s",""),
+      ]},
+    ]},
+
+    // ── T2 — Semaines 13 à 26 ─────────────────────────────────────────────
+    {label:"T2 — S13·S26",days:[
+      {label:"Lundi · Bas du corps",exercises:[
+        mkEx(110,2,"15","45s",""),
+        mkEx(1,4,"8","90s","70% 1RM"),
+        mkEx(106,4,"8","90s","67% 1RM"),
+        mkEx(107,4,"12","60s",""),
+        mkEx(11,3,"12","75s","62% 1RM"),
+        mkEx(108,3,"12/côté","60s",""),
+        mkEx(109,3,"10/côté","45s","2kg"),
+      ]},
+      {label:"Mardi · Cardio & Traction",exercises:[
+        mkEx(81,1,"20 min","","FC < 140 bpm"),
+        mkEx(3,4,"5","90s",""),
+        mkEx(32,4,"10","75s","65% 1RM"),
+        mkEx(34,3,"10","60s","62% 1RM"),
+        mkEx(37,3,"15","45s",""),
+        mkEx(52,3,"10","60s",""),
+        mkEx(90,3,"25 m","90s",""),
+      ]},
+      {label:"Jeudi · Haut du corps",exercises:[
+        mkEx(111,2,"15","45s",""),
+        mkEx(5,4,"8","90s","65% 1RM"),
+        mkEx(26,3,"10","75s","67% 1RM"),
+        mkEx(3,4,"5","90s",""),
+        mkEx(33,4,"8/côté","75s","62% 1RM"),
+        mkEx(34,3,"10","60s","60% 1RM"),
+        mkEx(40,3,"15","45s",""),
+        mkEx(59,3,"12","45s",""),
+        mkEx(48,3,"10","60s",""),
+      ]},
+      {label:"Vendredi · Full Body",exercises:[
+        mkEx(114,1,"15 min","","FC < 140 bpm"),
+        mkEx(1,3,"10","75s","62% 1RM"),
+        mkEx(106,3,"8","75s","59% 1RM"),
+        mkEx(103,3,"10","60s",""),
+        mkEx(45,3,"10","60s","65% 1RM"),
+        mkEx(112,3,"8/côté","60s",""),
+        mkEx(113,3,"40s","45s",""),
+      ]},
+    ]},
+
+    // ── T3 — Semaines 27 à 40 ─────────────────────────────────────────────
+    {label:"T3 — S27·S40",days:[
+      {label:"Lundi · Bas du corps",exercises:[
+        mkEx(110,2,"15","45s",""),
+        mkEx(1,3,"8","90s","65% 1RM"),
+        mkEx(106,4,"8","90s","62% 1RM"),
+        mkEx(107,4,"12","60s",""),
+        mkEx(11,3,"12","75s","60% 1RM"),
+        mkEx(108,3,"12/côté","60s",""),
+        mkEx(109,3,"10/côté","45s","2kg"),
+      ]},
+      {label:"Mardi · Cardio & Traction",exercises:[
+        mkEx(81,1,"20 min","","FC < 140 bpm"),
+        mkEx(3,4,"5","90s",""),
+        mkEx(32,4,"10","75s","65% 1RM"),
+        mkEx(34,3,"10","60s","62% 1RM"),
+        mkEx(37,3,"15","45s",""),
+        mkEx(52,3,"10","60s",""),
+        mkEx(90,3,"25 m","90s",""),
+      ]},
+      {label:"Jeudi · Haut du corps",exercises:[
+        mkEx(111,2,"15","45s",""),
+        mkEx(5,4,"8","90s","62% 1RM"),
+        mkEx(26,3,"10","75s","67% 1RM"),
+        mkEx(3,4,"5","90s",""),
+        mkEx(33,4,"8/côté","75s","62% 1RM"),
+        mkEx(34,3,"10","60s","60% 1RM"),
+        mkEx(40,3,"15","45s",""),
+        mkEx(59,3,"12","45s",""),
+        mkEx(48,3,"10","60s",""),
+      ]},
+      {label:"Vendredi · Full Body",exercises:[
+        mkEx(114,1,"15 min","","FC < 140 bpm"),
+        mkEx(1,3,"10","75s","58% 1RM"),
+        mkEx(106,3,"8","75s","55% 1RM"),
+        mkEx(103,3,"10","60s",""),
+        mkEx(45,3,"10","60s","65% 1RM"),
+        mkEx(112,3,"8/côté","60s",""),
+        mkEx(113,3,"40s","45s",""),
+      ]},
+    ]},
+
   ]},
 ];
 
