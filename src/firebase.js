@@ -7,6 +7,7 @@ import {
   setDoc,
   deleteDoc,
   writeBatch,
+  getDocs,
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -20,4 +21,4 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
-export { doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch };
+export { doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs };

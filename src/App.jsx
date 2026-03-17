@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch } from "./firebase.js";
+import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs } from "./firebase.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
@@ -284,29 +284,42 @@ function useFirestoreCollection(collectionName, seed){
 
   useEffect(()=>{
     const colRef = collection(db, collectionName);
-    const unsub = onSnapshot(colRef, async snap => {
+
+    // Listener temps réel — uniquement pour les mises à jour
+    const unsub = onSnapshot(colRef,
+      snap => {
+        setDataLocal(snap.docs.map(d => d.data()));
+        setReady(true);
+      },
+      err => {
+        console.error(`[Firebase] Erreur listener ${collectionName}:`, err);
+        setDataLocal(seed);
+        setReady(true);
+      }
+    );
+
+    // Seeding séparé : vérifie si la collection est vide puis insère les données
+    getDocs(colRef).then(snap => {
       if(snap.empty){
-        // Premier lancement : on seed Firestore par lots de 499
         const BATCH_SIZE = 499;
+        const batches = [];
         for(let i = 0; i < seed.length; i += BATCH_SIZE){
           const b = writeBatch(db);
           seed.slice(i, i + BATCH_SIZE).forEach(item =>
             b.set(doc(db, collectionName, String(item.id)), item)
           );
-          await b.commit();
+          batches.push(b.commit());
         }
-        return;
+        return Promise.all(batches);
       }
-      setDataLocal(snap.docs.map(d => d.data()));
-      setReady(true);
-    });
+    }).catch(err => console.error(`[Firebase] Erreur seed ${collectionName}:`, err));
+
     return unsub;
   }, [collectionName]); // eslint-disable-line
 
   const setData = (updater) => {
     setDataLocal(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
-      // Écriture diff vers Firestore
       const prevMap = new Map(prev.map(x => [String(x.id), x]));
       const nextIds = new Set(next.map(x => String(x.id)));
       next.forEach(item => {
