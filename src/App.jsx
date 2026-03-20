@@ -327,6 +327,7 @@ const SEED_PROGRAMS = [
 
 const SEED_CLIENTS = [
   {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
+   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",content:""},{id:"snack1",label:"Collation matin",content:""},{id:"lunch",label:"Déjeuner",content:""},{id:"snack2",label:"Collation après-midi",content:""},{id:"dinner",label:"Dîner",content:""},{id:"other",label:"Autre / Suppléments",content:""}]},
    nutrition:{calories:1800,proteins:130,carbs:180,fats:60,notes:"Éviter le gluten."},
    sessionLogs:[
      {id:"log1",date:"2025-03-10",programId:1,weekIdx:0,dayIdx:0,dayLabel:"Séance A",completed:true,notes:"Bonne séance",
@@ -337,13 +338,24 @@ const SEED_CLIENTS = [
       ]},
    ]},
   {id:2,name:"Thomas Dubois",code:"THOM2025",goal:"Prise de masse",since:"Fév 2025",sessions:2,color:G.gold,programs:[2],
+   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",content:""},{id:"snack1",label:"Collation matin",content:""},{id:"lunch",label:"Déjeuner",content:""},{id:"snack2",label:"Collation après-midi",content:""},{id:"dinner",label:"Dîner",content:""},{id:"other",label:"Autre / Suppléments",content:""}]},
    nutrition:{calories:3200,proteins:200,carbs:380,fats:90,notes:"Shake post-workout."},sessionLogs:[]},
   {id:3,name:"Camille Roy",code:"CAMI2025",goal:"Tonification",since:"Mar 2025",sessions:0,color:"#8a7040",programs:[],
+   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",content:""},{id:"snack1",label:"Collation matin",content:""},{id:"lunch",label:"Déjeuner",content:""},{id:"snack2",label:"Collation après-midi",content:""},{id:"dinner",label:"Dîner",content:""},{id:"other",label:"Autre / Suppléments",content:""}]},
    nutrition:{calories:2000,proteins:150,carbs:220,fats:65,notes:""},sessionLogs:[]},
 ];
 
 const MUSCLES=["Tous","Jambes","Pectoraux","Dos","Épaules","Biceps","Triceps","Abdominaux"];
 const EQUIPS=["Aucun","Barre","Haltères","Poulie","Barre fixe","Machine","Élastique","Kettlebell","Poids du corps"];
+const MEAL_SLOTS=[
+  {id:"breakfast",icon:"🌅",label:"Petit déjeuner"},
+  {id:"snack1",icon:"🍎",label:"Collation matin"},
+  {id:"lunch",icon:"🥗",label:"Déjeuner"},
+  {id:"snack2",icon:"🍌",label:"Collation après-midi"},
+  {id:"dinner",icon:"🌙",label:"Dîner"},
+  {id:"other",icon:"💊",label:"Autre / Suppléments"},
+];
+const emptyMealPlan=()=>({meals:MEAL_SLOTS.map(s=>({id:s.id,label:s.label,content:""}))});
 const genCode=n=>n.split(" ")[0].toUpperCase().slice(0,4)+new Date().getFullYear();
 const uid=()=>Math.random().toString(36).slice(2,9);
 
@@ -418,6 +430,52 @@ const Modal=({onClose,title,children})=>(
   </div>
 );
 
+// ─── MEAL PLAN EDITOR (coach) ─────────────────────────────────────────────────
+function MealPlanEditor({mealPlan,onSave}){
+  const [editing,setEditing]=useState(false);
+  const meals=(mealPlan?.meals||MEAL_SLOTS.map(s=>({id:s.id,label:s.label,content:""}))).map(m=>{
+    const slot=MEAL_SLOTS.find(s=>s.id===m.id);
+    return{...m,icon:slot?.icon||"🍽"};
+  });
+  const [form,setForm]=useState(meals.map(m=>({...m})));
+  const hasContent=meals.some(m=>m.content&&m.content.trim());
+  const save=()=>{onSave({meals:form.map(({icon,...rest})=>rest)});setEditing(false);};
+  const cancel=()=>{setForm(meals.map(m=>({...m})));setEditing(false);};
+  return(
+    <div style={{marginTop:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,padding:"14px 16px",background:G.bg2,borderRadius:"12px 12px 0 0",border:`1px solid ${G.border}`,borderBottom:"none"}}>
+        <div style={{fontWeight:700,fontSize:14}}>Plan alimentaire</div>
+        <BtnSm variant={editing?"ghost":"gold"} onClick={()=>editing?cancel():setEditing(true)}>{editing?"Annuler":"✏️ Modifier"}</BtnSm>
+      </div>
+      {editing?(
+        <div style={{background:G.bg2,borderRadius:"0 0 12px 12px",padding:16,border:`1px solid ${G.border}`,borderTop:"none"}}>
+          {form.map((meal,i)=>(
+            <div key={meal.id} style={{marginBottom:14}}>
+              <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:6}}>{meal.icon} {meal.label}</div>
+              <textarea value={meal.content} onChange={e=>setForm(f=>f.map((m,j)=>j===i?{...m,content:e.target.value}:m))}
+                placeholder={`Ex : ${meal.id==="breakfast"?"3 œufs brouillés, flocons d'avoine 60g, café noir":meal.id==="lunch"?"Poulet 150g, riz basmati 80g, légumes verts":"..."}`}
+                rows={2}
+                style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 12px",color:G.white,fontSize:13,outline:"none",resize:"vertical",fontFamily:G.font}}
+                onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border}/>
+            </div>
+          ))}
+          <Btn onClick={save}>✓ Enregistrer le plan alimentaire</Btn>
+        </div>
+      ):(
+        <div style={{background:G.bg2,borderRadius:"0 0 12px 12px",border:`1px solid ${G.border}`,borderTop:"none",overflow:"hidden"}}>
+          {!hasContent&&<div style={{padding:"20px 16px",textAlign:"center",color:G.greyDim,fontSize:13}}>Aucun plan alimentaire renseigné</div>}
+          {meals.filter(m=>m.content&&m.content.trim()).map((meal,i,arr)=>(
+            <div key={meal.id} style={{padding:"14px 16px",borderBottom:i<arr.length-1?`1px solid ${G.border}`:"none"}}>
+              <div style={{fontSize:10,color:G.gold,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>{meal.icon} {meal.label}</div>
+              <div style={{fontSize:13,color:G.white,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{meal.content}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 // ─── PERSISTANCE FIRESTORE ────────────────────────────────────────────────────
 function useFirestoreCollection(collectionName, seed){
@@ -464,15 +522,22 @@ function useFirestoreCollection(collectionName, seed){
       const next = typeof updater === "function" ? updater(prev) : updater;
       const prevMap = new Map(prev.map(x => [String(x.id), x]));
       const nextIds = new Set(next.map(x => String(x.id)));
+      // Collect diffs first, then schedule Firestore writes OUTSIDE the render phase.
+      // Calling setDoc/deleteDoc directly inside a state updater is a side-effect that
+      // React 18 concurrent mode can trigger multiple times, causing write cascades.
+      const toWrite = [];
+      const toDelete = [];
       next.forEach(item => {
         const p = prevMap.get(String(item.id));
-        if(!p || JSON.stringify(p) !== JSON.stringify(item))
-          setDoc(doc(db, collectionName, String(item.id)), item).catch(console.error);
+        if(!p || JSON.stringify(p) !== JSON.stringify(item)) toWrite.push(item);
       });
       prev.forEach(item => {
-        if(!nextIds.has(String(item.id)))
-          deleteDoc(doc(db, collectionName, String(item.id))).catch(console.error);
+        if(!nextIds.has(String(item.id))) toDelete.push(String(item.id));
       });
+      setTimeout(() => {
+        toWrite.forEach(item => setDoc(doc(db, collectionName, String(item.id)), item).catch(console.error));
+        toDelete.forEach(id => deleteDoc(doc(db, collectionName, id)).catch(console.error));
+      }, 0);
       return next;
     });
   };
@@ -777,28 +842,33 @@ function ClientDetail({client,clients,setClients,setPrograms,setSel,programs,exe
       )}
 
       {tab==="nutrition"&&(
-        <div style={{background:G.bg2,borderRadius:12,padding:18,border:`1px solid ${G.border}`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <div style={{fontWeight:700}}>Objectifs nutritionnels</div>
-            <BtnSm variant={editNut?"ghost":"gold"} onClick={()=>{setNutForm({...client.nutrition});setEditNut(!editNut);}}>{editNut?"Annuler":"Modifier"}</BtnSm>
-          </div>
-          {editNut?(
-            <>{[["Calories (kcal)","calories"],["Protéines (g)","proteins"],["Glucides (g)","carbs"],["Lipides (g)","fats"]].map(([l,k])=>(
-              <Inp key={k} label={l} type="number" value={nutForm[k]} onChange={e=>setNutForm(p=>({...p,[k]:Number(e.target.value)}))}/>
-            ))}
-            <Txa label="Notes" value={nutForm.notes} placeholder="Allergies, préférences..." onChange={e=>setNutForm(p=>({...p,notes:e.target.value}))}/>
-            <Btn onClick={saveNut}>Enregistrer</Btn></>
-          ):(
-            <><div style={{textAlign:"center",padding:"12px 0 20px"}}>
-              <div style={{fontFamily:G.fontD,fontSize:56,fontWeight:800,color:G.goldLight,lineHeight:1}}>{nutForm.calories}</div>
-              <div style={{fontSize:11,color:G.grey,letterSpacing:2,textTransform:"uppercase",marginTop:4}}>kcal / jour</div>
+        <>
+          <div style={{background:G.bg2,borderRadius:12,padding:18,border:`1px solid ${G.border}`,marginBottom:0}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div style={{fontWeight:700}}>Objectifs nutritionnels</div>
+              <BtnSm variant={editNut?"ghost":"gold"} onClick={()=>{setNutForm({...client.nutrition});setEditNut(!editNut);}}>{editNut?"Annuler":"Modifier"}</BtnSm>
             </div>
-            <MacroBar label="Protéines" value={nutForm.proteins} max={300} color={G.goldLight}/>
-            <MacroBar label="Glucides" value={nutForm.carbs} max={500} color={G.gold}/>
-            <MacroBar label="Lipides" value={nutForm.fats} max={150} color="#C9A84C66"/>
-            {nutForm.notes&&<div style={{marginTop:16,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {nutForm.notes}</div>}</>
-          )}
-        </div>
+            {editNut?(
+              <>{[["Calories (kcal)","calories"],["Protéines (g)","proteins"],["Glucides (g)","carbs"],["Lipides (g)","fats"]].map(([l,k])=>(
+                <Inp key={k} label={l} type="number" value={nutForm[k]} onChange={e=>setNutForm(p=>({...p,[k]:Number(e.target.value)}))}/>
+              ))}
+              <Txa label="Notes" value={nutForm.notes} placeholder="Allergies, préférences..." onChange={e=>setNutForm(p=>({...p,notes:e.target.value}))}/>
+              <Btn onClick={saveNut}>Enregistrer</Btn></>
+            ):(
+              <><div style={{textAlign:"center",padding:"12px 0 20px"}}>
+                <div style={{fontFamily:G.fontD,fontSize:56,fontWeight:800,color:G.goldLight,lineHeight:1}}>{nutForm.calories}</div>
+                <div style={{fontSize:11,color:G.grey,letterSpacing:2,textTransform:"uppercase",marginTop:4}}>kcal / jour</div>
+              </div>
+              <MacroBar label="Protéines" value={nutForm.proteins} max={300} color={G.goldLight}/>
+              <MacroBar label="Glucides" value={nutForm.carbs} max={500} color={G.gold}/>
+              <MacroBar label="Lipides" value={nutForm.fats} max={150} color="#C9A84C66"/>
+              {nutForm.notes&&<div style={{marginTop:16,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {nutForm.notes}</div>}</>
+            )}
+          </div>
+          <MealPlanEditor
+            mealPlan={clients.find(c=>c.id===client.id)?.mealPlan||client.mealPlan}
+            onSave={mp=>upd(c=>({...c,mealPlan:mp}))}/>
+        </>
       )}
 
       {tab==="suivi"&&(
@@ -1409,7 +1479,7 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
   const startSession=(prog,weekIdx,day,dayIdx)=>{
     const exEntries=day.exercises.map(pe=>{
       const ex=exercises.find(e=>e.id===pe.exId);
-      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",muscle:ex?.muscle||"",rest:pe.rest||"",sensation:"",sets:Array.from({length:pe.sets},()=>({reps:pe.reps,load:pe.targetLoad||"",done:false}))};
+      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",muscle:ex?.muscle||"",rest:pe.rest||"",sensation:"",note:"",sets:Array.from({length:pe.sets},()=>({reps:pe.reps,load:pe.targetLoad||"",done:false}))};
     });
     setSession({progId:prog.id,weekIdx,dayIdx,dayLabel:day.label,weekLabel:prog.weeks[weekIdx]?.label||"",exercises:exEntries,notes:""});
     setView("session-active");
@@ -1585,7 +1655,8 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
       {tab==="nutrition"&&(
         <div className="fu">
           <PageH title="NUTRITION"/>
-          <div style={{background:G.bg2,borderRadius:12,padding:18,border:`1px solid ${G.border}`}}>
+          {/* Macros */}
+          <div style={{background:G.bg2,borderRadius:12,padding:18,border:`1px solid ${G.border}`,marginBottom:20}}>
             <div style={{textAlign:"center",padding:"12px 0 24px"}}>
               <div style={{fontFamily:G.fontD,fontSize:60,fontWeight:800,color:G.goldLight,lineHeight:1}}>{live.nutrition.calories}</div>
               <div style={{fontSize:11,color:G.grey,letterSpacing:2,textTransform:"uppercase",marginTop:6}}>kcal / jour</div>
@@ -1595,6 +1666,31 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
             <MacroBar label="Lipides" value={live.nutrition.fats} max={150} color="#C9A84C66"/>
             {live.nutrition.notes&&<div style={{marginTop:16,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {live.nutrition.notes}</div>}
           </div>
+          {/* Plan alimentaire */}
+          {(()=>{
+            const meals=(live.mealPlan?.meals||[]).filter(m=>m.content&&m.content.trim());
+            if(meals.length===0)return(
+              <div style={{textAlign:"center",padding:"24px 20px",color:G.greyDim,fontSize:13,background:G.bg2,borderRadius:12,border:`1px solid ${G.border}`}}>
+                <div style={{fontSize:24,marginBottom:8}}>🍽</div>
+                Ton coach n'a pas encore assigné de plan alimentaire.
+              </div>
+            );
+            const enriched=meals.map(m=>{const s=MEAL_SLOTS.find(s=>s.id===m.id);return{...m,icon:s?.icon||"🍽"};});
+            return(
+              <div>
+                <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>Plan alimentaire</div>
+                {enriched.map((meal,i)=>(
+                  <div key={meal.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,borderLeft:`3px solid ${G.gold}55`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                      <span style={{fontSize:20}}>{meal.icon}</span>
+                      <div style={{fontSize:11,color:G.goldLight,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{meal.label}</div>
+                    </div>
+                    <div style={{fontSize:14,color:G.white,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{meal.content}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1614,6 +1710,7 @@ function useRestTimer(){
   const [timeLeft,setTimeLeft]=useState(0);
   const [running,setRunning]=useState(false);
   const ref=useRef(null);
+  useEffect(()=>()=>clearInterval(ref.current),[]);
   const start=(secs)=>{
     clearInterval(ref.current);
     setTimeLeft(secs);
@@ -1647,6 +1744,8 @@ function playTone(freq,dur,vol=0.4){
     gain.gain.setValueAtTime(vol,ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur);
     osc.start(ctx.currentTime);osc.stop(ctx.currentTime+dur);
+    // Disconnect nodes after playback to prevent memory accumulation (critical in Safari)
+    osc.onended=()=>{try{osc.disconnect();gain.disconnect();}catch(_){}};
   }catch(e){}
 }
 const playTick=()=>playTone(660,0.12,0.3);

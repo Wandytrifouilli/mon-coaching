@@ -30,6 +30,15 @@ const genCode = n=>n.split(" ")[0].toUpperCase().slice(0,4)+new Date().getFullYe
 const uid = ()=>Math.random().toString(36).slice(2,9);
 const MUSCLES = ["Tous","Jambes","Pectoraux","Dos","Épaules","Biceps","Triceps","Abdominaux"];
 const EQUIPS = ["Aucun","Barre","Haltères","Poulie","Barre fixe","Machine","Élastique","Kettlebell","Poids du corps"];
+const MEAL_SLOTS=[
+  {id:"breakfast",icon:"🌅",label:"Petit déjeuner"},
+  {id:"snack1",icon:"🍎",label:"Collation matin"},
+  {id:"lunch",icon:"🥗",label:"Déjeuner"},
+  {id:"snack2",icon:"🍌",label:"Collation après-midi"},
+  {id:"dinner",icon:"🌙",label:"Dîner"},
+  {id:"other",icon:"💊",label:"Autre / Suppléments"},
+];
+const emptyMealPlan=()=>({meals:MEAL_SLOTS.map(s=>({id:s.id,label:s.label,content:""}))});
 
 // ─── SEED DATA ────────────────────────────────────────────────────────────────
 const SEED_EX = [
@@ -405,6 +414,50 @@ function Dashboard({clients,programs,exercises,onSelClient,onSelProgram}){
   );
 }
 
+// ─── MEAL PLAN EDITOR ─────────────────────────────────────────────────────────
+function MealPlanEditor({mealPlan,onSave}){
+  const [editing,setEditing]=useState(false);
+  const meals=(mealPlan?.meals||MEAL_SLOTS.map(s=>({id:s.id,label:s.label,content:""}))).map(m=>{
+    const slot=MEAL_SLOTS.find(s=>s.id===m.id)||{icon:"🍽️"};
+    return {...m,icon:slot.icon};
+  });
+  const [form,setForm]=useState(meals.map(m=>({...m})));
+  const hasContent=meals.some(m=>m.content&&m.content.trim());
+  const save=()=>{onSave({meals:form.map(({icon,...rest})=>rest)});setEditing(false);};
+  return(
+    <div style={{marginTop:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <div style={{fontWeight:700}}>Programme alimentaire</div>
+        <BtnSm variant={editing?"ghost":"gold"} onClick={()=>{setForm(meals.map(m=>({...m})));setEditing(!editing);}}>{editing?"Annuler":"Modifier"}</BtnSm>
+      </div>
+      {editing?(
+        <>
+          {MEAL_SLOTS.map((slot,i)=>(
+            <div key={slot.id} style={{marginBottom:14}}>
+              <div style={{fontSize:12,color:G.grey,fontWeight:600,letterSpacing:.5,marginBottom:6}}>{slot.icon} {slot.label}</div>
+              <textarea value={form[i]?.content||""} onChange={e=>setForm(p=>p.map((m,j)=>j===i?{...m,content:e.target.value}:m))}
+                placeholder={`Décrire le ${slot.label.toLowerCase()}...`}
+                style={{width:"100%",minHeight:72,background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,color:G.white,fontSize:13,padding:"10px 12px",resize:"vertical",fontFamily:G.font}}/>
+            </div>
+          ))}
+          <Btn onClick={save} style={{width:"100%",marginTop:4}}>Enregistrer le programme</Btn>
+        </>
+      ):(
+        hasContent?(
+          MEAL_SLOTS.map((slot,i)=>meals[i]?.content?.trim()?(
+            <div key={slot.id} style={{background:G.bg3,borderRadius:10,padding:"12px 14px",marginBottom:10,borderLeft:`3px solid ${G.gold}66`}}>
+              <div style={{fontSize:11,fontWeight:700,color:G.gold,letterSpacing:.8,marginBottom:6,textTransform:"uppercase"}}>{slot.icon} {slot.label}</div>
+              <div style={{fontSize:13,color:G.white,lineHeight:1.55,whiteSpace:"pre-wrap"}}>{meals[i].content}</div>
+            </div>
+          ):null)
+        ):(
+          <div style={{textAlign:"center",padding:"24px 0",color:G.grey,fontSize:13}}>Aucun programme alimentaire assigné.<br/>Cliquez sur Modifier pour en créer un.</div>
+        )
+      )}
+    </div>
+  );
+}
+
 // ─── CLIENT DETAIL PANEL ──────────────────────────────────────────────────────
 function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onViewProgram,onDelete}){
   const [tab,setTab]=useState("program");
@@ -521,6 +574,11 @@ function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onVie
                 {cur.nutrition?.notes&&<div style={{marginTop:14,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {cur.nutrition.notes}</div>}
               </>
             )}
+          </div>
+        )}
+        {tab==="nutrition"&&(
+          <div style={{background:G.bg2,borderRadius:12,padding:20,border:`1px solid ${G.border}`,marginTop:12}}>
+            <MealPlanEditor mealPlan={cur.mealPlan} onSave={mp=>upd(c=>({...c,mealPlan:mp}))}/>
           </div>
         )}
         {tab==="suivi"&&(
