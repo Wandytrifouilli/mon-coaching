@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs } from "./firebase.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -14,6 +14,7 @@ const css=`
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   body{background:${G.bg};}
   input,textarea,select{font-family:${G.font};}
+  button{touch-action:manipulation;}
   ::-webkit-scrollbar{width:0;}
   @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
   .fu{animation:fadeUp .3s ease both;}
@@ -327,7 +328,7 @@ const SEED_PROGRAMS = [
 
 const SEED_CLIENTS = [
   {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
-   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",content:""},{id:"snack1",label:"Collation matin",content:""},{id:"lunch",label:"Déjeuner",content:""},{id:"snack2",label:"Collation après-midi",content:""},{id:"dinner",label:"Dîner",content:""},{id:"other",label:"Autre / Suppléments",content:""}]},
+   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",items:[]},{id:"snack1",label:"Collation matin",items:[]},{id:"lunch",label:"Déjeuner",items:[]},{id:"snack2",label:"Collation après-midi",items:[]},{id:"dinner",label:"Dîner",items:[]},{id:"other",label:"Autre / Suppléments",items:[]}]},
    nutrition:{calories:1800,proteins:130,carbs:180,fats:60,notes:"Éviter le gluten."},
    sessionLogs:[
      {id:"log1",date:"2025-03-10",programId:1,weekIdx:0,dayIdx:0,dayLabel:"Séance A",completed:true,notes:"Bonne séance",
@@ -338,10 +339,10 @@ const SEED_CLIENTS = [
       ]},
    ]},
   {id:2,name:"Thomas Dubois",code:"THOM2025",goal:"Prise de masse",since:"Fév 2025",sessions:2,color:G.gold,programs:[2],
-   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",content:""},{id:"snack1",label:"Collation matin",content:""},{id:"lunch",label:"Déjeuner",content:""},{id:"snack2",label:"Collation après-midi",content:""},{id:"dinner",label:"Dîner",content:""},{id:"other",label:"Autre / Suppléments",content:""}]},
+   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",items:[]},{id:"snack1",label:"Collation matin",items:[]},{id:"lunch",label:"Déjeuner",items:[]},{id:"snack2",label:"Collation après-midi",items:[]},{id:"dinner",label:"Dîner",items:[]},{id:"other",label:"Autre / Suppléments",items:[]}]},
    nutrition:{calories:3200,proteins:200,carbs:380,fats:90,notes:"Shake post-workout."},sessionLogs:[]},
   {id:3,name:"Camille Roy",code:"CAMI2025",goal:"Tonification",since:"Mar 2025",sessions:0,color:"#8a7040",programs:[],
-   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",content:""},{id:"snack1",label:"Collation matin",content:""},{id:"lunch",label:"Déjeuner",content:""},{id:"snack2",label:"Collation après-midi",content:""},{id:"dinner",label:"Dîner",content:""},{id:"other",label:"Autre / Suppléments",content:""}]},
+   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",items:[]},{id:"snack1",label:"Collation matin",items:[]},{id:"lunch",label:"Déjeuner",items:[]},{id:"snack2",label:"Collation après-midi",items:[]},{id:"dinner",label:"Dîner",items:[]},{id:"other",label:"Autre / Suppléments",items:[]}]},
    nutrition:{calories:2000,proteins:150,carbs:220,fats:65,notes:""},sessionLogs:[]},
 ];
 
@@ -355,8 +356,42 @@ const MEAL_SLOTS=[
   {id:"dinner",icon:"🌙",label:"Dîner"},
   {id:"other",icon:"💊",label:"Autre / Suppléments"},
 ];
-const emptyMealPlan=()=>({meals:MEAL_SLOTS.map(s=>({id:s.id,label:s.label,content:""}))});
+const emptyMealPlan=()=>({meals:MEAL_SLOTS.map(s=>({id:s.id,label:s.label,items:[]}))});
 const genCode=n=>n.split(" ")[0].toUpperCase().slice(0,4)+new Date().getFullYear();
+
+// ─── BASE DE DONNÉES ALIMENTAIRE ──────────────────────────────────────────────
+// unit:"g" → valeurs pour 100g | unit:"portion" → valeurs pour 1 portion
+const FOODS_DB=[
+  // ── Par 100g ──
+  {id:"pain_mie",        name:"Pain de mie complet",                                         unit:"g",      kcal:87,  protein:3.2, carbs:13,  fat:1.4},
+  {id:"flocons_avoine",  name:"Flocon d'avoine",                                              unit:"g",      kcal:370, protein:13,  carbs:58,  fat:7},
+  {id:"lait_amande",     name:"Lait d'amande",                                                unit:"g",      kcal:35,  protein:2,   carbs:2.5, fat:1.6},
+  {id:"fromage_blanc",   name:"Fromage blanc nature 3% MG Carrefour",                         unit:"g",      kcal:70,  protein:8,   carbs:3,   fat:3},
+  {id:"muesli_bjorg",   name:"Muesli Bjorg sans sucres ajoutés",                             unit:"g",      kcal:357, protein:12,  carbs:58,  fat:6},
+  {id:"viande_poisson",  name:"Viande / Poisson au choix",                                    unit:"g",      kcal:178, protein:22,  carbs:0,   fat:10},
+  {id:"legumes",         name:"Légumes au choix (hors légumineuses)",                         unit:"g",      kcal:24,  protein:1,   carbs:5,   fat:0},
+  {id:"farine",          name:"Farine",                                                       unit:"g",      kcal:364, protein:10,  carbs:76,  fat:1},
+  // ── Par portion ──
+  {id:"whey",            name:"Scoop de whey",                                                unit:"portion",kcal:120, protein:23,  carbs:2,   fat:1.5},
+  {id:"feculents_dej",   name:"Féculents petit déj. (40g pain / biscottes / muffin anglais)", unit:"portion",kcal:139, protein:3,   carbs:25,  fat:1},
+  {id:"oeuf",            name:"Œuf entier",                                                   unit:"portion",kcal:79,  protein:7,   carbs:1,   fat:6},
+  {id:"topping",         name:"Topping – miel ou sirop d'agave (1 c. à café ~10g)",           unit:"portion",kcal:20,  protein:0,   carbs:5,   fat:0},
+  {id:"jambon_dinde",    name:"Jambon / Dinde (1 tranche)",                                   unit:"portion",kcal:33,  protein:6.6, carbs:0.7, fat:0},
+  {id:"carre_frais",     name:"Carré frais nature 0%",                                        unit:"portion",kcal:76,  protein:16,  carbs:3,   fat:0},
+  {id:"fruits",          name:"Fruits au choix (2 abricots / ½ banane / 120g cerises…)",      unit:"portion",kcal:63,  protein:1,   carbs:15,  fat:1},
+  {id:"feculents_cuits", name:"Féculents cuits (100g pâtes/riz ou 130g semoule/boulgour)",    unit:"portion",kcal:136, protein:4,   carbs:30,  fat:0},
+  {id:"mat_grasse",      name:"Matière grasse – 1 c. à soupe d'huile",                        unit:"portion",kcal:90,  protein:0,   carbs:0,   fat:10},
+  {id:"beurre_cacah",    name:"Beurre de cacahouète PROZIZ (1 c. à café ~8g)",                unit:"portion",kcal:50,  protein:1,   carbs:2,   fat:4},
+];
+// Calcule les macros totaux d'un tableau d'items [{foodId, qty}]
+const calcMacros=(items=[],foods=FOODS_DB)=>items.reduce((acc,item)=>{
+  const f=foods.find(x=>x.id===item.foodId);
+  if(!f)return acc;
+  const m=f.unit==="g"?item.qty/100:item.qty;
+  return{kcal:acc.kcal+f.kcal*m,protein:acc.protein+f.protein*m,carbs:acc.carbs+f.carbs*m,fat:acc.fat+f.fat*m};
+},{kcal:0,protein:0,carbs:0,fat:0});
+const rnd=v=>Math.round(v);
+const rnd1=v=>Math.round(v*10)/10;
 const uid=()=>Math.random().toString(36).slice(2,9);
 
 // ─── SHARED UI ────────────────────────────────────────────────────────────────
@@ -431,46 +466,269 @@ const Modal=({onClose,title,children})=>(
 );
 
 // ─── MEAL PLAN EDITOR (coach) ─────────────────────────────────────────────────
-function MealPlanEditor({mealPlan,onSave}){
-  const [editing,setEditing]=useState(false);
-  const meals=(mealPlan?.meals||MEAL_SLOTS.map(s=>({id:s.id,label:s.label,content:""}))).map(m=>{
-    const slot=MEAL_SLOTS.find(s=>s.id===m.id);
-    return{...m,icon:slot?.icon||"🍽"};
+function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
+  const initForm=()=>MEAL_SLOTS.map(s=>{
+    const ex=(mealPlan?.meals||[]).find(m=>m.id===s.id);
+    return{id:s.id,label:s.label,icon:s.icon,items:ex?.items||[]};
   });
-  const [form,setForm]=useState(meals.map(m=>({...m})));
-  const hasContent=meals.some(m=>m.content&&m.content.trim());
-  const save=()=>{onSave({meals:form.map(({icon,...rest})=>rest)});setEditing(false);};
-  const cancel=()=>{setForm(meals.map(m=>({...m})));setEditing(false);};
+  const [editing,setEditing]=useState(false);
+  const [form,setForm]=useState(initForm);
+  const [pickerMeal,setPickerMeal]=useState(null);
+  const [search,setSearch]=useState("");
+
+  // Remonte les totaux en temps réel vers le parent pendant l'édition
+  useEffect(()=>{
+    if(editing&&onLiveChange) onLiveChange(calcMacros(form.flatMap(m=>m.items),foods));
+  },[form,editing]); // eslint-disable-line
+
+  const save=()=>{
+    const meals=form.map(({icon,...rest})=>rest);
+    const allItems=form.flatMap(m=>m.items);
+    const totals=calcMacros(allItems,foods);
+    onSave({meals},totals);
+    if(onLiveChange) onLiveChange(null);
+    setEditing(false);
+  };
+  const cancel=()=>{setForm(initForm());if(onLiveChange)onLiveChange(null);setEditing(false);};
+
+  const addItem=(mealId,foodId)=>{
+    const food=foods.find(f=>f.id===foodId);
+    const defQty=food.unit==="g"?100:1;
+    setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:[...m.items,{foodId,qty:defQty}]}));
+    setPickerMeal(null);setSearch("");
+  };
+  const removeItem=(mealId,idx)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:m.items.filter((_,i)=>i!==idx)}));
+  const updateQty=(mealId,idx,val)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:m.items.map((it,i)=>i!==idx?it:{...it,qty:parseFloat(val)||0})}));
+
+  const filteredFoods=foods.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
+  const totalMacros=calcMacros(form.flatMap(m=>m.items),foods);
+  const hasPlan=form.some(m=>m.items.length>0);
+
   return(
     <div style={{marginTop:14}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,padding:"14px 16px",background:G.bg2,borderRadius:"12px 12px 0 0",border:`1px solid ${G.border}`,borderBottom:"none"}}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:0,padding:"14px 16px",background:G.bg2,borderRadius:"12px 12px 0 0",border:`1px solid ${G.border}`,borderBottom:"none"}}>
         <div style={{fontWeight:700,fontSize:14}}>Plan alimentaire</div>
         <BtnSm variant={editing?"ghost":"gold"} onClick={()=>editing?cancel():setEditing(true)}>{editing?"Annuler":"✏️ Modifier"}</BtnSm>
       </div>
-      {editing?(
-        <div style={{background:G.bg2,borderRadius:"0 0 12px 12px",padding:16,border:`1px solid ${G.border}`,borderTop:"none"}}>
-          {form.map((meal,i)=>(
-            <div key={meal.id} style={{marginBottom:14}}>
-              <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:6}}>{meal.icon} {meal.label}</div>
-              <textarea value={meal.content} onChange={e=>setForm(f=>f.map((m,j)=>j===i?{...m,content:e.target.value}:m))}
-                placeholder={`Ex : ${meal.id==="breakfast"?"3 œufs brouillés, flocons d'avoine 60g, café noir":meal.id==="lunch"?"Poulet 150g, riz basmati 80g, légumes verts":"..."}`}
-                rows={2}
-                style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 12px",color:G.white,fontSize:13,outline:"none",resize:"vertical",fontFamily:G.font}}
-                onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border}/>
+
+      {/* Body */}
+      <div style={{background:G.bg2,borderRadius:"0 0 12px 12px",padding:16,border:`1px solid ${G.border}`,borderTop:"none"}}>
+
+        {editing?(
+          <>
+            {/* Totaux en temps réel */}
+            {totalMacros.kcal>0&&(
+              <div style={{display:"flex",justifyContent:"space-around",background:G.bg3,borderRadius:10,padding:"10px 0",marginBottom:14,border:`1px solid ${G.border}`}}>
+                {[[rnd(totalMacros.kcal),"kcal",G.goldLight],[rnd1(totalMacros.protein)+"g","Prot.",G.goldLight],[rnd1(totalMacros.carbs)+"g","Gluc.",G.gold],[rnd1(totalMacros.fat)+"g","Lip.","#C9A84C"]].map(([v,l,c])=>(
+                  <div key={l} style={{textAlign:"center"}}>
+                    <div style={{fontFamily:G.fontD,fontSize:18,fontWeight:800,color:c,lineHeight:1}}>{v}</div>
+                    <div style={{fontSize:9,color:G.grey,letterSpacing:.5,marginTop:3}}>{l}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Repas */}
+            {form.map(meal=>{
+              const mMacros=calcMacros(meal.items,foods);
+              return(
+                <div key={meal.id} style={{marginBottom:18}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <div style={{fontSize:12,color:G.gold,fontWeight:700,letterSpacing:.5}}>{meal.icon} {meal.label}</div>
+                    {meal.items.length>0&&<div style={{fontSize:10,color:G.grey}}>{rnd(mMacros.kcal)} kcal</div>}
+                  </div>
+
+                  {/* Aliments du repas */}
+                  {meal.items.map((item,idx)=>{
+                    const food=foods.find(f=>f.id===item.foodId);
+                    if(!food)return null;
+                    const im=calcMacros([item],foods);
+                    return(
+                      <div key={idx} style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,background:G.bg3,borderRadius:8,padding:"8px 10px"}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:600,color:G.white,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{food.name}</div>
+                          <div style={{fontSize:10,color:G.grey,marginTop:2}}>{rnd(im.kcal)} kcal · P {rnd1(im.protein)}g · G {rnd1(im.carbs)}g · L {rnd1(im.fat)}g</div>
+                        </div>
+                        <input type="number" value={item.qty} min="0" onChange={e=>updateQty(meal.id,idx,e.target.value)}
+                          style={{width:52,background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"5px 4px",color:G.goldLight,fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                        <div style={{fontSize:10,color:G.grey,flexShrink:0}}>{food.unit==="g"?"g":"port."}</div>
+                        <button onClick={()=>removeItem(meal.id,idx)}
+                          style={{background:"none",border:"none",color:G.red,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 2px",flexShrink:0}}>×</button>
+                      </div>
+                    );
+                  })}
+
+                  {/* Bouton ajouter */}
+                  <button onClick={()=>{setPickerMeal(meal.id);setSearch("");}}
+                    style={{width:"100%",background:"transparent",border:`1px dashed ${G.border}`,borderRadius:8,padding:"8px 0",color:G.grey,fontSize:12,cursor:"pointer",marginTop:meal.items.length?4:0,transition:"border .2s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold;e.currentTarget.style.color=G.gold;}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.grey;}}>
+                    + Ajouter un aliment
+                  </button>
+                </div>
+              );
+            })}
+
+            <Btn onClick={save}>✓ Enregistrer le plan alimentaire</Btn>
+          </>
+        ):(
+          /* Vue lecture */
+          !hasPlan?(
+            <div style={{textAlign:"center",padding:"20px 0",color:G.greyDim,fontSize:13}}>Aucun plan alimentaire renseigné</div>
+          ):(
+            form.filter(m=>m.items.length>0).map(meal=>{
+              const mMacros=calcMacros(meal.items,foods);
+              return(
+                <div key={meal.id} style={{marginBottom:12,paddingBottom:12,borderBottom:`1px solid ${G.border}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                    <div style={{fontSize:10,color:G.gold,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{meal.icon} {meal.label}</div>
+                    <div style={{fontSize:10,color:G.grey}}>{rnd(mMacros.kcal)} kcal</div>
+                  </div>
+                  {meal.items.map((item,idx)=>{
+                    const food=foods.find(f=>f.id===item.foodId);
+                    if(!food)return null;
+                    return(
+                      <div key={idx} style={{fontSize:13,color:G.white,marginBottom:3}}>
+                        {food.name} <span style={{color:G.grey}}>— {item.qty} {food.unit==="g"?"g":"port."}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })
+          )
+        )}
+      </div>
+
+      {/* Sélecteur d'aliment (modal) */}
+      {pickerMeal&&(
+        <Modal onClose={()=>{setPickerMeal(null);setSearch("");}} title="Ajouter un aliment">
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un aliment..."
+            style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 12px",color:G.white,fontSize:14,outline:"none",marginBottom:12}}
+            onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border}/>
+          {filteredFoods.map(food=>(
+            <div key={food.id} onClick={()=>addItem(pickerMeal,food.id)}
+              style={{padding:"12px 12px",marginBottom:6,background:G.bg3,borderRadius:8,cursor:"pointer",border:`1px solid ${G.border}`,transition:"border .15s"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=G.gold}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=G.border}>
+              <div style={{fontWeight:600,fontSize:13,color:G.white,marginBottom:3}}>{food.name}</div>
+              <div style={{fontSize:11,color:G.grey}}>
+                {food.kcal} kcal · {food.protein}g prot · {food.carbs}g gluc · {food.fat}g lip
+                <span style={{color:G.gold,marginLeft:6}}>/ {food.unit==="g"?"100g":"1 portion"}</span>
+              </div>
             </div>
           ))}
-          <Btn onClick={save}>✓ Enregistrer le plan alimentaire</Btn>
+          {filteredFoods.length===0&&<div style={{textAlign:"center",color:G.greyDim,padding:20}}>Aucun aliment trouvé</div>}
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── FOODS MANAGER (coach) ────────────────────────────────────────────────────
+const EMPTY_FOOD=()=>({id:"",name:"",unit:"g",kcal:0,protein:0,carbs:0,fat:0});
+function FoodsManager({foods,setFoods,go}){
+  const [editing,setEditing]=useState(null); // null | "new" | food object
+  const [form,setForm]=useState(EMPTY_FOOD());
+  const [search,setSearch]=useState("");
+  const [confirmDel,setConfirmDel]=useState(null);
+
+  const openNew=()=>{setForm(EMPTY_FOOD());setEditing("new");};
+  const openEdit=f=>{setForm({...f});setEditing(f);};
+  const f=k=>v=>setForm(p=>({...p,[k]:v}));
+
+  const save=()=>{
+    const entry={
+      ...form,
+      id:editing==="new"?(form.name.toLowerCase().replace(/[^a-z0-9]/g,"_").slice(0,30)+"_"+Date.now()):form.id,
+      kcal:parseFloat(form.kcal)||0,
+      protein:parseFloat(form.protein)||0,
+      carbs:parseFloat(form.carbs)||0,
+      fat:parseFloat(form.fat)||0,
+    };
+    if(!entry.name.trim())return;
+    if(editing==="new"){
+      setFoods(p=>[...p,entry]);
+    }else{
+      setFoods(p=>p.map(x=>x.id===entry.id?entry:x));
+    }
+    setEditing(null);
+  };
+  const del=id=>{setFoods(p=>p.filter(x=>x.id!==id));setConfirmDel(null);};
+
+  const filtered=foods.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
+
+  if(editing){
+    const isNew=editing==="new";
+    return(
+      <div style={{padding:"28px 20px 0"}} className="fu">
+        <BackBtn onClick={()=>setEditing(null)} label="Aliments"/>
+        <PageH title={isNew?"NOUVEL ALIMENT":"MODIFIER L'ALIMENT"}/>
+        <Inp label="Nom de l'aliment" value={form.name} onChange={e=>f("name")(e.target.value)} placeholder="Ex: Riz basmati cuit"/>
+        <div style={{marginBottom:14}}>
+          <Label>Type de mesure</Label>
+          <div style={{display:"flex",gap:8}}>
+            {[["g","Par 100g"],["portion","Par portion"]].map(([val,label])=>(
+              <button key={val} onClick={()=>f("unit")(val)}
+                style={{flex:1,padding:"10px 0",borderRadius:8,border:`1px solid ${form.unit===val?G.gold:G.border}`,background:form.unit===val?G.gold+"22":"transparent",color:form.unit===val?G.goldLight:G.grey,fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-      ):(
-        <div style={{background:G.bg2,borderRadius:"0 0 12px 12px",border:`1px solid ${G.border}`,borderTop:"none",overflow:"hidden"}}>
-          {!hasContent&&<div style={{padding:"20px 16px",textAlign:"center",color:G.greyDim,fontSize:13}}>Aucun plan alimentaire renseigné</div>}
-          {meals.filter(m=>m.content&&m.content.trim()).map((meal,i,arr)=>(
-            <div key={meal.id} style={{padding:"14px 16px",borderBottom:i<arr.length-1?`1px solid ${G.border}`:"none"}}>
-              <div style={{fontSize:10,color:G.gold,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>{meal.icon} {meal.label}</div>
-              <div style={{fontSize:13,color:G.white,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{meal.content}</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:4}}>
+          <Inp label={`Calories (kcal/${form.unit==="g"?"100g":"portion"})`} type="number" value={form.kcal} onChange={e=>f("kcal")(e.target.value)}/>
+          <Inp label={`Protéines (g/${form.unit==="g"?"100g":"portion"})`} type="number" value={form.protein} onChange={e=>f("protein")(e.target.value)}/>
+          <Inp label={`Glucides (g/${form.unit==="g"?"100g":"portion"})`} type="number" value={form.carbs} onChange={e=>f("carbs")(e.target.value)}/>
+          <Inp label={`Lipides (g/${form.unit==="g"?"100g":"portion"})`} type="number" value={form.fat} onChange={e=>f("fat")(e.target.value)}/>
+        </div>
+        {form.name.trim()&&(
+          <div style={{marginBottom:14,padding:12,background:G.bg3,borderRadius:8,border:`1px solid ${G.border}`,fontSize:12,color:G.grey}}>
+            Aperçu : <span style={{color:G.goldLight,fontWeight:700}}>{form.kcal} kcal</span> · P {form.protein}g · G {form.carbs}g · L {form.fat}g / {form.unit==="g"?"100g":"portion"}
+          </div>
+        )}
+        <Btn onClick={save}>{isNew?"Ajouter l'aliment":"Enregistrer les modifications"}</Btn>
+      </div>
+    );
+  }
+
+  return(
+    <div style={{padding:"28px 20px 0"}} className="fu">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+        <PageH title="ALIMENTS" style={{marginBottom:0}}/>
+        <Btn onClick={openNew} style={{marginTop:0,padding:"10px 18px",fontSize:13}}>+ Ajouter</Btn>
+      </div>
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher..."
+        style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 12px",color:G.white,fontSize:14,outline:"none",marginBottom:14,boxSizing:"border-box"}}
+        onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border}/>
+      {filtered.map(food=>(
+        <div key={food.id} style={{background:G.bg2,borderRadius:12,padding:"14px 16px",marginBottom:8,border:`1px solid ${G.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:600,fontSize:13,color:G.white,marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{food.name}</div>
+            <div style={{fontSize:11,color:G.grey}}>
+              {food.kcal} kcal · P {food.protein}g · G {food.carbs}g · L {food.fat}g
+              <span style={{color:G.gold,marginLeft:6}}>/ {food.unit==="g"?"100g":"portion"}</span>
             </div>
-          ))}
+          </div>
+          <div style={{display:"flex",gap:6,flexShrink:0}}>
+            <BtnSm onClick={()=>openEdit(food)}>✏️</BtnSm>
+            <BtnSm variant="ghost" onClick={()=>setConfirmDel(food.id)} style={{color:G.red,borderColor:G.red+"44"}}>🗑</BtnSm>
+          </div>
         </div>
+      ))}
+      {filtered.length===0&&<div style={{textAlign:"center",color:G.greyDim,padding:"32px 0",fontSize:13}}>Aucun aliment trouvé</div>}
+      {confirmDel&&(
+        <Modal onClose={()=>setConfirmDel(null)} title="Supprimer l'aliment">
+          <div style={{color:G.grey,fontSize:14,marginBottom:20}}>
+            Supprimer <strong style={{color:G.white}}>{foods.find(f=>f.id===confirmDel)?.name}</strong> ?<br/>
+            <span style={{fontSize:12}}>Les plans alimentaires existants qui utilisent cet aliment ne seront plus affichés correctement.</span>
+          </div>
+          <div style={{display:"flex",gap:10}}>
+            <Btn onClick={()=>del(confirmDel)} style={{background:G.red+"22",borderColor:G.red,color:G.red}}>Supprimer</Btn>
+            <BtnSm onClick={()=>setConfirmDel(null)}>Annuler</BtnSm>
+          </div>
+        </Modal>
       )}
     </div>
   );
@@ -550,7 +808,8 @@ export default function App(){
   const [exercises,setExercises,exReady]=useFirestoreCollection("exercises", SEED_EX);
   const [programs,setPrograms,pgReady]=useFirestoreCollection("programs", SEED_PROGRAMS);
   const [clients,setClients,clReady]=useFirestoreCollection("clients", SEED_CLIENTS);
-  const dbReady = exReady && pgReady && clReady;
+  const [foods,setFoods,foodsReady]=useFirestoreCollection("foods", FOODS_DB);
+  const dbReady = exReady && pgReady && clReady && foodsReady;
 
   // Migration : ajoute les nouveaux exercices/programmes seed manquants dans Firestore
   useEffect(()=>{
@@ -593,7 +852,7 @@ export default function App(){
   if(auth==="login") return <LoginScreen onLogin={login}/>;
   if(auth==="client") return (
     <Shell css={css}>
-      <ClientPortal client={currentClient} clients={clients} setClients={setClients} programs={programs} exercises={exercises} onLogout={logout}/>
+      <ClientPortal client={currentClient} clients={clients} setClients={setClients} programs={programs} exercises={exercises} foods={foods} onLogout={logout}/>
     </Shell>
   );
   return (
@@ -601,7 +860,7 @@ export default function App(){
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {coachView==="dashboard"&&<Dashboard clients={clients} programs={programs} exercises={exercises} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}} selP={p=>{setSelProgram(p);setCoachView("program-detail");}} onLogout={logout}/>}
         {coachView==="clients"&&<ClientsList clients={clients} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}}/>}
-        {coachView==="client-detail"&&selClient&&<ClientDetail client={clients.find(c=>c.id===selClient.id)||selClient} clients={clients} setClients={setClients} setPrograms={setPrograms} setSel={setSelClient} programs={programs} exercises={exercises} go={setCoachView} selP={p=>{setSelProgram(p);setSelClientForProgram(clients.find(c=>c.id===selClient.id)||selClient);setCoachView("program-detail");}}/>}
+        {coachView==="client-detail"&&selClient&&<ClientDetail client={clients.find(c=>c.id===selClient.id)||selClient} clients={clients} setClients={setClients} setPrograms={setPrograms} setSel={setSelClient} programs={programs} exercises={exercises} foods={foods} go={setCoachView} selP={p=>{setSelProgram(p);setSelClientForProgram(clients.find(c=>c.id===selClient.id)||selClient);setCoachView("program-detail");}}/>}
         {coachView==="new-client"&&<NewClient setClients={setClients} go={setCoachView}/>}
         {coachView==="programs"&&<ProgramsList programs={programs} setPrograms={setPrograms} setClients={setClients} exercises={exercises} go={setCoachView} sel={p=>{setSelProgram(p);setSelClientForProgram(null);setCoachView("program-detail");}} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
         {coachView==="program-detail"&&selProgram&&<ProgramDetail program={programs.find(x=>x.id===selProgram.id)||selProgram} exercises={exercises} go={setCoachView} client={selClientForProgram} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
@@ -610,6 +869,7 @@ export default function App(){
         {coachView==="exercises"&&<ExLib exercises={exercises} setExercises={setExercises} go={setCoachView}/>}
         {coachView==="new-exercise"&&<NewEx setExercises={setExercises} go={setCoachView}/>}
         {coachView==="ai-coach"&&<AICoach exercises={exercises} setPrograms={setPrograms} go={setCoachView}/>}
+        {coachView==="foods"&&<FoodsManager foods={foods} setFoods={setFoods} go={setCoachView}/>}
       </div>
       <CoachNav view={coachView} setView={setCoachView}/>
     </Shell>
@@ -679,7 +939,7 @@ function LoginScreen({onLogin}){
 
 // ─── COACH NAV ────────────────────────────────────────────────────────────────
 function CoachNav({view,setView}){
-  const items=[{key:"dashboard",icon:"◈",label:"Accueil"},{key:"clients",icon:"◉",label:"Clients"},{key:"programs",icon:"▦",label:"Prog."},{key:"exercises",icon:"⊕",label:"Exercices"},{key:"ai-coach",icon:"✦",label:"IA Coach"}];
+  const items=[{key:"dashboard",icon:"◈",label:"Accueil"},{key:"clients",icon:"◉",label:"Clients"},{key:"programs",icon:"▦",label:"Prog."},{key:"exercises",icon:"⊕",label:"Exercices"},{key:"foods",icon:"◎",label:"Aliments"},{key:"ai-coach",icon:"✦",label:"IA Coach"}];
   const ak=v=>{if(["client-detail","new-client"].includes(v))return"clients";if(["program-detail","new-program","edit-program"].includes(v))return"programs";if(v==="new-exercise")return"exercises";return v;};
   return(
     <nav style={{flexShrink:0,width:"100%",background:G.bg2,borderTop:`1px solid ${G.border}`,display:"flex",zIndex:100}}>
@@ -764,12 +1024,13 @@ function ClientsList({clients,go,sel}){
 }
 
 // ─── CLIENT DETAIL (coach side) ───────────────────────────────────────────────
-function ClientDetail({client,clients,setClients,setPrograms,setSel,programs,exercises,go,selP}){
+function ClientDetail({client,clients,setClients,setPrograms,setSel,programs,exercises,go,selP,foods=FOODS_DB}){
   const [tab,setTab]=useState("program");
   const [showLog,setShowLog]=useState(false);
   const [logForm,setLogForm]=useState({date:new Date().toISOString().split("T")[0],programId:"",weekIdx:"",dayIdx:"",completed:true,notes:""});
   const [nutForm,setNutForm]=useState({...client.nutrition});
   const [editNut,setEditNut]=useState(false);
+  const [liveNut,setLiveNut]=useState(null); // totaux en temps réel depuis MealPlanEditor
 
   const upd=fn=>{setClients(p=>p.map(c=>c.id===client.id?fn(c):c));setSel(fn(client));};
   const removeProgram=pid=>upd(c=>({...c,programs:c.programs.filter(x=>x!==pid)}));
@@ -843,31 +1104,55 @@ function ClientDetail({client,clients,setClients,setPrograms,setSel,programs,exe
 
       {tab==="nutrition"&&(
         <>
-          <div style={{background:G.bg2,borderRadius:12,padding:18,border:`1px solid ${G.border}`,marginBottom:0}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <div style={{fontWeight:700}}>Objectifs nutritionnels</div>
-              <BtnSm variant={editNut?"ghost":"gold"} onClick={()=>{setNutForm({...client.nutrition});setEditNut(!editNut);}}>{editNut?"Annuler":"Modifier"}</BtnSm>
-            </div>
-            {editNut?(
-              <>{[["Calories (kcal)","calories"],["Protéines (g)","proteins"],["Glucides (g)","carbs"],["Lipides (g)","fats"]].map(([l,k])=>(
-                <Inp key={k} label={l} type="number" value={nutForm[k]} onChange={e=>setNutForm(p=>({...p,[k]:Number(e.target.value)}))}/>
-              ))}
-              <Txa label="Notes" value={nutForm.notes} placeholder="Allergies, préférences..." onChange={e=>setNutForm(p=>({...p,notes:e.target.value}))}/>
-              <Btn onClick={saveNut}>Enregistrer</Btn></>
-            ):(
-              <><div style={{textAlign:"center",padding:"12px 0 20px"}}>
-                <div style={{fontFamily:G.fontD,fontSize:56,fontWeight:800,color:G.goldLight,lineHeight:1}}>{nutForm.calories}</div>
-                <div style={{fontSize:11,color:G.grey,letterSpacing:2,textTransform:"uppercase",marginTop:4}}>kcal / jour</div>
+          {(()=>{
+            // Calcul des macros : liveNut (édition en cours) > plan stocké > valeurs manuelles
+            const liveMp=clients.find(c=>c.id===client.id)?.mealPlan||client.mealPlan;
+            const storedItems=(liveMp?.meals||[]).flatMap(m=>m.items||[]);
+            const storedCalc=storedItems.length>0?calcMacros(storedItems,foods):null;
+            const src=liveNut||storedCalc;
+            const cal=src?rnd(src.kcal):client.nutrition.calories;
+            const prot=src?rnd1(src.protein):client.nutrition.proteins;
+            const gluc=src?rnd1(src.carbs):client.nutrition.carbs;
+            const lip=src?rnd1(src.fat):client.nutrition.fats;
+            const isLive=!!liveNut;
+            return(
+              <div style={{background:G.bg2,borderRadius:12,padding:18,border:`1px solid ${G.border}`,marginBottom:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                  <div>
+                    <div style={{fontWeight:700}}>Objectifs nutritionnels</div>
+                    {isLive&&<div style={{fontSize:10,color:G.gold,marginTop:3}}>● Aperçu en temps réel</div>}
+                  </div>
+                  <BtnSm variant={editNut?"ghost":"gold"} onClick={()=>{setNutForm({...client.nutrition});setEditNut(!editNut);}}>{editNut?"Annuler":"✏️ Notes"}</BtnSm>
+                </div>
+                {editNut&&(
+                  <>
+                    <Txa label="Notes / Allergies / Préférences" value={nutForm.notes} placeholder="Éviter le gluten, shake post-workout..." onChange={e=>setNutForm(p=>({...p,notes:e.target.value}))}/>
+                    <Btn onClick={saveNut}>Enregistrer les notes</Btn>
+                  </>
+                )}
+                <div style={{textAlign:"center",padding:"12px 0 20px"}}>
+                  <div style={{fontFamily:G.fontD,fontSize:56,fontWeight:800,color:G.goldLight,lineHeight:1,transition:"all .3s"}}>{cal}</div>
+                  <div style={{fontSize:11,color:G.grey,letterSpacing:2,textTransform:"uppercase",marginTop:4}}>kcal / jour</div>
+                </div>
+                <MacroBar label="Protéines" value={prot} max={300} color={G.goldLight}/>
+                <MacroBar label="Glucides" value={gluc} max={500} color={G.gold}/>
+                <MacroBar label="Lipides" value={lip} max={150} color="#C9A84C66"/>
+                {client.nutrition.notes&&!editNut&&<div style={{marginTop:16,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {client.nutrition.notes}</div>}
               </div>
-              <MacroBar label="Protéines" value={nutForm.proteins} max={300} color={G.goldLight}/>
-              <MacroBar label="Glucides" value={nutForm.carbs} max={500} color={G.gold}/>
-              <MacroBar label="Lipides" value={nutForm.fats} max={150} color="#C9A84C66"/>
-              {nutForm.notes&&<div style={{marginTop:16,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {nutForm.notes}</div>}</>
-            )}
-          </div>
+            );
+          })()}
           <MealPlanEditor
+            foods={foods}
             mealPlan={clients.find(c=>c.id===client.id)?.mealPlan||client.mealPlan}
-            onSave={mp=>upd(c=>({...c,mealPlan:mp}))}/>
+            onLiveChange={setLiveNut}
+            onSave={(mp,totals)=>{
+              setLiveNut(null);
+              upd(c=>({
+                ...c,
+                mealPlan:mp,
+                ...(totals.kcal>0?{nutrition:{...c.nutrition,calories:rnd(totals.kcal),proteins:rnd1(totals.protein),carbs:rnd1(totals.carbs),fats:rnd1(totals.fat)}}:{})
+              }));
+            }}/>
         </>
       )}
 
@@ -923,7 +1208,7 @@ function NewClient({setClients,go}){
   const [form,setForm]=useState({name:"",goal:"",color:G.goldLight});
   const colors=[G.goldLight,G.gold,"#C9A84C","#8a7040","#a08030"];
   const create=()=>{
-    setClients(p=>[...p,{...form,id:Date.now(),code:genCode(form.name),since:new Date().toLocaleDateString("fr-FR",{month:"short",year:"numeric"}),sessions:0,programs:[],nutrition:{calories:2000,proteins:150,carbs:200,fats:65,notes:""},sessionLogs:[]}]);
+    setClients(p=>[...p,{...form,id:Date.now(),code:genCode(form.name),since:new Date().toLocaleDateString("fr-FR",{month:"short",year:"numeric"}),sessions:0,programs:[],mealPlan:emptyMealPlan(),nutrition:{calories:2000,proteins:150,carbs:200,fats:65,notes:""},sessionLogs:[]}]);
     go("clients");
   };
   return(
@@ -1464,7 +1749,7 @@ function NewEx({setExercises,go}){
 }
 
 // ─── CLIENT PORTAL ────────────────────────────────────────────────────────────
-function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
+function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foods=FOODS_DB}){
   const live=clients.find(c=>c.id===client.id)||client;
   const [tab,setTab]=useState("home");
   const [view,setView]=useState("list"); // list | week-detail | session-active | session-done
@@ -1485,15 +1770,15 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
     setView("session-active");
   };
 
-  const updateLoad=(exIdx,setIdx,val)=>{
+  const updateLoad=useCallback((exIdx,setIdx,val)=>{
     setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,load:val})})}));
-  };
-  const toggleDone=(exIdx,setIdx)=>{
+  },[]);
+  const toggleDone=useCallback((exIdx,setIdx)=>{
     setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,done:!st.done})})}));
-  };
-  const updateSensation=(exIdx,val)=>{
+  },[]);
+  const updateSensation=useCallback((exIdx,val)=>{
     setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sensation:val})}));
-  };
+  },[]);
 
   const completeSession=()=>{
     const log={id:uid(),date:new Date().toISOString().split("T")[0],programId:session.progId,weekIdx:session.weekIdx,dayIdx:session.dayIdx,dayLabel:session.dayLabel,weekLabel:session.weekLabel,completed:true,notes:session.notes,exercises:session.exercises.map(ex=>({exId:ex.exId,name:ex.name,sensation:ex.sensation||"",sets:ex.sets.map(s=>({reps:s.reps,load:s.load}))}))};
@@ -1656,38 +1941,67 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout}){
         <div className="fu">
           <PageH title="NUTRITION"/>
           {/* Macros */}
-          <div style={{background:G.bg2,borderRadius:12,padding:18,border:`1px solid ${G.border}`,marginBottom:20}}>
-            <div style={{textAlign:"center",padding:"12px 0 24px"}}>
-              <div style={{fontFamily:G.fontD,fontSize:60,fontWeight:800,color:G.goldLight,lineHeight:1}}>{live.nutrition.calories}</div>
-              <div style={{fontSize:11,color:G.grey,letterSpacing:2,textTransform:"uppercase",marginTop:6}}>kcal / jour</div>
-            </div>
-            <MacroBar label="Protéines" value={live.nutrition.proteins} max={300} color={G.goldLight}/>
-            <MacroBar label="Glucides" value={live.nutrition.carbs} max={500} color={G.gold}/>
-            <MacroBar label="Lipides" value={live.nutrition.fats} max={150} color="#C9A84C66"/>
-            {live.nutrition.notes&&<div style={{marginTop:16,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {live.nutrition.notes}</div>}
-          </div>
+          {(()=>{
+            const storedItems=(live.mealPlan?.meals||[]).flatMap(m=>m.items||[]);
+            const src=storedItems.length>0?calcMacros(storedItems,foods):null;
+            const cal=src?rnd(src.kcal):live.nutrition.calories;
+            const prot=src?rnd1(src.protein):live.nutrition.proteins;
+            const gluc=src?rnd1(src.carbs):live.nutrition.carbs;
+            const lip=src?rnd1(src.fat):live.nutrition.fats;
+            return(
+              <div style={{background:G.bg2,borderRadius:12,padding:18,border:`1px solid ${G.border}`,marginBottom:20}}>
+                <div style={{textAlign:"center",padding:"12px 0 24px"}}>
+                  <div style={{fontFamily:G.fontD,fontSize:60,fontWeight:800,color:G.goldLight,lineHeight:1}}>{cal}</div>
+                  <div style={{fontSize:11,color:G.grey,letterSpacing:2,textTransform:"uppercase",marginTop:6}}>kcal / jour</div>
+                </div>
+                <MacroBar label="Protéines" value={prot} max={300} color={G.goldLight}/>
+                <MacroBar label="Glucides" value={gluc} max={500} color={G.gold}/>
+                <MacroBar label="Lipides" value={lip} max={150} color="#C9A84C66"/>
+                {live.nutrition.notes&&<div style={{marginTop:16,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {live.nutrition.notes}</div>}
+              </div>
+            );
+          })()}
           {/* Plan alimentaire */}
           {(()=>{
-            const meals=(live.mealPlan?.meals||[]).filter(m=>m.content&&m.content.trim());
+            const meals=(live.mealPlan?.meals||[]).filter(m=>(m.items||[]).length>0);
             if(meals.length===0)return(
               <div style={{textAlign:"center",padding:"24px 20px",color:G.greyDim,fontSize:13,background:G.bg2,borderRadius:12,border:`1px solid ${G.border}`}}>
                 <div style={{fontSize:24,marginBottom:8}}>🍽</div>
                 Ton coach n'a pas encore assigné de plan alimentaire.
               </div>
             );
-            const enriched=meals.map(m=>{const s=MEAL_SLOTS.find(s=>s.id===m.id);return{...m,icon:s?.icon||"🍽"};});
             return(
               <div>
                 <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>Plan alimentaire</div>
-                {enriched.map((meal,i)=>(
-                  <div key={meal.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,borderLeft:`3px solid ${G.gold}55`}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                      <span style={{fontSize:20}}>{meal.icon}</span>
-                      <div style={{fontSize:11,color:G.goldLight,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{meal.label}</div>
+                {meals.map(meal=>{
+                  const slot=MEAL_SLOTS.find(s=>s.id===meal.id);
+                  const mMacros=calcMacros(meal.items,foods);
+                  return(
+                    <div key={meal.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,borderLeft:`3px solid ${G.gold}55`}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:20}}>{slot?.icon||"🍽"}</span>
+                          <div style={{fontSize:11,color:G.goldLight,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{meal.label}</div>
+                        </div>
+                        <div style={{fontSize:11,color:G.grey}}>{rnd(mMacros.kcal)} kcal</div>
+                      </div>
+                      {(meal.items||[]).map((item,idx)=>{
+                        const food=foods.find(f=>f.id===item.foodId);
+                        if(!food)return null;
+                        const im=calcMacros([item],foods);
+                        return(
+                          <div key={idx} style={{paddingBottom:8,marginBottom:8,borderBottom:idx<meal.items.length-1?`1px solid ${G.border}`:"none"}}>
+                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                              <div style={{fontSize:13,color:G.white,fontWeight:600}}>{food.name}</div>
+                              <div style={{fontSize:12,color:G.gold,fontWeight:700,flexShrink:0,marginLeft:8}}>{item.qty} {food.unit==="g"?"g":"port."}</div>
+                            </div>
+                            <div style={{fontSize:11,color:G.grey}}>{rnd(im.kcal)} kcal · P {rnd1(im.protein)}g · G {rnd1(im.carbs)}g · L {rnd1(im.fat)}g</div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div style={{fontSize:14,color:G.white,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{meal.content}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             );
           })()}
@@ -1745,7 +2059,9 @@ function playTone(freq,dur,vol=0.4){
     gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur);
     osc.start(ctx.currentTime);osc.stop(ctx.currentTime+dur);
     // Disconnect nodes after playback to prevent memory accumulation (critical in Safari)
-    osc.onended=()=>{try{osc.disconnect();gain.disconnect();}catch(_){}};
+    const cleanup=()=>{try{osc.disconnect();gain.disconnect();}catch(_){}};
+    osc.onended=cleanup;
+    setTimeout(cleanup,(dur+0.5)*1000); // fallback si onended ne se déclenche pas
   }catch(e){}
 }
 const playTick=()=>playTone(660,0.12,0.3);
@@ -1885,7 +2201,7 @@ function ClientShell({children,active,onNav,onLogout}){
   const items=[{key:"home",icon:"◈",label:"Accueil"},{key:"programme",icon:"▦",label:"Programme"},{key:"nutrition",icon:"◎",label:"Nutrition"},{key:"historique",icon:"◷",label:"Historique"}];
   return(
     <>
-      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"20px 20px 24px"}}>
+      <div style={{flex:1,overflowY:"auto",overscrollBehavior:"contain",padding:"20px 20px 24px"}}>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:4}}>
           <button onClick={onLogout} style={{background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"6px 12px",color:G.grey,fontSize:11,cursor:"pointer"}}>Déconnexion</button>
         </div>
