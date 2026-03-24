@@ -38,7 +38,38 @@ const MEAL_SLOTS=[
   {id:"dinner",icon:"🌙",label:"Dîner"},
   {id:"other",icon:"💊",label:"Autre / Suppléments"},
 ];
-const emptyMealPlan=()=>({meals:MEAL_SLOTS.map(s=>({id:s.id,label:s.label,content:""}))});
+const emptyMealPlan=()=>({meals:MEAL_SLOTS.map(s=>({id:s.id,label:s.label,items:[]}))});
+
+// ─── BASE ALIMENTAIRE ─────────────────────────────────────────────────────────
+// unit:"g" → valeurs pour 100g | unit:"portion" → valeurs pour 1 portion
+const FOODS_DB=[
+  {id:"pain_mie",        name:"Pain de mie complet",                                         unit:"g",      kcal:87,  protein:3.2, carbs:13,  fat:1.4},
+  {id:"flocons_avoine",  name:"Flocon d'avoine",                                              unit:"g",      kcal:370, protein:13,  carbs:58,  fat:7},
+  {id:"lait_amande",     name:"Lait d'amande",                                                unit:"g",      kcal:35,  protein:2,   carbs:2.5, fat:1.6},
+  {id:"fromage_blanc",   name:"Fromage blanc nature 3% MG Carrefour",                         unit:"g",      kcal:70,  protein:8,   carbs:3,   fat:3},
+  {id:"muesli_bjorg",    name:"Muesli Bjorg sans sucres ajoutés",                             unit:"g",      kcal:357, protein:12,  carbs:58,  fat:6},
+  {id:"viande_poisson",  name:"Viande / Poisson au choix",                                    unit:"g",      kcal:178, protein:22,  carbs:0,   fat:10},
+  {id:"legumes",         name:"Légumes au choix (hors légumineuses)",                         unit:"g",      kcal:24,  protein:1,   carbs:5,   fat:0},
+  {id:"farine",          name:"Farine",                                                       unit:"g",      kcal:364, protein:10,  carbs:76,  fat:1},
+  {id:"whey",            name:"Scoop de whey",                                                unit:"portion",kcal:120, protein:23,  carbs:2,   fat:1.5},
+  {id:"feculents_dej",   name:"Féculents petit déj. (40g pain / biscottes / muffin anglais)", unit:"portion",kcal:139, protein:3,   carbs:25,  fat:1},
+  {id:"oeuf",            name:"Œuf entier",                                                   unit:"portion",kcal:79,  protein:7,   carbs:1,   fat:6},
+  {id:"topping",         name:"Topping – miel ou sirop d'agave (1 c. à café ~10g)",           unit:"portion",kcal:20,  protein:0,   carbs:5,   fat:0},
+  {id:"jambon_dinde",    name:"Jambon / Dinde (1 tranche)",                                   unit:"portion",kcal:33,  protein:6.6, carbs:0.7, fat:0},
+  {id:"carre_frais",     name:"Carré frais nature 0%",                                        unit:"portion",kcal:76,  protein:16,  carbs:3,   fat:0},
+  {id:"fruits",          name:"Fruits au choix (2 abricots / ½ banane / 120g cerises…)",      unit:"portion",kcal:63,  protein:1,   carbs:15,  fat:1},
+  {id:"feculents_cuits", name:"Féculents cuits (100g pâtes/riz ou 130g semoule/boulgour)",    unit:"portion",kcal:136, protein:4,   carbs:30,  fat:0},
+  {id:"mat_grasse",      name:"Matière grasse – 1 c. à soupe d'huile",                        unit:"portion",kcal:90,  protein:0,   carbs:0,   fat:10},
+  {id:"beurre_cacah",    name:"Beurre de cacahouète PROZIZ (1 c. à café ~8g)",                unit:"portion",kcal:50,  protein:1,   carbs:2,   fat:4},
+];
+const calcMacros=(items=[],foods=FOODS_DB)=>items.reduce((acc,item)=>{
+  const f=foods.find(x=>x.id===item.foodId);
+  if(!f)return acc;
+  const m=f.unit==="g"?item.qty/100:item.qty;
+  return{kcal:acc.kcal+f.kcal*m,protein:acc.protein+f.protein*m,carbs:acc.carbs+f.carbs*m,fat:acc.fat+f.fat*m};
+},{kcal:0,protein:0,carbs:0,fat:0});
+const rnd=v=>Math.round(v);
+const rnd1=v=>Math.round(v*10)/10;
 
 // ─── SEED DATA ────────────────────────────────────────────────────────────────
 const SEED_EX = [
@@ -172,6 +203,7 @@ const SEED_PROGRAMS = [
 
 const SEED_CLIENTS = [
   {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
+   mealPlan:emptyMealPlan(),
    nutrition:{calories:1800,proteins:130,carbs:180,fats:60,notes:"Éviter le gluten."},
    sessionLogs:[
      {id:"log1",date:"2025-03-10",programId:1,weekIdx:0,dayIdx:0,dayLabel:"Séance A",completed:true,notes:"Bonne séance",
@@ -182,8 +214,10 @@ const SEED_CLIENTS = [
       ]}
    ]},
   {id:2,name:"Thomas Dubois",code:"THOM2025",goal:"Prise de masse",since:"Fév 2025",sessions:2,color:G.gold,programs:[2],
+   mealPlan:emptyMealPlan(),
    nutrition:{calories:3200,proteins:200,carbs:380,fats:90,notes:"Shake post-workout."},sessionLogs:[]},
   {id:3,name:"Camille Roy",code:"CAMI2025",goal:"Tonification",since:"Mar 2025",sessions:0,color:"#8a7040",programs:[],
+   mealPlan:emptyMealPlan(),
    nutrition:{calories:2000,proteins:150,carbs:220,fats:65,notes:""},sessionLogs:[]},
 ];
 
@@ -325,6 +359,7 @@ function Sidebar({view,setView,onLogout,counts}){
     {key:"clients",icon:"◉",label:"Clients",count:counts.clients},
     {key:"programs",icon:"▦",label:"Programmes",count:counts.programs},
     {key:"exercises",icon:"⊕",label:"Exercices",count:counts.exercises},
+    {key:"foods",icon:"◎",label:"Aliments",count:counts.foods},
   ];
   const isActive=v=>{
     if(v==="clients"&&view==="program-from-client")return true;
@@ -415,54 +450,155 @@ function Dashboard({clients,programs,exercises,onSelClient,onSelProgram}){
 }
 
 // ─── MEAL PLAN EDITOR ─────────────────────────────────────────────────────────
-function MealPlanEditor({mealPlan,onSave}){
-  const [editing,setEditing]=useState(false);
-  const meals=(mealPlan?.meals||MEAL_SLOTS.map(s=>({id:s.id,label:s.label,content:""}))).map(m=>{
-    const slot=MEAL_SLOTS.find(s=>s.id===m.id)||{icon:"🍽️"};
-    return {...m,icon:slot.icon};
+function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
+  const initForm=()=>MEAL_SLOTS.map(s=>{
+    const ex=(mealPlan?.meals||[]).find(m=>m.id===s.id);
+    return{id:s.id,label:s.label,icon:s.icon,items:ex?.items||[]};
   });
-  const [form,setForm]=useState(meals.map(m=>({...m})));
-  const hasContent=meals.some(m=>m.content&&m.content.trim());
-  const save=()=>{onSave({meals:form.map(({icon,...rest})=>rest)});setEditing(false);};
+  const [editing,setEditing]=useState(false);
+  const [form,setForm]=useState(initForm);
+  const [pickerMeal,setPickerMeal]=useState(null);
+  const [search,setSearch]=useState("");
+
+  useEffect(()=>{
+    if(editing&&onLiveChange) onLiveChange(calcMacros(form.flatMap(m=>m.items),foods));
+  },[form,editing]); // eslint-disable-line
+
+  const save=()=>{
+    const meals=form.map(({icon,...rest})=>rest);
+    const totals=calcMacros(form.flatMap(m=>m.items),foods);
+    onSave({meals},totals);
+    if(onLiveChange) onLiveChange(null);
+    setEditing(false);
+  };
+  const cancel=()=>{setForm(initForm());if(onLiveChange)onLiveChange(null);setEditing(false);};
+
+  const addItem=(mealId,foodId)=>{
+    const food=foods.find(f=>f.id===foodId);
+    const defQty=food.unit==="g"?100:1;
+    setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:[...m.items,{foodId,qty:defQty}]}));
+    setPickerMeal(null);setSearch("");
+  };
+  const removeItem=(mealId,idx)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:m.items.filter((_,i)=>i!==idx)}));
+  const updateQty=(mealId,idx,val)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:m.items.map((it,i)=>i!==idx?it:{...it,qty:parseFloat(val)||0})}));
+
+  const filteredFoods=foods.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
+  const totalMacros=calcMacros(form.flatMap(m=>m.items),foods);
+  const hasPlan=form.some(m=>m.items.length>0);
+
   return(
-    <div style={{marginTop:16}}>
+    <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-        <div style={{fontWeight:700}}>Programme alimentaire</div>
-        <BtnSm variant={editing?"ghost":"gold"} onClick={()=>{setForm(meals.map(m=>({...m})));setEditing(!editing);}}>{editing?"Annuler":"Modifier"}</BtnSm>
+        <div style={{fontWeight:700,fontSize:14}}>Plan alimentaire</div>
+        <BtnSm variant={editing?"ghost":"gold"} onClick={()=>editing?cancel():setEditing(true)}>{editing?"Annuler":"✏️ Modifier"}</BtnSm>
       </div>
+
       {editing?(
         <>
-          {MEAL_SLOTS.map((slot,i)=>(
-            <div key={slot.id} style={{marginBottom:14}}>
-              <div style={{fontSize:12,color:G.grey,fontWeight:600,letterSpacing:.5,marginBottom:6}}>{slot.icon} {slot.label}</div>
-              <textarea value={form[i]?.content||""} onChange={e=>setForm(p=>p.map((m,j)=>j===i?{...m,content:e.target.value}:m))}
-                placeholder={`Décrire le ${slot.label.toLowerCase()}...`}
-                style={{width:"100%",minHeight:72,background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,color:G.white,fontSize:13,padding:"10px 12px",resize:"vertical",fontFamily:G.font}}/>
+          {totalMacros.kcal>0&&(
+            <div style={{display:"flex",justifyContent:"space-around",background:G.bg3,borderRadius:10,padding:"10px 0",marginBottom:16,border:`1px solid ${G.border}`}}>
+              {[[rnd(totalMacros.kcal),"kcal",G.goldLight],[rnd1(totalMacros.protein)+"g","Prot.",G.goldLight],[rnd1(totalMacros.carbs)+"g","Gluc.",G.gold],[rnd1(totalMacros.fat)+"g","Lip.","#C9A84C"]].map(([v,l,c])=>(
+                <div key={l} style={{textAlign:"center"}}>
+                  <div style={{fontFamily:G.fontD,fontSize:20,fontWeight:800,color:c,lineHeight:1}}>{v}</div>
+                  <div style={{fontSize:10,color:G.grey,letterSpacing:.5,marginTop:3}}>{l}</div>
+                </div>
+              ))}
             </div>
-          ))}
-          <Btn onClick={save} style={{width:"100%",marginTop:4}}>Enregistrer le programme</Btn>
+          )}
+          {form.map(meal=>{
+            const mMacros=calcMacros(meal.items,foods);
+            return(
+              <div key={meal.id} style={{marginBottom:18}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <div style={{fontSize:12,color:G.gold,fontWeight:700}}>{meal.icon} {meal.label}</div>
+                  {meal.items.length>0&&<div style={{fontSize:11,color:G.grey}}>{rnd(mMacros.kcal)} kcal</div>}
+                </div>
+                {meal.items.map((item,idx)=>{
+                  const food=foods.find(f=>f.id===item.foodId);
+                  if(!food)return null;
+                  const im=calcMacros([item],foods);
+                  return(
+                    <div key={idx} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:G.bg3,borderRadius:8,padding:"8px 10px"}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:G.white,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{food.name}</div>
+                        <div style={{fontSize:11,color:G.grey,marginTop:2}}>{rnd(im.kcal)} kcal · P {rnd1(im.protein)}g · G {rnd1(im.carbs)}g · L {rnd1(im.fat)}g</div>
+                      </div>
+                      <input type="number" value={item.qty} min="0" onChange={e=>updateQty(meal.id,idx,e.target.value)}
+                        style={{width:56,background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"5px 6px",color:G.goldLight,fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                      <div style={{fontSize:11,color:G.grey,flexShrink:0}}>{food.unit==="g"?"g":"port."}</div>
+                      <button onClick={()=>removeItem(meal.id,idx)}
+                        style={{background:"none",border:"none",color:G.red,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 2px",flexShrink:0}}>×</button>
+                    </div>
+                  );
+                })}
+                <button onClick={()=>{setPickerMeal(meal.id);setSearch("");}}
+                  style={{width:"100%",background:"transparent",border:`1px dashed ${G.border}`,borderRadius:8,padding:"7px 0",color:G.grey,fontSize:12,cursor:"pointer",marginTop:meal.items.length?4:0}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold;e.currentTarget.style.color=G.gold;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.grey;}}>
+                  + Ajouter un aliment
+                </button>
+              </div>
+            );
+          })}
+          <Btn onClick={save} style={{width:"100%"}}>✓ Enregistrer le plan alimentaire</Btn>
         </>
       ):(
-        hasContent?(
-          MEAL_SLOTS.map((slot,i)=>meals[i]?.content?.trim()?(
-            <div key={slot.id} style={{background:G.bg3,borderRadius:10,padding:"12px 14px",marginBottom:10,borderLeft:`3px solid ${G.gold}66`}}>
-              <div style={{fontSize:11,fontWeight:700,color:G.gold,letterSpacing:.8,marginBottom:6,textTransform:"uppercase"}}>{slot.icon} {slot.label}</div>
-              <div style={{fontSize:13,color:G.white,lineHeight:1.55,whiteSpace:"pre-wrap"}}>{meals[i].content}</div>
-            </div>
-          ):null)
+        !hasPlan?(
+          <div style={{textAlign:"center",padding:"20px 0",color:G.greyDim,fontSize:13}}>Aucun plan alimentaire renseigné</div>
         ):(
-          <div style={{textAlign:"center",padding:"24px 0",color:G.grey,fontSize:13}}>Aucun programme alimentaire assigné.<br/>Cliquez sur Modifier pour en créer un.</div>
+          form.filter(m=>m.items.length>0).map(meal=>{
+            const mMacros=calcMacros(meal.items,foods);
+            return(
+              <div key={meal.id} style={{marginBottom:12,paddingBottom:12,borderBottom:`1px solid ${G.border}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                  <div style={{fontSize:11,color:G.gold,fontWeight:700,letterSpacing:.5,textTransform:"uppercase"}}>{meal.icon} {meal.label}</div>
+                  <div style={{fontSize:11,color:G.grey}}>{rnd(mMacros.kcal)} kcal</div>
+                </div>
+                {meal.items.map((item,idx)=>{
+                  const food=foods.find(f=>f.id===item.foodId);
+                  if(!food)return null;
+                  return(
+                    <div key={idx} style={{fontSize:13,color:G.white,marginBottom:3}}>
+                      {food.name} <span style={{color:G.grey}}>— {item.qty} {food.unit==="g"?"g":"port."}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })
         )
+      )}
+
+      {pickerMeal&&(
+        <Modal onClose={()=>{setPickerMeal(null);setSearch("");}} title="Ajouter un aliment">
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un aliment..."
+            style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 12px",color:G.white,fontSize:14,outline:"none",marginBottom:12}}
+            onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border}/>
+          {filteredFoods.map(food=>(
+            <div key={food.id} onClick={()=>addItem(pickerMeal,food.id)}
+              style={{padding:"10px 12px",marginBottom:6,background:G.bg3,borderRadius:8,cursor:"pointer",border:`1px solid ${G.border}`}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=G.gold}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=G.border}>
+              <div style={{fontWeight:600,fontSize:13,color:G.white,marginBottom:2}}>{food.name}</div>
+              <div style={{fontSize:11,color:G.grey}}>
+                {food.kcal} kcal · {food.protein}g prot · {food.carbs}g gluc · {food.fat}g lip
+                <span style={{color:G.gold,marginLeft:6}}>/ {food.unit==="g"?"100g":"1 portion"}</span>
+              </div>
+            </div>
+          ))}
+          {filteredFoods.length===0&&<div style={{textAlign:"center",color:G.greyDim,padding:20}}>Aucun aliment trouvé</div>}
+        </Modal>
       )}
     </div>
   );
 }
 
 // ─── CLIENT DETAIL PANEL ──────────────────────────────────────────────────────
-function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onViewProgram,onDelete}){
+function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onViewProgram,onDelete,foods=FOODS_DB}){
   const [tab,setTab]=useState("program");
   const [editNut,setEditNut]=useState(false);
   const [nutForm,setNutForm]=useState({...client.nutrition});
+  const [liveNut,setLiveNut]=useState(null);
   const [editName,setEditName]=useState(false);
   const [nameVal,setNameVal]=useState(client.name);
 
@@ -546,41 +682,52 @@ function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onVie
             )}
           </>
         )}
-        {tab==="nutrition"&&(
-          <div style={{background:G.bg2,borderRadius:12,padding:20,border:`1px solid ${G.border}`}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-              <div style={{fontWeight:700}}>Objectifs nutritionnels</div>
-              <BtnSm variant={editNut?"ghost":"gold"} onClick={()=>{setNutForm({...cur.nutrition});setEditNut(!editNut);}}>{editNut?"Annuler":"Modifier"}</BtnSm>
-            </div>
-            {editNut?(
-              <>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                  {[["Calories (kcal)","calories"],["Protéines (g)","proteins"],["Glucides (g)","carbs"],["Lipides (g)","fats"]].map(([l,k])=>(
-                    <Inp key={k} label={l} type="number" value={nutForm[k]||0} onChange={e=>setNutForm(p=>({...p,[k]:Number(e.target.value)}))}/>
-                  ))}
+        {tab==="nutrition"&&(()=>{
+          const storedItems=(cur.mealPlan?.meals||[]).flatMap(m=>m.items||[]);
+          const storedCalc=storedItems.length>0?calcMacros(storedItems,foods):null;
+          const src=liveNut||storedCalc;
+          const cal=src?rnd(src.kcal):cur.nutrition?.calories||0;
+          const prot=src?rnd1(src.protein):cur.nutrition?.proteins||0;
+          const gluc=src?rnd1(src.carbs):cur.nutrition?.carbs||0;
+          const lip=src?rnd1(src.fat):cur.nutrition?.fats||0;
+          return(
+            <>
+              <div style={{background:G.bg2,borderRadius:12,padding:20,border:`1px solid ${G.border}`,marginBottom:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:liveNut?6:18}}>
+                  <div>
+                    <div style={{fontWeight:700}}>Objectifs nutritionnels</div>
+                    {liveNut&&<div style={{fontSize:10,color:G.gold,marginTop:3}}>● Aperçu en temps réel</div>}
+                  </div>
+                  <BtnSm variant={editNut?"ghost":"gold"} onClick={()=>{setNutForm({...cur.nutrition});setEditNut(!editNut);}}>{editNut?"Annuler":"Notes"}</BtnSm>
                 </div>
-                <Txa label="Notes" value={nutForm.notes||""} placeholder="Allergies, préférences..." onChange={e=>setNutForm(p=>({...p,notes:e.target.value}))}/>
-                <Btn onClick={saveNut} style={{width:"100%",marginTop:4}}>Enregistrer</Btn>
-              </>
-            ):(
-              <>
+                {editNut&&(
+                  <>
+                    <Txa label="Notes / Allergies / Préférences" value={nutForm.notes||""} placeholder="Allergies, préférences..." onChange={e=>setNutForm(p=>({...p,notes:e.target.value}))}/>
+                    <Btn onClick={saveNut} style={{width:"100%",marginTop:4}}>Enregistrer les notes</Btn>
+                  </>
+                )}
                 <div style={{textAlign:"center",padding:"12px 0 20px"}}>
-                  <div style={{fontFamily:G.fontD,fontSize:52,fontWeight:800,color:G.goldLight,lineHeight:1}}>{cur.nutrition?.calories||0}</div>
+                  <div style={{fontFamily:G.fontD,fontSize:52,fontWeight:800,color:G.goldLight,lineHeight:1,transition:"all .3s"}}>{cal}</div>
                   <div style={{fontSize:11,color:G.grey,letterSpacing:2,textTransform:"uppercase",marginTop:4}}>kcal / jour</div>
                 </div>
-                <MacroBar label="Protéines" value={cur.nutrition?.proteins||0} max={300} color={G.goldLight}/>
-                <MacroBar label="Glucides" value={cur.nutrition?.carbs||0} max={500} color={G.gold}/>
-                <MacroBar label="Lipides" value={cur.nutrition?.fats||0} max={150} color="#C9A84C66"/>
+                <MacroBar label="Protéines" value={prot} max={300} color={G.goldLight}/>
+                <MacroBar label="Glucides" value={gluc} max={500} color={G.gold}/>
+                <MacroBar label="Lipides" value={lip} max={150} color="#C9A84C66"/>
                 {cur.nutrition?.notes&&<div style={{marginTop:14,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {cur.nutrition.notes}</div>}
-              </>
-            )}
-          </div>
-        )}
-        {tab==="nutrition"&&(
-          <div style={{background:G.bg2,borderRadius:12,padding:20,border:`1px solid ${G.border}`,marginTop:12}}>
-            <MealPlanEditor mealPlan={cur.mealPlan} onSave={mp=>upd(c=>({...c,mealPlan:mp}))}/>
-          </div>
-        )}
+              </div>
+              <div style={{background:G.bg2,borderRadius:12,padding:20,border:`1px solid ${G.border}`}}>
+                <MealPlanEditor
+                  foods={foods}
+                  mealPlan={cur.mealPlan}
+                  onLiveChange={setLiveNut}
+                  onSave={(mp,totals)=>{
+                    setLiveNut(null);
+                    upd(c=>({...c,mealPlan:mp,...(totals.kcal>0?{nutrition:{...c.nutrition,calories:rnd(totals.kcal),proteins:rnd1(totals.protein),carbs:rnd1(totals.carbs),fats:rnd1(totals.fat)}}:{})}));
+                  }}/>
+              </div>
+            </>
+          );
+        })()}
         {tab==="suivi"&&(
           <>
             <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:14}}>
@@ -617,8 +764,115 @@ function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onVie
   );
 }
 
+// ─── FOODS MANAGER ────────────────────────────────────────────────────────────
+const EMPTY_FOOD=()=>({id:"",name:"",unit:"g",kcal:0,protein:0,carbs:0,fat:0});
+function FoodsManager({foods,setFoods}){
+  const [editing,setEditing]=useState(null);
+  const [form,setForm]=useState(EMPTY_FOOD());
+  const [search,setSearch]=useState("");
+  const [confirmDel,setConfirmDel]=useState(null);
+
+  const openNew=()=>{setForm(EMPTY_FOOD());setEditing("new");};
+  const openEdit=f=>{setForm({...f});setEditing(f);};
+  const f=k=>v=>setForm(p=>({...p,[k]:v}));
+
+  const save=()=>{
+    const entry={
+      ...form,
+      id:editing==="new"?(form.name.toLowerCase().replace(/[^a-z0-9]/g,"_").slice(0,30)+"_"+Date.now()):form.id,
+      kcal:parseFloat(form.kcal)||0,
+      protein:parseFloat(form.protein)||0,
+      carbs:parseFloat(form.carbs)||0,
+      fat:parseFloat(form.fat)||0,
+    };
+    if(!entry.name.trim())return;
+    if(editing==="new") setFoods(p=>[...p,entry]);
+    else setFoods(p=>p.map(x=>x.id===entry.id?entry:x));
+    setEditing(null);
+  };
+  const del=id=>{setFoods(p=>p.filter(x=>x.id!==id));setConfirmDel(null);};
+
+  const filtered=foods.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
+
+  return(
+    <div style={{height:"100%",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{padding:"20px 24px",borderBottom:`1px solid ${G.border}`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800,letterSpacing:-.5}}>ALIMENTS</div>
+        <Btn onClick={openNew} style={{padding:"8px 18px"}}>+ Ajouter un aliment</Btn>
+      </div>
+      <div style={{padding:"16px 24px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un aliment..."
+          style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 14px",color:G.white,fontSize:14,outline:"none"}}
+          onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border}/>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"16px 24px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:10}}>
+          {filtered.map(food=>(
+            <div key={food.id} style={{background:G.bg2,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:600,fontSize:14,color:G.white,marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{food.name}</div>
+                <div style={{fontSize:12,color:G.grey}}>
+                  {food.kcal} kcal · P {food.protein}g · G {food.carbs}g · L {food.fat}g
+                  <span style={{color:G.gold,marginLeft:8}}>/ {food.unit==="g"?"100g":"portion"}</span>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <BtnSm onClick={()=>openEdit(food)}>✏️</BtnSm>
+                <BtnSm variant="ghost" onClick={()=>setConfirmDel(food.id)} style={{color:G.red,borderColor:G.red+"44"}}>🗑</BtnSm>
+              </div>
+            </div>
+          ))}
+        </div>
+        {filtered.length===0&&<div style={{textAlign:"center",color:G.greyDim,padding:"48px 0",fontSize:14}}>Aucun aliment trouvé</div>}
+      </div>
+
+      {editing&&(
+        <Modal onClose={()=>setEditing(null)} title={editing==="new"?"Nouvel aliment":"Modifier l'aliment"}>
+          <Inp label="Nom de l'aliment" value={form.name} onChange={e=>f("name")(e.target.value)} placeholder="Ex: Riz basmati cuit"/>
+          <div style={{marginBottom:14}}>
+            <Label>Type de mesure</Label>
+            <div style={{display:"flex",gap:8}}>
+              {[["g","Par 100g"],["portion","Par portion"]].map(([val,label])=>(
+                <button key={val} onClick={()=>f("unit")(val)}
+                  style={{flex:1,padding:"10px 0",borderRadius:8,border:`1px solid ${form.unit===val?G.gold:G.border}`,background:form.unit===val?G.gold+"22":"transparent",color:form.unit===val?G.goldLight:G.grey,fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Inp label={`Calories (kcal/${form.unit==="g"?"100g":"portion"})`} type="number" value={form.kcal} onChange={e=>f("kcal")(e.target.value)}/>
+            <Inp label={`Protéines (g)`} type="number" value={form.protein} onChange={e=>f("protein")(e.target.value)}/>
+            <Inp label={`Glucides (g)`} type="number" value={form.carbs} onChange={e=>f("carbs")(e.target.value)}/>
+            <Inp label={`Lipides (g)`} type="number" value={form.fat} onChange={e=>f("fat")(e.target.value)}/>
+          </div>
+          {form.name.trim()&&(
+            <div style={{marginBottom:14,padding:12,background:G.bg3,borderRadius:8,fontSize:12,color:G.grey}}>
+              Aperçu : <span style={{color:G.goldLight,fontWeight:700}}>{form.kcal} kcal</span> · P {form.protein}g · G {form.carbs}g · L {form.fat}g / {form.unit==="g"?"100g":"portion"}
+            </div>
+          )}
+          <Btn onClick={save} style={{width:"100%"}}>{editing==="new"?"Ajouter l'aliment":"Enregistrer les modifications"}</Btn>
+        </Modal>
+      )}
+
+      {confirmDel&&(
+        <Modal onClose={()=>setConfirmDel(null)} title="Supprimer l'aliment">
+          <div style={{color:G.grey,fontSize:14,marginBottom:20}}>
+            Supprimer <strong style={{color:G.white}}>{foods.find(f=>f.id===confirmDel)?.name}</strong> ?
+            <br/><span style={{fontSize:12}}>Les plans alimentaires utilisant cet aliment ne s'afficheront plus correctement.</span>
+          </div>
+          <div style={{display:"flex",gap:10}}>
+            <Btn onClick={()=>del(confirmDel)} style={{background:G.red+"22",borderColor:G.red,color:G.red,flex:1}}>Supprimer</Btn>
+            <BtnSm onClick={()=>setConfirmDel(null)}>Annuler</BtnSm>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 // ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function ClientsView({clients,setClients,programs,setPrograms,onViewProgram,initialClient}){
+function ClientsView({clients,setClients,programs,setPrograms,onViewProgram,initialClient,foods=FOODS_DB}){
   const [sel,setSel]=useState(initialClient||null);
   const [showNew,setShowNew]=useState(false);
   const [search,setSearch]=useState("");
@@ -675,7 +929,7 @@ function ClientsView({clients,setClients,programs,setPrograms,onViewProgram,init
       <div style={{flex:1,overflow:"hidden",background:G.bg}}>
         {selClient?(
           <ClientDetailPanel key={selClient.id} client={selClient} clients={clients} setClients={setClients}
-            programs={programs} setPrograms={setPrograms} onViewProgram={onViewProgram} onDelete={deleteClient}/>
+            programs={programs} setPrograms={setPrograms} onViewProgram={onViewProgram} onDelete={deleteClient} foods={foods}/>
         ):(
           <Empty text="Sélectionne un client pour voir son profil" icon="◉"/>
         )}
@@ -1128,21 +1382,8 @@ export default function CoachApp(){
   const [exercises,setExercises,exReady]=useFirestoreCollection("exercises",SEED_EX);
   const [programs,setPrograms,pgReady]=useFirestoreCollection("programs",SEED_PROGRAMS);
   const [clients,setClients,clReady]=useFirestoreCollection("clients",SEED_CLIENTS);
-  const dbReady=exReady&&pgReady&&clReady;
-
-  // Migrations
-  useEffect(()=>{
-    if(!exReady)return;
-    const ids=new Set(exercises.map(e=>e.id));
-    const missing=SEED_EX.filter(e=>!ids.has(e.id));
-    if(missing.length>0)setExercises(prev=>[...prev,...missing]);
-  },[exReady]); // eslint-disable-line
-  useEffect(()=>{
-    if(!pgReady)return;
-    const ids=new Set(programs.map(p=>p.id));
-    const missing=SEED_PROGRAMS.filter(p=>!ids.has(p.id));
-    if(missing.length>0)setPrograms(prev=>[...prev,...missing]);
-  },[pgReady]); // eslint-disable-line
+  const [foods,setFoods,foodsReady]=useFirestoreCollection("foods",FOODS_DB);
+  const dbReady=exReady&&pgReady&&clReady&&foodsReady;
 
   // Cross-view navigation state
   const [dashClient,setDashClient]=useState(null);
@@ -1180,7 +1421,7 @@ export default function CoachApp(){
         view={view}
         setView={changeView}
         onLogout={()=>{setAuth("login");setView("dashboard");}}
-        counts={{clients:clients.length,programs:programs.length,exercises:exercises.length}}/>
+        counts={{clients:clients.length,programs:programs.length,exercises:exercises.length,foods:foods.length}}/>
       <main style={{flex:1,height:"100vh",overflow:"hidden",display:"flex",flexDirection:"column"}}>
         {view==="dashboard"&&(
           <div style={{flex:1,overflowY:"auto"}}>
@@ -1191,7 +1432,12 @@ export default function CoachApp(){
         {view==="clients"&&(
           <div style={{flex:1,overflow:"hidden"}}>
             <ClientsView clients={clients} setClients={setClients} programs={programs} setPrograms={setPrograms}
-              onViewProgram={viewProgramFromClient} initialClient={dashClient}/>
+              onViewProgram={viewProgramFromClient} initialClient={dashClient} foods={foods}/>
+          </div>
+        )}
+        {view==="foods"&&(
+          <div style={{flex:1,overflow:"hidden"}}>
+            <FoodsManager foods={foods} setFoods={setFoods}/>
           </div>
         )}
         {view==="programs"&&(
