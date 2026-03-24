@@ -828,20 +828,6 @@ export default function App(){
   const [foods,setFoods,foodsReady]=useFirestoreCollection("foods", FOODS_DB);
   const dbReady = exReady && pgReady && clReady && foodsReady;
 
-  // Migration : ajoute les nouveaux exercices/programmes seed manquants dans Firestore
-  useEffect(()=>{
-    if(!exReady) return;
-    const ids = new Set(exercises.map(e=>e.id));
-    const missing = SEED_EX.filter(e=>!ids.has(e.id));
-    if(missing.length>0) setExercises(prev=>[...prev,...missing]);
-  },[exReady]); // eslint-disable-line
-  useEffect(()=>{
-    if(!pgReady) return;
-    const ids = new Set(programs.map(p=>p.id));
-    const missing = SEED_PROGRAMS.filter(p=>!ids.has(p.id));
-    if(missing.length>0) setPrograms(prev=>[...prev,...missing]);
-  },[pgReady]); // eslint-disable-line
-
   const [currentClient,setCurrentClient]=useState(null);
   const [coachView,setCoachView]=useState("dashboard");
   const [selClient,setSelClient]=useState(null);
