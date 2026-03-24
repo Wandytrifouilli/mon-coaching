@@ -2,17 +2,34 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs } from "./firebase.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
+const THEMES = {
+  dark:{
+    bg:"#080808",bg2:"#0f0f0f",bg3:"#161616",bg4:"#1c1c1c",
+    gold:"#C9A84C",goldLight:"#E8C547",
+    white:"#F5F0E8",grey:"#888",greyDim:"#444",border:"#2a2a2a",
+    red:"#E05252",green:"#52C07A",
+    bgOuter:"#111",bgFrame:"#1a1a1a",frameBorder:"#333",
+  },
+  light:{
+    bg:"#F5F2ED",bg2:"#FFFFFF",bg3:"#EDE9E2",bg4:"#E3DDD5",
+    gold:"#9A7228",goldLight:"#C49A1A",
+    white:"#1C1510",grey:"#6B6560",greyDim:"#BBB4A8",border:"#D8D2C8",
+    red:"#CC3535",green:"#2A8A4A",
+    bgOuter:"#E8E4DC",bgFrame:"#D0CAC0",frameBorder:"#BBB4A8",
+  },
+};
+// G est mutable — on le met à jour au toggle de thème pour que tous les composants voient les nouvelles valeurs au prochain render
 const G = {
-  bg:"#080808",bg2:"#0f0f0f",bg3:"#161616",bg4:"#1c1c1c",
-  gold:"#C9A84C",goldLight:"#E8C547",
-  white:"#F5F0E8",grey:"#888",greyDim:"#444",border:"#2a2a2a",
-  red:"#E05252",green:"#52C07A",
+  ...THEMES.dark,
   font:"'Barlow',sans-serif",fontD:"'Barlow Condensed',sans-serif",
 };
-const css=`
+// Initialisation depuis localStorage (avant le premier render)
+;(()=>{ const t=localStorage.getItem("coachTheme"); if(t&&THEMES[t]) Object.assign(G,THEMES[t]); })();
+
+const buildCss=()=>`
   @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@700;800&display=swap');
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  body{background:${G.bg};}
+  body{background:${G.bgOuter};}
   input,textarea,select{font-family:${G.font};}
   button{touch-action:manipulation;}
   ::-webkit-scrollbar{width:0;}
@@ -831,6 +848,17 @@ export default function App(){
   const [selProgram,setSelProgram]=useState(null);
   const [selClientForProgram,setSelClientForProgram]=useState(null);
 
+  // ── Thème coach ──
+  const [theme,setTheme]=useState(()=>localStorage.getItem("coachTheme")||"dark");
+  const [dynamicCss,setDynamicCss]=useState(buildCss);
+  const toggleTheme=()=>{
+    const next=theme==="dark"?"light":"dark";
+    Object.assign(G,THEMES[next]);
+    localStorage.setItem("coachTheme",next);
+    setDynamicCss(buildCss());
+    setTheme(next);
+  };
+
   const login=code=>{
     if(code.toUpperCase()==="COACH2025"){setAuth("coach");return true;}
     const c=clients.find(c=>c.code===code.toUpperCase());
@@ -840,7 +868,7 @@ export default function App(){
   const logout=()=>{setAuth("login");setCurrentClient(null);setCoachView("dashboard");};
 
   if(!dbReady) return (
-    <Shell css={css}>
+    <Shell css={dynamicCss}>
       <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
         <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,color:G.goldLight,letterSpacing:-1}}>MON COACHING</div>
         <div style={{fontSize:13,color:G.grey}}>Connexion à la base de données…</div>
@@ -851,12 +879,12 @@ export default function App(){
   );
   if(auth==="login") return <LoginScreen onLogin={login}/>;
   if(auth==="client") return (
-    <Shell css={css}>
+    <Shell css={dynamicCss}>
       <ClientPortal client={currentClient} clients={clients} setClients={setClients} programs={programs} exercises={exercises} foods={foods} onLogout={logout}/>
     </Shell>
   );
   return (
-    <Shell css={css}>
+    <Shell css={dynamicCss}>
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {coachView==="dashboard"&&<Dashboard clients={clients} programs={programs} exercises={exercises} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}} selP={p=>{setSelProgram(p);setCoachView("program-detail");}} onLogout={logout}/>}
         {coachView==="clients"&&<ClientsList clients={clients} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}}/>}
@@ -871,27 +899,27 @@ export default function App(){
         {coachView==="ai-coach"&&<AICoach exercises={exercises} setPrograms={setPrograms} go={setCoachView}/>}
         {coachView==="foods"&&<FoodsManager foods={foods} setFoods={setFoods} go={setCoachView}/>}
       </div>
-      <CoachNav view={coachView} setView={setCoachView}/>
+      <CoachNav view={coachView} setView={setCoachView} theme={theme} onToggleTheme={toggleTheme}/>
     </Shell>
   );
 }
 
 const IS_MOBILE = window.innerWidth <= 480;
 const Shell=({children,css:c})=>(
-  <div style={{background:IS_MOBILE?"#080808":"#111",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:IS_MOBILE?"flex-start":"center"}}>
+  <div style={{background:IS_MOBILE?G.bg:G.bgOuter,minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:IS_MOBILE?"flex-start":"center",transition:"background .3s"}}>
     <style>{c}</style>
-    {!IS_MOBILE&&<div style={{width:390,height:844,borderRadius:44,background:"#1a1a1a",boxShadow:"0 40px 120px #000a, inset 0 0 0 1px #333",padding:"12px",flexShrink:0,position:"relative"}}>
-      <div style={{position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",width:120,height:30,background:"#1a1a1a",borderRadius:"0 0 18px 18px",zIndex:10}}/>
-      <div style={{width:"100%",height:"100%",borderRadius:34,overflow:"hidden",display:"flex",flexDirection:"column",background:G.bg}}>
+    {!IS_MOBILE&&<div style={{width:390,height:844,borderRadius:44,background:G.bgFrame,boxShadow:"0 40px 120px #0006, inset 0 0 0 1px "+G.frameBorder,padding:"12px",flexShrink:0,position:"relative",transition:"background .3s"}}>
+      <div style={{position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",width:120,height:30,background:G.bgFrame,borderRadius:"0 0 18px 18px",zIndex:10}}/>
+      <div style={{width:"100%",height:"100%",borderRadius:34,overflow:"hidden",display:"flex",flexDirection:"column",background:G.bg,transition:"background .3s"}}>
         <div style={{height:44,flexShrink:0,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingBottom:6}}>
-          <div style={{fontSize:11,color:"#888",fontFamily:G.font,letterSpacing:.5}}>{new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}</div>
+          <div style={{fontSize:11,color:G.grey,fontFamily:G.font,letterSpacing:.5}}>{new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}</div>
         </div>
         <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column"}}>
           {children}
         </div>
       </div>
     </div>}
-    {IS_MOBILE&&<div style={{background:G.bg,width:"100vw",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:G.font,color:G.white,margin:"0 auto"}}>
+    {IS_MOBILE&&<div style={{background:G.bg,width:"100vw",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:G.font,color:G.white,margin:"0 auto",transition:"background .3s"}}>
       {children}
     </div>}
   </div>
@@ -938,11 +966,19 @@ function LoginScreen({onLogin}){
 }
 
 // ─── COACH NAV ────────────────────────────────────────────────────────────────
-function CoachNav({view,setView}){
+function CoachNav({view,setView,theme,onToggleTheme}){
   const items=[{key:"dashboard",icon:"◈",label:"Accueil"},{key:"clients",icon:"◉",label:"Clients"},{key:"programs",icon:"▦",label:"Prog."},{key:"exercises",icon:"⊕",label:"Exercices"},{key:"foods",icon:"◎",label:"Aliments"},{key:"ai-coach",icon:"✦",label:"IA Coach"}];
   const ak=v=>{if(["client-detail","new-client"].includes(v))return"clients";if(["program-detail","new-program","edit-program"].includes(v))return"programs";if(v==="new-exercise")return"exercises";return v;};
+  const isDark=theme==="dark";
   return(
-    <nav style={{flexShrink:0,width:"100%",background:G.bg2,borderTop:`1px solid ${G.border}`,display:"flex",zIndex:100}}>
+    <nav style={{flexShrink:0,width:"100%",background:G.bg2,borderTop:`1px solid ${G.border}`,display:"flex",zIndex:100,position:"relative"}}>
+      {/* Bouton thème — bas gauche */}
+      <button onClick={onToggleTheme} title={isDark?"Passer en thème clair":"Passer en thème sombre"}
+        style={{position:"absolute",bottom:"calc(100% + 10px)",left:10,width:36,height:36,borderRadius:"50%",background:G.bg3,border:`1px solid ${G.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,boxShadow:"0 2px 8px #0004",transition:"background .2s,border .2s",zIndex:200}}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold;}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;}}>
+        {isDark?"☀️":"🌙"}
+      </button>
       {items.map(({key,icon,label})=>{
         const a=ak(view)===key;
         const isAI=key==="ai-coach";
