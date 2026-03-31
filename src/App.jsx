@@ -161,6 +161,10 @@ const SEED_EX = [
   {id:112,name:"RDL Unilatéral Haltère",muscle:"Jambes",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/qH1lLrkXNRE",notes:"Vitesse lente, équilibre, dos plat — jambe d'appui légèrement fléchie"},
   {id:113,name:"Planche sur Genoux",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/DHBMtGlXnmk",notes:"Gainage actif, stopper si doming abdominal visible"},
   {id:114,name:"Vélo Stationnaire",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/JqaCVNKRWF4",notes:"FC < 140 bpm, cadence modérée, dos droit"},
+
+  // ── AVANT-BRAS ──
+  {id:115,name:"Curl Poignet Haltères",muscle:"Avant-bras",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/rUDDhR3DNeY",notes:"Avant-bras posés sur les cuisses, flexion complète du poignet, tempo lent"},
+  {id:116,name:"Curl Poignet Inversé",muscle:"Avant-bras",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/a4NaRXbzOOE",notes:"Prise pronation, extension du poignet vers le haut, avant-bras fixés sur les cuisses"},
 ];
 
 
@@ -324,6 +328,131 @@ const SEED_PROGRAMS = [
     ]},
 
   ]},
+
+  // ── PROGRAMME MAISON — BARRE DE TRACTION + HALTÈRES ───────────────────────
+  {id:4,name:"Force Maison 3j/sem",category:"Force",level:"Débutant / Intermédiaire",weeks:[
+
+    {label:"Semaine 1 — Découverte",days:[
+      {label:"Séance A — Bas + Poussé",exercises:[
+        mkEx(14,4,"12","90s"),
+        mkEx(9,3,"12","75s"),
+        mkEx(24,3,"12","90s"),
+        mkEx(45,3,"12","75s"),
+        mkEx(54,3,"Max","75s"),
+        mkEx(115,3,"20","45s"),
+        mkEx(8,3,"40s","45s"),
+      ]},
+      {label:"Séance B — Dos + Avant-bras",exercises:[
+        mkEx(3,4,"Max","2min"),
+        mkEx(33,3,"12","75s"),
+        mkEx(15,3,"12","90s"),
+        mkEx(49,3,"15","60s"),
+        mkEx(116,3,"20","45s"),
+        mkEx(90,3,"30s","75s"),
+        mkEx(61,3,"15","60s"),
+      ]},
+      {label:"Séance C — Full Body + Épaules",exercises:[
+        mkEx(23,3,"10","90s"),
+        mkEx(103,4,"12","75s"),
+        mkEx(41,3,"12","75s"),
+        mkEx(42,3,"15","60s"),
+        mkEx(56,3,"15","60s"),
+        mkEx(6,3,"12","60s"),
+        mkEx(66,3,"40s","45s"),
+      ]},
+    ]},
+
+    {label:"Semaine 2 — Construction",days:[
+      {label:"Séance A — Bas + Poussé",exercises:[
+        mkEx(14,4,"12","90s"),
+        mkEx(9,3,"14","75s"),
+        mkEx(24,4,"10","90s"),
+        mkEx(45,3,"12","75s"),
+        mkEx(54,3,"Max","75s"),
+        mkEx(115,3,"20","45s"),
+        mkEx(8,3,"45s","45s"),
+      ]},
+      {label:"Séance B — Dos + Avant-bras",exercises:[
+        mkEx(3,4,"Max","2min"),
+        mkEx(33,4,"12","75s"),
+        mkEx(15,4,"10","90s"),
+        mkEx(49,3,"15","60s"),
+        mkEx(116,3,"20","45s"),
+        mkEx(90,4,"30s","75s"),
+        mkEx(61,3,"15","60s"),
+      ]},
+      {label:"Séance C — Full Body + Épaules",exercises:[
+        mkEx(23,4,"10","90s"),
+        mkEx(103,4,"12","75s"),
+        mkEx(41,3,"12","75s"),
+        mkEx(42,3,"15","60s"),
+        mkEx(56,3,"15","60s"),
+        mkEx(6,3,"12","60s"),
+        mkEx(66,3,"45s","45s"),
+      ]},
+    ]},
+
+    {label:"Semaine 3 — Intensification",days:[
+      {label:"Séance A — Bas + Poussé",exercises:[
+        mkEx(14,4,"10","90s"),
+        mkEx(9,4,"12","75s"),
+        mkEx(24,4,"10","90s"),
+        mkEx(45,4,"10","75s"),
+        mkEx(54,4,"Max","90s"),
+        mkEx(115,4,"20","45s"),
+        mkEx(8,4,"45s","45s"),
+      ]},
+      {label:"Séance B — Dos + Avant-bras",exercises:[
+        mkEx(3,5,"Max","2min"),
+        mkEx(33,4,"12","75s"),
+        mkEx(15,4,"10","90s"),
+        mkEx(49,4,"12","60s"),
+        mkEx(116,4,"20","45s"),
+        mkEx(90,4,"35s","75s"),
+        mkEx(61,4,"15","60s"),
+      ]},
+      {label:"Séance C — Full Body + Épaules",exercises:[
+        mkEx(23,4,"10","90s"),
+        mkEx(103,4,"12","75s"),
+        mkEx(41,4,"10","75s"),
+        mkEx(42,4,"15","60s"),
+        mkEx(56,4,"12","60s"),
+        mkEx(6,4,"10","60s"),
+        mkEx(66,4,"45s","45s"),
+      ]},
+    ]},
+
+    {label:"Semaine 4 — Peak",days:[
+      {label:"Séance A — Bas + Poussé",exercises:[
+        mkEx(14,5,"8","2min"),
+        mkEx(9,4,"12","75s"),
+        mkEx(24,4,"8","2min"),
+        mkEx(45,4,"10","90s"),
+        mkEx(54,4,"Max","90s"),
+        mkEx(115,4,"20","45s"),
+        mkEx(8,4,"50s","45s"),
+      ]},
+      {label:"Séance B — Dos + Avant-bras",exercises:[
+        mkEx(3,5,"Max","2min"),
+        mkEx(33,4,"10","90s"),
+        mkEx(15,4,"8","2min"),
+        mkEx(49,4,"12","60s"),
+        mkEx(116,4,"20","45s"),
+        mkEx(90,4,"40s","75s"),
+        mkEx(61,4,"15","60s"),
+      ]},
+      {label:"Séance C — Full Body + Épaules",exercises:[
+        mkEx(23,4,"8","2min"),
+        mkEx(103,4,"10","90s"),
+        mkEx(41,4,"10","90s"),
+        mkEx(42,4,"15","60s"),
+        mkEx(56,4,"12","60s"),
+        mkEx(6,4,"10","60s"),
+        mkEx(66,4,"50s","45s"),
+      ]},
+    ]},
+
+  ]},
 ];
 
 const SEED_CLIENTS = [
@@ -346,7 +475,7 @@ const SEED_CLIENTS = [
    nutrition:{calories:2000,proteins:150,carbs:220,fats:65,notes:""},sessionLogs:[]},
 ];
 
-const MUSCLES=["Tous","Jambes","Pectoraux","Dos","Épaules","Biceps","Triceps","Abdominaux"];
+const MUSCLES=["Tous","Jambes","Pectoraux","Dos","Épaules","Biceps","Triceps","Abdominaux","Avant-bras"];
 const EQUIPS=["Aucun","Barre","Haltères","Poulie","Barre fixe","Machine","Élastique","Kettlebell","Poids du corps"];
 const MEAL_SLOTS=[
   {id:"breakfast",icon:"🌅",label:"Petit déjeuner"},
