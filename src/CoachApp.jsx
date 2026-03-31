@@ -261,12 +261,14 @@ function useFirestoreCollection(collectionName, seed) {
       err => { console.error(`[Firebase] ${collectionName}:`, err); setDataLocal(seed); setReady(true); }
     );
     getDocs(colRef).then(snap=>{
-      if(snap.empty && seed.length>0){
+      const existingIds=new Set(snap.docs.map(d=>d.id));
+      const missing=seed.filter(item=>!existingIds.has(String(item.id)));
+      if(missing.length>0){
         const BATCH_SIZE=499;
         const batches=[];
-        for(let i=0;i<seed.length;i+=BATCH_SIZE){
+        for(let i=0;i<missing.length;i+=BATCH_SIZE){
           const b=writeBatch(db);
-          seed.slice(i,i+BATCH_SIZE).forEach(item=>b.set(doc(db,collectionName,String(item.id)),item));
+          missing.slice(i,i+BATCH_SIZE).forEach(item=>b.set(doc(db,collectionName,String(item.id)),item));
           batches.push(b.commit());
         }
         return Promise.all(batches);

@@ -885,14 +885,16 @@ function useFirestoreCollection(collectionName, seed){
       }
     );
 
-    // Seeding séparé : vérifie si la collection est vide puis insère les données
+    // Seeding : ajoute uniquement les éléments manquants (par id) sans écraser l'existant
     getDocs(colRef).then(snap => {
-      if(snap.empty){
+      const existingIds = new Set(snap.docs.map(d => d.id));
+      const missing = seed.filter(item => !existingIds.has(String(item.id)));
+      if(missing.length > 0){
         const BATCH_SIZE = 499;
         const batches = [];
-        for(let i = 0; i < seed.length; i += BATCH_SIZE){
+        for(let i = 0; i < missing.length; i += BATCH_SIZE){
           const b = writeBatch(db);
-          seed.slice(i, i + BATCH_SIZE).forEach(item =>
+          missing.slice(i, i + BATCH_SIZE).forEach(item =>
             b.set(doc(db, collectionName, String(item.id)), item)
           );
           batches.push(b.commit());
