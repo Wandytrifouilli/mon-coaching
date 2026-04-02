@@ -1881,7 +1881,7 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
   const startSession=(prog,weekIdx,day,dayIdx)=>{
     const exEntries=day.exercises.map(pe=>{
       const ex=exercises.find(e=>e.id===pe.exId);
-      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",muscle:ex?.muscle||"",rest:pe.rest||"",sensation:"",note:"",sets:Array.from({length:pe.sets},()=>({reps:pe.reps,load:pe.targetLoad||"",done:false}))};
+      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",muscle:ex?.muscle||"",rest:pe.rest||"",sensation:"",note:"",sets:Array.from({length:pe.sets},()=>({reps:pe.reps,load:pe.targetLoad||"",done:false,actualReps:""}))};
     });
     setSession({progId:prog.id,weekIdx,dayIdx,dayLabel:day.label,weekLabel:prog.weeks[weekIdx]?.label||"",exercises:exEntries,notes:""});
     setView("session-active");
@@ -1889,6 +1889,9 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
 
   const updateLoad=useCallback((exIdx,setIdx,val)=>{
     setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,load:val})})}));
+  },[]);
+  const updateActualReps=useCallback((exIdx,setIdx,val)=>{
+    setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,actualReps:val})})}));
   },[]);
   const toggleDone=useCallback((exIdx,setIdx)=>{
     setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,done:!st.done})})}));
@@ -1898,7 +1901,7 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
   },[]);
 
   const completeSession=()=>{
-    const log={id:uid(),date:new Date().toISOString().split("T")[0],programId:session.progId,weekIdx:session.weekIdx,dayIdx:session.dayIdx,dayLabel:session.dayLabel,weekLabel:session.weekLabel,completed:true,notes:session.notes,exercises:session.exercises.map(ex=>({exId:ex.exId,name:ex.name,sensation:ex.sensation||"",sets:ex.sets.map(s=>({reps:s.reps,load:s.load}))}))};
+    const log={id:uid(),date:new Date().toISOString().split("T")[0],programId:session.progId,weekIdx:session.weekIdx,dayIdx:session.dayIdx,dayLabel:session.dayLabel,weekLabel:session.weekLabel,completed:true,notes:session.notes,exercises:session.exercises.map(ex=>({exId:ex.exId,name:ex.name,sensation:ex.sensation||"",sets:ex.sets.map(s=>({reps:s.actualReps||s.reps,load:s.load}))}))};
     setClients(p=>p.map(c=>c.id===live.id?{...c,sessions:c.sessions+1,sessionLogs:[log,...c.sessionLogs]}:c));
     setView("session-done");
   };
@@ -1920,7 +1923,7 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
         </div>
 
         {session.exercises.map((ex,ei)=>(
-          <ExerciseSessionCard key={ei} ex={ex} ei={ei} onLoadChange={updateLoad} onToggleDone={toggleDone} onSensationChange={updateSensation} sessionLogs={live.sessionLogs}/>
+          <ExerciseSessionCard key={ei} ex={ex} ei={ei} onLoadChange={updateLoad} onActualRepsChange={updateActualReps} onToggleDone={toggleDone} onSensationChange={updateSensation} sessionLogs={live.sessionLogs}/>
         ))}
 
         <Txa label="Notes de séance (optionnel)" placeholder="Ressenti, observations..." value={session.notes} onChange={e=>setSession(s=>({...s,notes:e.target.value}))}/>
@@ -2192,16 +2195,27 @@ function parseRest(rest){
   if(s.includes("s"))return parseInt(s)||0;
   return parseInt(s)||0;
 }
+// Détecte si la valeur de reps est un temps (ex: "30s", "45s", "2min")
+const isTimed=r=>/^\d+(\.\d+)?(s|min)$/.test((r||"").toLowerCase().trim());
 
 // ─── EXERCISE SESSION CARD ────────────────────────────────────────────────────
-function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,onSensationChange,sessionLogs}){
+function ExerciseSessionCard({ex,ei,onLoadChange,onActualRepsChange,onToggleDone,onSensationChange,sessionLogs}){
   const [vidOpen,setVidOpen]=useState(false);
   const [histOpen,setHistOpen]=useState(false);
   const [units,setUnits]=useState(ex.sets.map(()=>"kg"));
+  // Chrono de récupération
   const {timeLeft,running,start,stop}=useRestTimer();
+  // Chrono de travail (exercices en temps)
+  const {timeLeft:workLeft,running:workRunning,start:startWork,stop:stopWork}=useRestTimer();
+  const [activeWorkSet,setActiveWorkSet]=useState(null);
+  const activeWorkSetRef=useRef(null);
+  useEffect(()=>{activeWorkSetRef.current=activeWorkSet;},[activeWorkSet]);
+
   const allSetsDone=ex.sets.every(s=>s.done);
   const restSecs=parseRest(ex.rest||"");
   const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+
+  // Chrono récup : bips de fin
   const prevTL=useRef(0);
   useEffect(()=>{
     if(timeLeft>0&&timeLeft<=3&&running) playTick();
@@ -2209,8 +2223,23 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,onSensationChange,
     prevTL.current=timeLeft;
   },[timeLeft]);
 
-  const UNITS=["kg","élastique","cal","m","km","reps"];
+  // Chrono travail : bips + validation auto + lancement récup
+  const prevWorkTL=useRef(0);
+  useEffect(()=>{
+    if(workLeft>0&&workLeft<=3&&workRunning) playTick();
+    if(workLeft===0&&prevWorkTL.current>0){
+      playBeep();
+      const aws=activeWorkSetRef.current;
+      if(aws!==null){
+        onToggleDone(ei,aws);
+        setActiveWorkSet(null);
+        if(restSecs>0){unlockAudio();start(restSecs);}
+      }
+    }
+    prevWorkTL.current=workLeft;
+  },[workLeft]);// eslint-disable-line
 
+  const UNITS=["kg","élastique","cal","m","km","reps"];
   const setUnit=(si,u)=>setUnits(prev=>prev.map((x,i)=>i===si?u:x));
 
   const history=[];
@@ -2261,6 +2290,7 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,onSensationChange,
         </div>
       )}
 
+      {/* Chrono récupération */}
       {restSecs>0&&(
         <div style={{background:running&&timeLeft<=3?G.red+"22":running?G.gold+"15":G.bg3,border:`1px solid ${running&&timeLeft<=3?G.red+"88":running?G.gold+"55":G.border}`,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",transition:"all .3s"}}>
           <div style={{flex:1,textAlign:running&&timeLeft<=3?"center":"left"}}>
@@ -2280,23 +2310,81 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onToggleDone,onSensationChange,
       )}
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
-        {ex.sets.map((st,si)=>(
-          <div key={si} style={{background:st.done?G.green+"18":G.bg3,borderRadius:9,padding:"10px 10px 8px",border:`1.5px solid ${st.done?G.green+"55":G.border}`,transition:"all .2s"}}>
-            <div style={{fontSize:10,color:st.done?G.green:G.grey,fontWeight:700,letterSpacing:.8,marginBottom:6}}>SÉRIE {si+1} · {st.reps}</div>
-            <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:6}}>
-              <input value={st.load} onChange={e=>onLoadChange(ei,si,e.target.value)} placeholder="—"
-                style={{flex:1,background:"transparent",border:"none",borderBottom:`1px solid ${G.border}`,color:st.done?G.green:G.white,fontSize:14,fontWeight:700,outline:"none",padding:"2px 0",textAlign:"center",minWidth:0}}/>
+        {ex.sets.map((st,si)=>{
+          const timed=isTimed(st.reps);
+          const workSecs=timed?parseRest(st.reps):0;
+          const isActiveWork=workRunning&&activeWorkSet===si;
+          return(
+            <div key={si} style={{background:st.done?G.green+"18":G.bg3,borderRadius:9,padding:"10px 10px 8px",border:`1.5px solid ${st.done?G.green+"55":G.border}`,transition:"all .2s"}}>
+              {/* Titre série */}
+              <div style={{fontSize:10,color:st.done?G.green:G.grey,fontWeight:700,letterSpacing:.8,marginBottom:6}}>
+                SÉRIE {si+1}
+                {st.actualReps&&!timed
+                  ?<span> · <span style={{color:G.red,textDecoration:"line-through"}}>{st.reps}</span> <span style={{color:G.goldLight}}>{st.actualReps}</span></span>
+                  :<span> · {st.reps}</span>
+                }
+              </div>
+
+              {/* Chrono de travail (exercices en temps) */}
+              {timed&&!st.done&&(
+                <div style={{textAlign:"center",padding:"6px 0 8px",borderBottom:`1px solid ${G.border}`,marginBottom:8}}>
+                  <div style={{fontFamily:G.fontD,fontWeight:900,lineHeight:1,transition:"all .3s",
+                    fontSize:isActiveWork?(workLeft<=3?44:28):20,
+                    color:isActiveWork?(workLeft<=3?G.red:G.goldLight):G.grey}}>
+                    {isActiveWork?(workLeft<=3?workLeft:fmt(workLeft)):st.reps}
+                  </div>
+                </div>
+              )}
+
+              {/* Charge (visible sauf si timed et chrono en cours) */}
+              {!(timed&&isActiveWork)&&(
+                <>
+                  <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:6}}>
+                    <input value={st.load} onChange={e=>onLoadChange(ei,si,e.target.value)} placeholder="—"
+                      style={{flex:1,background:"transparent",border:"none",borderBottom:`1px solid ${G.border}`,color:st.done?G.green:G.white,fontSize:14,fontWeight:700,outline:"none",padding:"2px 0",textAlign:"center",minWidth:0}}/>
+                  </div>
+                  <select value={units[si]} onChange={e=>setUnit(si,e.target.value)}
+                    style={{width:"100%",background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"4px 6px",color:st.done?G.green:G.grey,fontSize:11,outline:"none",marginBottom:6,cursor:"pointer"}}>
+                    {UNITS.map(u=><option key={u} value={u}>{u}</option>)}
+                  </select>
+                </>
+              )}
+
+              {/* Reps réalisées (exercices non-chronométrés uniquement) */}
+              {!timed&&!st.done&&(
+                <input
+                  type="number" inputMode="numeric"
+                  value={st.actualReps||""}
+                  onChange={e=>onActualRepsChange(ei,si,e.target.value)}
+                  placeholder={`reps: ${st.reps}`}
+                  style={{width:"100%",background:"transparent",border:"none",borderBottom:`1px solid ${G.border}`,color:st.actualReps?G.goldLight:G.greyDim,fontSize:12,fontWeight:600,outline:"none",padding:"2px 0",textAlign:"center",marginBottom:6}}/>
+              )}
+
+              {/* Bouton action */}
+              {st.done?(
+                <button onClick={()=>onToggleDone(ei,si)}
+                  style={{width:"100%",background:"transparent",color:G.green,border:`1px solid ${G.green+"55"}`,borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  ✓ Fait
+                </button>
+              ):timed?(
+                isActiveWork
+                  ?<button onClick={()=>{stopWork();setActiveWorkSet(null);}}
+                    style={{width:"100%",background:G.red+"22",color:G.red,border:`1px solid ${G.red}44`,borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                    ✕ Stop
+                  </button>
+                  :<button onClick={()=>{unlockAudio();startWork(workSecs);setActiveWorkSet(si);}}
+                    style={{width:"100%",background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none",borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                    ▶ Lancer
+                  </button>
+              ):(
+                <button onClick={()=>{onToggleDone(ei,si);if(restSecs>0){unlockAudio();start(restSecs);}}}
+                  style={{width:"100%",background:G.goldLight+"18",color:G.goldLight,border:`1px solid ${G.gold+"44"}`,borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  Valider
+                </button>
+              )}
             </div>
-            <select value={units[si]} onChange={e=>setUnit(si,e.target.value)}
-              style={{width:"100%",background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"4px 6px",color:st.done?G.green:G.grey,fontSize:11,outline:"none",marginBottom:6,cursor:"pointer"}}>
-              {UNITS.map(u=><option key={u} value={u}>{u}</option>)}
-            </select>
-            <button onClick={()=>{onToggleDone(ei,si);if(!st.done&&restSecs>0)start(restSecs);}}
-              style={{width:"100%",background:st.done?"transparent":G.goldLight+"18",color:st.done?G.green:G.goldLight,border:`1px solid ${st.done?G.green+"55":G.gold+"44"}`,borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-              {st.done?"✓ Fait":"Valider"}
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div style={{marginTop:12}}>
         <div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Ressenti</div>
