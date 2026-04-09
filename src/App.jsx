@@ -165,6 +165,10 @@ const SEED_EX = [
   // ── AVANT-BRAS ──
   {id:115,name:"Curl Poignet Haltères",muscle:"Avant-bras",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/rUDDhR3DNeY",notes:"Avant-bras posés sur les cuisses, flexion complète du poignet, tempo lent"},
   {id:116,name:"Curl Poignet Inversé",muscle:"Avant-bras",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/a4NaRXbzOOE",notes:"Prise pronation, extension du poignet vers le haut, avant-bras fixés sur les cuisses"},
+
+  // ── POWERLIFTING ──
+  {id:117,name:"Squat Pause",muscle:"Jambes",equipment:"Barre",videoUrl:"",notes:"Pause 2-3s en bas, genoux alignés, sortie explosive — garder les abdos braqués"},
+  {id:118,name:"Front Squat",muscle:"Jambes",equipment:"Barre",videoUrl:"",notes:"Coudes hauts, dos vertical, barre sur les deltoïdes antérieurs — descente lente"},
 ];
 
 
@@ -449,6 +453,190 @@ const SEED_PROGRAMS = [
         mkEx(56,4,"12","60s"),
         mkEx(6,4,"10","60s"),
         mkEx(66,4,"50s","45s"),
+      ]},
+    ]},
+
+  ]},
+
+  // ── PROGRAMME FORCE SBD — 6 SEMAINES ─────────────────────────────────────
+  {id:5,name:"Force SBD 6 semaines",category:"Powerlifting",level:"Avancé",weeks:[
+
+    // S1 — Accumulation @75%
+    {label:"S1 — Accumulation @75%",days:[
+      {label:"Lower 1 — Squat",exercises:[
+        mkEx(1,1,"5","3min","75% 1RM"),
+        mkEx(1,4,"5","3min","70% 1RM"),
+        mkEx(117,3,"5","2min","65% 1RM"),
+        mkEx(11,3,"10","90s"),
+        mkEx(13,3,"12","75s"),
+      ]},
+      {label:"Upper 1 — Bench lourd",exercises:[
+        mkEx(2,1,"5","3min","75% 1RM"),
+        mkEx(2,4,"5","3min","70% 1RM"),
+        mkEx(58,3,"6","2min","70% 1RM"),
+        mkEx(10,4,"8","90s"),
+        mkEx(56,3,"12","75s"),
+      ]},
+      {label:"Lower 2 — Deadlift",exercises:[
+        mkEx(4,1,"4","3min","75% 1RM"),
+        mkEx(4,3,"4","3min","70% 1RM"),
+        mkEx(118,3,"6","2min","65% 1RM"),
+        mkEx(16,3,"10","90s"),
+        mkEx(13,3,"12","75s"),
+      ]},
+      {label:"Upper 2 — Bench volume",exercises:[
+        mkEx(2,4,"6","2min","70% 1RM"),
+        mkEx(26,3,"10","90s"),
+        mkEx(32,4,"10","75s"),
+        mkEx(6,3,"12","75s"),
+      ]},
+    ]},
+
+    // S2 — Accumulation @77.5%
+    {label:"S2 — Accumulation @77.5%",days:[
+      {label:"Lower 1 — Squat",exercises:[
+        mkEx(1,1,"5","3min","77.5% 1RM"),
+        mkEx(1,4,"5","3min","72.5% 1RM"),
+        mkEx(117,3,"5","2min","65% 1RM"),
+        mkEx(11,3,"10","90s"),
+        mkEx(13,3,"12","75s"),
+      ]},
+      {label:"Upper 1 — Bench lourd",exercises:[
+        mkEx(2,1,"5","3min","77.5% 1RM"),
+        mkEx(2,4,"5","3min","72.5% 1RM"),
+        mkEx(58,3,"6","2min","72.5% 1RM"),
+        mkEx(10,4,"8","90s"),
+        mkEx(56,3,"12","75s"),
+      ]},
+      {label:"Lower 2 — Deadlift",exercises:[
+        mkEx(4,1,"4","3min","77.5% 1RM"),
+        mkEx(4,3,"4","3min","72.5% 1RM"),
+        mkEx(118,3,"6","2min","65% 1RM"),
+        mkEx(16,3,"10","90s"),
+        mkEx(13,3,"12","75s"),
+      ]},
+      {label:"Upper 2 — Bench volume",exercises:[
+        mkEx(2,4,"6","2min","72.5% 1RM"),
+        mkEx(26,3,"10","90s"),
+        mkEx(32,4,"10","75s"),
+        mkEx(6,3,"12","75s"),
+      ]},
+    ]},
+
+    // S3 — Accumulation max @80%
+    {label:"S3 — Accumulation max @80%",days:[
+      {label:"Lower 1 — Squat",exercises:[
+        mkEx(1,1,"5","3min","80% 1RM"),
+        mkEx(1,4,"5","3min","75% 1RM"),
+        mkEx(117,3,"5","2min","67.5% 1RM"),
+        mkEx(11,3,"10","90s"),
+        mkEx(13,3,"12","75s"),
+      ]},
+      {label:"Upper 1 — Bench lourd",exercises:[
+        mkEx(2,1,"5","3min","80% 1RM"),
+        mkEx(2,4,"5","3min","75% 1RM"),
+        mkEx(58,3,"6","2min","75% 1RM"),
+        mkEx(10,4,"8","90s"),
+        mkEx(56,3,"12","75s"),
+      ]},
+      {label:"Lower 2 — Deadlift",exercises:[
+        mkEx(4,1,"4","3min","80% 1RM"),
+        mkEx(4,3,"4","3min","75% 1RM"),
+        mkEx(118,3,"6","2min","67.5% 1RM"),
+        mkEx(16,3,"10","90s"),
+        mkEx(13,3,"12","75s"),
+      ]},
+      {label:"Upper 2 — Bench volume",exercises:[
+        mkEx(2,4,"6","2min","75% 1RM"),
+        mkEx(26,3,"10","90s"),
+        mkEx(32,4,"10","75s"),
+        mkEx(6,3,"12","75s"),
+      ]},
+    ]},
+
+    // S4 — Intensification @82.5%
+    {label:"S4 — Intensification @82.5%",days:[
+      {label:"Lower 1 — Squat",exercises:[
+        mkEx(1,1,"4","4min","82.5% 1RM"),
+        mkEx(1,4,"4","3min","77.5% 1RM"),
+        mkEx(117,3,"4","2min","70% 1RM"),
+        mkEx(11,3,"8","90s"),
+        mkEx(13,3,"10","75s"),
+      ]},
+      {label:"Upper 1 — Bench lourd",exercises:[
+        mkEx(2,1,"4","4min","82.5% 1RM"),
+        mkEx(2,4,"4","3min","77.5% 1RM"),
+        mkEx(58,3,"4","2min","77.5% 1RM"),
+        mkEx(10,4,"6","90s"),
+        mkEx(56,3,"10","75s"),
+      ]},
+      {label:"Lower 2 — Deadlift",exercises:[
+        mkEx(4,1,"3","4min","82.5% 1RM"),
+        mkEx(4,3,"3","3min","77.5% 1RM"),
+        mkEx(118,3,"5","2min","70% 1RM"),
+        mkEx(16,3,"8","90s"),
+        mkEx(13,3,"10","75s"),
+      ]},
+      {label:"Upper 2 — Bench volume",exercises:[
+        mkEx(2,4,"5","2min","77.5% 1RM"),
+        mkEx(26,3,"8","90s"),
+        mkEx(32,4,"8","75s"),
+        mkEx(6,3,"10","75s"),
+      ]},
+    ]},
+
+    // S5 — Pic de contrainte @85%
+    {label:"S5 — Pic de contrainte @85%",days:[
+      {label:"Lower 1 — Squat",exercises:[
+        mkEx(1,1,"3","4min","85% 1RM"),
+        mkEx(1,3,"4","3min","80% 1RM"),
+        mkEx(117,2,"3","2min","72.5% 1RM"),
+        mkEx(11,3,"8","90s"),
+        mkEx(13,2,"10","75s"),
+      ]},
+      {label:"Upper 1 — Bench lourd",exercises:[
+        mkEx(2,1,"3","4min","85% 1RM"),
+        mkEx(2,3,"4","3min","80% 1RM"),
+        mkEx(58,3,"3","2min","80% 1RM"),
+        mkEx(10,3,"6","90s"),
+        mkEx(56,2,"10","75s"),
+      ]},
+      {label:"Lower 2 — Deadlift",exercises:[
+        mkEx(4,1,"3","4min","85% 1RM"),
+        mkEx(4,2,"3","3min","80% 1RM"),
+        mkEx(118,2,"4","2min","72.5% 1RM"),
+        mkEx(16,3,"8","90s"),
+        mkEx(13,2,"10","75s"),
+      ]},
+      {label:"Upper 2 — Bench volume",exercises:[
+        mkEx(2,3,"5","2min","80% 1RM"),
+        mkEx(26,3,"8","90s"),
+        mkEx(32,3,"8","75s"),
+        mkEx(6,3,"10","75s"),
+      ]},
+    ]},
+
+    // S6 — Deload actif @70% (RPE ~6)
+    {label:"S6 — Deload actif @70%",days:[
+      {label:"Lower 1 — Squat",exercises:[
+        mkEx(1,3,"3","3min","70% 1RM"),
+        mkEx(11,2,"12","90s"),
+        mkEx(13,2,"12","75s"),
+      ]},
+      {label:"Upper 1 — Bench",exercises:[
+        mkEx(2,3,"3","3min","70% 1RM"),
+        mkEx(58,2,"6","90s","70% 1RM"),
+        mkEx(10,2,"10","75s"),
+      ]},
+      {label:"Lower 2 — Deadlift",exercises:[
+        mkEx(4,3,"3","3min","70% 1RM"),
+        mkEx(16,2,"12","90s"),
+        mkEx(13,2,"12","75s"),
+      ]},
+      {label:"Upper 2 — Bench",exercises:[
+        mkEx(2,3,"3","3min","70% 1RM"),
+        mkEx(26,2,"12","90s"),
+        mkEx(32,2,"12","75s"),
       ]},
     ]},
 
