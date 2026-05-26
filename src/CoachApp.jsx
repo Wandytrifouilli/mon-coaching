@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs } from "./firebase.js";
+import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc } from "./firebase.js";
+import PompiersProgram from "./PompiersProgram.jsx";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
@@ -70,6 +71,25 @@ const calcMacros=(items=[],foods=FOODS_DB)=>items.reduce((acc,item)=>{
 },{kcal:0,protein:0,carbs:0,fat:0});
 const rnd=v=>Math.round(v);
 const rnd1=v=>Math.round(v*10)/10;
+
+// ─── PERFORMANCES / TESTS ─────────────────────────────────────────────────────
+const LOAD_REFS = [
+  {id:"none",       label:"—",             testKey:null,         unit:""},
+  {id:"1rm_squat",  label:"% 1RM Squat",   testKey:"rm_squat",  unit:"kg"},
+  {id:"1rm_bench",  label:"% 1RM Bench",   testKey:"rm_bench",  unit:"kg"},
+  {id:"1rm_sdt",    label:"% 1RM SDT",     testKey:"rm_sdt",    unit:"kg"},
+  {id:"fcmax",      label:"% FCmax",        testKey:"fcmax",     unit:"bpm"},
+  {id:"vma",        label:"% VMA",          testKey:"vma",       unit:"km/h"},
+];
+const EMPTY_TESTS={fcmax:"",vma:"",rm_squat:"",rm_bench:"",rm_sdt:"",tractions_max:"",pompes_max:"",gainage_max:"",notes:""};
+const computeLoad=(pe,tests)=>{
+  const ref=LOAD_REFS.find(r=>r.id===(pe.loadRef||"none"));
+  if(!ref||ref.id==="none"||!tests)return null;
+  const base=parseFloat(tests[ref.testKey]);
+  const pct=parseFloat(pe.targetLoad);
+  if(!base||!pct)return null;
+  return{value:Math.round(pct/100*base),unit:ref.unit,label:ref.label,pct};
+};
 
 // ─── SEED DATA ────────────────────────────────────────────────────────────────
 const SEED_EX = [
@@ -300,10 +320,18 @@ function useFirestoreCollection(collectionName, seed) {
 
   useEffect(()=>{
     const colRef = collection(db, collectionName);
+    let settled = false;
+    const settle = (items) => {
+      if (settled) return;
+      settled = true;
+      setDataLocal(items);
+      setReady(true);
+    };
     const unsub = onSnapshot(colRef,
-      snap => { setDataLocal(snap.docs.map(d=>d.data())); setReady(true); },
-      err => { console.error(`[Firebase] ${collectionName}:`, err); setDataLocal(seed); setReady(true); }
+      snap => settle(snap.docs.map(d=>d.data())),
+      err => { console.error(`[Firebase] ${collectionName}:`, err); settle(seed); }
     );
+    const timer = setTimeout(() => settle(seed), 5000);
     getDocs(colRef).then(snap=>{
       const existingIds=new Set(snap.docs.map(d=>d.id));
       const missing=seed.filter(item=>!existingIds.has(String(item.id)));
@@ -318,7 +346,7 @@ function useFirestoreCollection(collectionName, seed) {
         return Promise.all(batches);
       }
     }).catch(err=>console.error(`[Firebase] seed ${collectionName}:`,err));
-    return unsub;
+    return ()=>{ unsub(); clearTimeout(timer); };
   },[collectionName]); // eslint-disable-line
 
   const setData=(updater)=>{
@@ -533,10 +561,35 @@ function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
   const [form,setForm]=useState(initForm);
   const [pickerMeal,setPickerMeal]=useState(null);
   const [search,setSearch]=useState("");
+  const [templateSaved,setTemplateSaved]=useState(false);
+  const [firestoreTemplate,setFirestoreTemplate]=useState(null);
+
+  useEffect(()=>{
+    getDoc(doc(db,"settings","mealTemplate"))
+      .then(snap=>{if(snap.exists())setFirestoreTemplate(snap.data().meals||null);})
+      .catch(()=>{});
+  },[]);
 
   useEffect(()=>{
     if(editing&&onLiveChange) onLiveChange(calcMacros(form.flatMap(m=>m.items),foods));
   },[form,editing]); // eslint-disable-line
+
+  const saveAsTemplate=()=>{
+    const meals=form.map(({icon,...rest})=>rest);
+    setDoc(doc(db,"settings","mealTemplate"),{meals})
+      .then(()=>{setFirestoreTemplate(meals);setTemplateSaved(true);setTimeout(()=>setTemplateSaved(false),2500);})
+      .catch(()=>{});
+  };
+
+  const applyTemplate=(thenEdit=false)=>{
+    const t=firestoreTemplate;
+    if(!t)return;
+    setForm(MEAL_SLOTS.map(s=>{
+      const tm=t.find(m=>m.id===s.id);
+      return{id:s.id,label:s.label,icon:s.icon,items:tm?.items||[]};
+    }));
+    if(thenEdit)setEditing(true);
+  };
 
   const save=()=>{
     const meals=form.map(({icon,...rest})=>rest);
@@ -564,7 +617,20 @@ function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
         <div style={{fontWeight:700,fontSize:14}}>Plan alimentaire</div>
-        <BtnSm variant={editing?"ghost":"gold"} onClick={()=>editing?cancel():setEditing(true)}>{editing?"Annuler":"✏️ Modifier"}</BtnSm>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {!editing&&hasPlan&&(
+            <BtnSm variant="ghost" onClick={saveAsTemplate}>
+              {templateSaved?"✓ Sauvegardé":"💾 Modèle"}
+            </BtnSm>
+          )}
+          {editing&&(
+            <BtnSm variant="ghost" onClick={()=>applyTemplate(false)}
+              style={!firestoreTemplate?{opacity:0.35,cursor:"default",pointerEvents:"none"}:{}}>
+              📋 Coller le template
+            </BtnSm>
+          )}
+          <BtnSm variant={editing?"ghost":"gold"} onClick={()=>editing?cancel():setEditing(true)}>{editing?"Annuler":"✏️ Modifier"}</BtnSm>
+        </div>
       </div>
 
       {editing?(
@@ -618,7 +684,17 @@ function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
         </>
       ):(
         !hasPlan?(
-          <div style={{textAlign:"center",padding:"20px 0",color:G.greyDim,fontSize:13}}>Aucun plan alimentaire renseigné</div>
+          <div style={{textAlign:"center",padding:"16px 0"}}>
+            <div style={{color:G.greyDim,fontSize:13,marginBottom:firestoreTemplate?14:0}}>Aucun plan alimentaire renseigné</div>
+            {firestoreTemplate&&(
+              <button onClick={()=>applyTemplate(true)}
+                style={{background:`linear-gradient(135deg,${G.gold}22,${G.gold}11)`,border:`1px solid ${G.gold}55`,
+                  borderRadius:10,padding:"12px 20px",color:G.goldLight,fontFamily:G.font,fontWeight:700,
+                  fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:8}}>
+                📋 Pré-remplir avec le modèle
+              </button>
+            )}
+          </div>
         ):(
           form.filter(m=>m.items.length>0).map(meal=>{
             const mMacros=calcMacros(meal.items,foods);
@@ -668,19 +744,22 @@ function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
 }
 
 // ─── CLIENT DETAIL PANEL ──────────────────────────────────────────────────────
-function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onViewProgram,onDelete,foods=FOODS_DB}){
+function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onViewProgram,onViewPompiers,onDelete,foods=FOODS_DB}){
   const [tab,setTab]=useState("program");
   const [editNut,setEditNut]=useState(false);
   const [nutForm,setNutForm]=useState({...client.nutrition});
   const [liveNut,setLiveNut]=useState(null);
   const [editName,setEditName]=useState(false);
   const [nameVal,setNameVal]=useState(client.name);
+  const [editTests,setEditTests]=useState(false);
+  const [testsForm,setTestsForm]=useState({...EMPTY_TESTS,...(client.tests||{})});
 
   const cur=clients.find(c=>c.id===client.id)||client;
   const upd=fn=>setClients(p=>p.map(c=>c.id===cur.id?fn(c):c));
   const toggleProg=pid=>upd(c=>({...c,programs:c.programs.includes(pid)?c.programs.filter(x=>x!==pid):[...c.programs,pid]}));
   const saveNut=()=>{upd(c=>({...c,nutrition:nutForm}));setEditNut(false);};
   const saveName=()=>{upd(c=>({...c,name:nameVal}));setEditName(false);};
+  const saveTests=()=>{upd(c=>({...c,tests:testsForm}));setEditTests(false);};
   const copyAndEdit=p=>{
     const copy={...JSON.parse(JSON.stringify(p)),id:Date.now(),name:`${p.name} (${cur.name.split(" ")[0]})`,_copy:true};
     setPrograms(prev=>[...prev,copy]);
@@ -719,7 +798,7 @@ function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onVie
       </div>
       {/* Tabs */}
       <div style={{display:"flex",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-        {[["program","Programme"],["nutrition","Nutrition"],["suivi","Historique"]].map(([k,l])=>(
+        {[["program","Programme"],["perfs","Performances"],["nutrition","Nutrition"],["suivi","Historique"]].map(([k,l])=>(
           <button key={k} onClick={()=>setTab(k)} style={{padding:"10px 20px",background:"none",border:"none",borderBottom:tab===k?`2px solid ${G.goldLight}`:"2px solid transparent",color:tab===k?G.goldLight:G.grey,cursor:"pointer",fontSize:13,fontWeight:tab===k?700:500,marginBottom:-1}}>
             {l}
           </button>
@@ -729,7 +808,20 @@ function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onVie
       <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
         {tab==="program"&&(
           <>
-            {assigned.length===0&&<Empty text="Aucun programme assigné" icon="▦"/>}
+            {/* Programme Pompiers assigné */}
+            {cur.pompiers&&(
+              <div style={{background:"#1a1200",borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.gold}44`,borderLeft:`3px solid ${G.gold}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <div style={{fontWeight:700,color:G.goldLight}}>🚒 Programme Pompiers Pros</div>
+                  <div style={{display:"flex",gap:6}}>
+                    <BtnSm variant="danger" onClick={()=>upd(c=>({...c,pompiers:false}))}>Retirer</BtnSm>
+                  </div>
+                </div>
+                <div style={{fontSize:12,color:G.grey,marginBottom:10}}>8 semaines · Luc-Léger · Force · Maison</div>
+                {onViewPompiers&&<BtnSm onClick={()=>onViewPompiers(cur)}>Voir séances & résultats →</BtnSm>}
+              </div>
+            )}
+            {assigned.length===0&&!cur.pompiers&&<Empty text="Aucun programme assigné" icon="▦"/>}
             {assigned.map(p=>(
               <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -743,6 +835,7 @@ function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onVie
                 <BtnSm onClick={()=>onViewProgram(p,cur)}>Voir séances & résultats →</BtnSm>
               </div>
             ))}
+            {/* Section "Assigner un programme" */}
             {unassigned.length>0&&(
               <>
                 <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",margin:"20px 0 10px"}}>Assigner un programme</div>
@@ -754,8 +847,81 @@ function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onVie
                 ))}
               </>
             )}
+            {/* Programmes spéciaux — discret, coach seulement */}
+            {!cur.pompiers&&(
+              <div style={{marginTop:24,paddingTop:16,borderTop:`1px solid ${G.border}`}}>
+                <button onClick={()=>upd(c=>({...c,pompiers:true}))}
+                  style={{background:"none",border:"none",cursor:"pointer",color:G.greyDim,fontSize:12,display:"flex",alignItems:"center",gap:6,padding:0}}
+                  onMouseEnter={e=>e.currentTarget.style.color=G.gold}
+                  onMouseLeave={e=>e.currentTarget.style.color=G.greyDim}>
+                  🚒 <span style={{textDecoration:"underline"}}>Assigner le Programme Pompiers Pros</span>
+                </button>
+              </div>
+            )}
           </>
         )}
+        {tab==="perfs"&&(()=>{
+          const t=cur.tests||{};
+          const tf=k=>v=>setTestsForm(p=>({...p,[k]:v}));
+          const SECTIONS=[
+            {label:"❤️ Cardio",fields:[["fcmax","FCmax","bpm"],["vma","VMA","km/h"]]},
+            {label:"🏋️ Force (1RM estimé)",fields:[["rm_squat","Squat","kg"],["rm_bench","Développé couché","kg"],["rm_sdt","Soulevé de terre","kg"]]},
+            {label:"💪 Tests corps",fields:[["tractions_max","Tractions max","reps"],["pompes_max","Pompes max","reps"],["gainage_max","Gainage planche","sec"]]},
+          ];
+          return(
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+                <div style={{fontFamily:G.fontD,fontSize:18,fontWeight:800,letterSpacing:.5,color:G.goldLight}}>Performances & Tests</div>
+                <div style={{display:"flex",gap:6}}>
+                  {editTests?(
+                    <>
+                      <BtnSm variant="ghost" onClick={()=>{setTestsForm({...EMPTY_TESTS,...(cur.tests||{})});setEditTests(false);}}>Annuler</BtnSm>
+                      <BtnSm onClick={saveTests}>✓ Enregistrer</BtnSm>
+                    </>
+                  ):(
+                    <BtnSm variant="ghost" onClick={()=>{setTestsForm({...EMPTY_TESTS,...(cur.tests||{})});setEditTests(true);}}>✏️ Modifier</BtnSm>
+                  )}
+                </div>
+              </div>
+              {SECTIONS.map(sec=>(
+                <div key={sec.label} style={{marginBottom:20}}>
+                  <div style={{fontSize:11,color:G.gold,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>{sec.label}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                    {sec.fields.map(([key,label,unit])=>(
+                      <div key={key} style={{background:G.bg2,borderRadius:10,padding:"12px 14px",border:`1px solid ${G.border}`}}>
+                        <div style={{fontSize:10,color:G.grey,letterSpacing:.8,textTransform:"uppercase",marginBottom:6}}>{label}</div>
+                        {editTests?(
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <input type="number" value={testsForm[key]} placeholder="—"
+                              onChange={e=>tf(key)(e.target.value)}
+                              style={{flex:1,background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"6px 8px",color:G.white,fontSize:15,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                            <span style={{fontSize:11,color:G.grey,flexShrink:0}}>{unit}</span>
+                          </div>
+                        ):(
+                          <div style={{display:"flex",alignItems:"baseline",gap:5}}>
+                            <span style={{fontFamily:G.fontD,fontSize:24,fontWeight:800,color:t[key]?G.goldLight:G.greyDim}}>{t[key]||"—"}</span>
+                            {t[key]&&<span style={{fontSize:11,color:G.grey}}>{unit}</span>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:11,color:G.gold,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>📝 Notes</div>
+                {editTests?(
+                  <textarea value={testsForm.notes||""} onChange={e=>tf("notes")(e.target.value)} rows={3} placeholder="Observations, conditions du test, date..."
+                    style={{width:"100%",background:G.bg2,border:`1px solid ${G.border}`,borderRadius:10,padding:12,color:G.white,fontSize:13,outline:"none",resize:"vertical",fontFamily:G.font}}/>
+                ):(
+                  <div style={{background:G.bg2,borderRadius:10,padding:12,border:`1px solid ${G.border}`,fontSize:13,color:t.notes?G.white:G.greyDim,minHeight:48}}>
+                    {t.notes||"Aucune note"}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
         {tab==="nutrition"&&(()=>{
           const storedItems=(cur.mealPlan?.meals||[]).flatMap(m=>m.items||[]);
           const storedCalc=storedItems.length>0?calcMacros(storedItems,foods):null;
@@ -946,7 +1112,7 @@ function FoodsManager({foods,setFoods}){
 }
 
 // ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function ClientsView({clients,setClients,programs,setPrograms,onViewProgram,initialClient,foods=FOODS_DB}){
+function ClientsView({clients,setClients,programs,setPrograms,onViewProgram,onViewPompiers,initialClient,foods=FOODS_DB}){
   const [sel,setSel]=useState(initialClient||null);
   const [showNew,setShowNew]=useState(false);
   const [search,setSearch]=useState("");
@@ -1003,7 +1169,7 @@ function ClientsView({clients,setClients,programs,setPrograms,onViewProgram,init
       <div style={{flex:1,overflow:"hidden",background:G.bg}}>
         {selClient?(
           <ClientDetailPanel key={selClient.id} client={selClient} clients={clients} setClients={setClients}
-            programs={programs} setPrograms={setPrograms} onViewProgram={onViewProgram} onDelete={deleteClient} foods={foods}/>
+            programs={programs} setPrograms={setPrograms} onViewProgram={onViewProgram} onViewPompiers={onViewPompiers} onDelete={deleteClient} foods={foods}/>
         ):(
           <Empty text="Sélectionne un client pour voir son profil" icon="◉"/>
         )}
@@ -1099,7 +1265,18 @@ function ProgramDetailView({program,programs,exercises,onEdit,client,onBack}){
                   <div style={{flex:1}}>
                     <div style={{fontWeight:700,fontSize:14}}><span style={{color:G.gold,fontFamily:G.fontD,marginRight:6}}>{i+1}.</span>{ex.name}</div>
                     <div style={{fontSize:12,color:G.grey,marginTop:4}}>{pe.sets} séries × {pe.reps} — repos {pe.rest}</div>
-                    {pe.targetLoad&&<div style={{fontSize:12,color:G.goldLight,marginTop:3}}>🎯 {pe.targetLoad}</div>}
+                    {pe.targetLoad&&(()=>{
+                      const comp=computeLoad(pe,client?.tests);
+                      return(
+                        <div style={{fontSize:12,color:G.goldLight,marginTop:3}}>
+                          🎯{" "}
+                          {comp
+                            ?<><span style={{color:G.white,fontWeight:700}}>{comp.value} {comp.unit}</span><span style={{color:G.grey,marginLeft:5}}>({comp.pct}% — {comp.label.replace("% ","")})</span></>
+                            :<span>{pe.targetLoad}{pe.loadRef&&pe.loadRef!=="none"&&<span style={{color:G.grey,marginLeft:4}}>— {LOAD_REFS.find(r=>r.id===pe.loadRef)?.label}</span>}</span>
+                          }
+                        </div>
+                      );
+                    })()}
                     {ex.notes&&<div style={{fontSize:11,color:G.gold+"88",marginTop:4}}>📝 {ex.notes}</div>}
                     <div style={{marginTop:6}}><Tag text={ex.muscle} color={G.grey}/></div>
                   </div>
@@ -1153,7 +1330,7 @@ function ProgramForm({init,exercises,onSave,onCancel,title}){
   const addDay=()=>{if(week.days.length>=7)return;const labels=["A","B","C","D","E","F","G"];const nd={label:`Séance ${labels[week.days.length]||week.days.length+1}`,exercises:[]};setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:[...w.days,nd]})}));setDayIdx(week.days.length);};
   const removeDay=di=>{if(week.days.length<=1)return;setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.filter((_,j)=>j!==di)})}));setDayIdx(Math.max(0,dayIdx-(di<=dayIdx?1:0)));};
   const updateLabel=(type,idx,val)=>{if(type==="week")setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==idx?w:{...w,label:val})}));else setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.map((d,j)=>j!==idx?d:{...d,label:val})})}));};
-  const toggleEx=ex=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.find(e=>e.exId===ex.id)?d.exercises.filter(e=>e.exId!==ex.id):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:""}]})})}));};
+  const toggleEx=ex=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.find(e=>e.exId===ex.id)?d.exercises.filter(e=>e.exId!==ex.id):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:"",loadRef:"none"}]})})}));};
   const updateExField=(exId,field,val)=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.map(e=>e.exId===exId?{...e,[field]:val}:e)})})}));};
   const moveEx=(from,to)=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:(()=>{const a=[...d.exercises];const[item]=a.splice(from,1);a.splice(to,0,item);return a;})()})})}));};
   const totalEx=form.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.exercises.length,0),0);
@@ -1232,15 +1409,22 @@ function ProgramForm({init,exercises,onSave,onCancel,title}){
                         <BtnSm variant="danger" onClick={()=>toggleEx(ex)}>✕</BtnSm>
                       </div>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
-                      {[["Séries","sets","number"],["Reps","reps","text"],["Repos","rest","text"],["Charge cible","targetLoad","text"]].map(([l,k,t])=>(
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:8}}>
+                      {[["Séries","sets","number"],["Reps","reps","text"],["Repos","rest","text"],["Charge (valeur)","targetLoad","text"]].map(([l,k,t])=>(
                         <div key={k}>
                           <div style={{fontSize:10,color:G.grey,letterSpacing:.8,textTransform:"uppercase",marginBottom:3}}>{l}</div>
-                          <input type={t} value={pe[k]} placeholder={k==="targetLoad"?"optionnel":""}
+                          <input type={t} value={pe[k]} placeholder={k==="targetLoad"?"%  ou texte libre":""}
                             onChange={e=>updateExField(pe.exId,k,t==="number"?Number(e.target.value):e.target.value)}
                             style={{width:"100%",background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"6px 8px",color:G.white,fontSize:12,outline:"none"}}/>
                         </div>
                       ))}
+                    </div>
+                    <div>
+                      <div style={{fontSize:10,color:G.grey,letterSpacing:.8,textTransform:"uppercase",marginBottom:3}}>Référence (pour calcul auto)</div>
+                      <select value={pe.loadRef||"none"} onChange={e=>updateExField(pe.exId,"loadRef",e.target.value)}
+                        style={{width:"100%",background:G.bg4,border:`1px solid ${pe.loadRef&&pe.loadRef!=="none"?G.gold+"66":G.border}`,borderRadius:6,padding:"6px 8px",color:pe.loadRef&&pe.loadRef!=="none"?G.goldLight:G.grey,fontSize:12,outline:"none",cursor:"pointer"}}>
+                        {LOAD_REFS.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}
+                      </select>
                     </div>
                   </div>
                 );
@@ -1309,6 +1493,20 @@ function ProgramsView({programs,setPrograms,exercises,initialProgram}){
             style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 12px",color:G.white,fontSize:13,outline:"none"}}/>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"6px 8px"}}>
+          {/* Carte Programme Pompiers */}
+          <div onClick={()=>{setSel(null);setSubView("pompiers");}}
+            style={{borderRadius:10,padding:"11px 12px",marginBottom:8,
+              border:`1px solid ${subView==="pompiers"?G.gold+"44":"#3a2a00"}`,
+              background:subView==="pompiers"?G.gold+"0a":"#1a1200",cursor:"pointer",
+              display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:24,flexShrink:0}}>🚒</span>
+            <div style={{flex:1,overflow:"hidden"}}>
+              <div style={{fontWeight:700,fontSize:13,color:G.goldLight,marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Programme Pompiers Pros</div>
+              <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                {["8 sem.","Luc-Léger","Force","Maison"].map(t=><Tag key={t} text={t} color={G.gold}/>)}
+              </div>
+            </div>
+          </div>
           {filtered.length===0&&<Empty text="Aucun programme" icon="▦"/>}
           {filtered.map(p=>(
             <div key={p.id} onClick={()=>{setSel(p);setSubView("detail");}}
@@ -1348,7 +1546,12 @@ function ProgramsView({programs,setPrograms,exercises,initialProgram}){
           <ProgramDetailView program={cur} programs={programs} exercises={exercises}
             onEdit={p=>{setSel(p);setSubView("edit");}} client={null}/>
         )}
-        {(subView==="empty"||(!cur&&subView!=="new"))&&(
+        {subView==="pompiers"&&(
+          <div style={{height:"100%",overflowY:"auto"}}>
+            <PompiersProgram onBack={()=>setSubView("empty")}/>
+          </div>
+        )}
+        {(subView==="empty"||(!cur&&subView!=="new"&&subView!=="pompiers"))&&(
           <Empty text="Sélectionne ou crée un programme" icon="▦"/>
         )}
       </div>
@@ -1451,7 +1654,7 @@ function ExercisesView({exercises,setExercises}){
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function CoachApp(){
-  const [auth,setAuth]=useState("login");
+  const [auth,setAuth]=useState(()=>sessionStorage.getItem("wandy_coach_auth")||"login");
   const [view,setView]=useState("dashboard");
   const [exercises,setExercises,exReady]=useFirestoreCollection("exercises",SEED_EX);
   const [programs,setPrograms,pgReady]=useFirestoreCollection("programs",SEED_PROGRAMS);
@@ -1463,16 +1666,19 @@ export default function CoachApp(){
   const [dashClient,setDashClient]=useState(null);
   const [dashProgram,setDashProgram]=useState(null);
   const [programFromClient,setProgramFromClient]=useState(null); // {program, client}
+  const [pompierClient,setPompierClient]=useState(null); // client object
 
   const navigateToClient=c=>{setDashClient(c);setView("clients");};
   const navigateToProgram=p=>{setDashProgram(p);setView("programs");};
   const viewProgramFromClient=(p,c)=>{setProgramFromClient({program:p,client:c});setView("program-from-client");};
+  const viewPompiersFromClient=c=>{setPompierClient(c);setView("pompiers-client");};
 
   const changeView=v=>{
     setView(v);
     if(v!=="clients")setDashClient(null);
     if(v!=="programs")setDashProgram(null);
     if(v!=="program-from-client")setProgramFromClient(null);
+    if(v!=="pompiers-client")setPompierClient(null);
   };
 
   if(!dbReady)return(
@@ -1485,7 +1691,7 @@ export default function CoachApp(){
   );
 
   if(auth==="login")return(
-    <CoachLogin onLogin={code=>{if(code===COACH_CODE){setAuth("coach");return true;}return false;}}/>
+    <CoachLogin onLogin={code=>{if(code===COACH_CODE){sessionStorage.setItem("wandy_coach_auth","coach");setAuth("coach");return true;}return false;}}/>
   );
 
   return(
@@ -1494,7 +1700,7 @@ export default function CoachApp(){
       <Sidebar
         view={view}
         setView={changeView}
-        onLogout={()=>{setAuth("login");setView("dashboard");}}
+        onLogout={()=>{sessionStorage.removeItem("wandy_coach_auth");setAuth("login");setView("dashboard");}}
         counts={{clients:clients.length,programs:programs.length,exercises:exercises.length,foods:foods.length}}/>
       <main style={{flex:1,height:"100vh",overflow:"hidden",display:"flex",flexDirection:"column"}}>
         {view==="dashboard"&&(
@@ -1506,7 +1712,7 @@ export default function CoachApp(){
         {view==="clients"&&(
           <div style={{flex:1,overflow:"hidden"}}>
             <ClientsView clients={clients} setClients={setClients} programs={programs} setPrograms={setPrograms}
-              onViewProgram={viewProgramFromClient} initialClient={dashClient} foods={foods}/>
+              onViewProgram={viewProgramFromClient} onViewPompiers={viewPompiersFromClient} initialClient={dashClient} foods={foods}/>
           </div>
         )}
         {view==="foods"&&(
@@ -1528,6 +1734,13 @@ export default function CoachApp(){
               client={clients.find(c=>c.id===programFromClient.client.id)||programFromClient.client}
               onEdit={p=>{setDashProgram(p);changeView("programs");}}
               onBack={()=>{setProgramFromClient(null);setView("clients");}}/>
+          </div>
+        )}
+        {view==="pompiers-client"&&pompierClient&&(
+          <div style={{flex:1,overflowY:"auto"}}>
+            <PompiersProgram
+              clientId={String(pompierClient.id)}
+              onBack={()=>{setPompierClient(null);setView("clients");}}/>
           </div>
         )}
         {view==="exercises"&&(

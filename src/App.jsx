@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs } from "./firebase.js";
+import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc } from "./firebase.js";
+import PompiersProgram from "./PompiersProgram.jsx";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
@@ -783,7 +784,7 @@ const Modal=({onClose,title,children})=>(
 );
 
 // ─── MEAL PLAN EDITOR (coach) ─────────────────────────────────────────────────
-function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
+function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB,onSetAsTemplate}){
   const initForm=()=>MEAL_SLOTS.map(s=>{
     const ex=(mealPlan?.meals||[]).find(m=>m.id===s.id);
     return{id:s.id,label:s.label,icon:s.icon,items:ex?.items||[]};
@@ -792,6 +793,14 @@ function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
   const [form,setForm]=useState(initForm);
   const [pickerMeal,setPickerMeal]=useState(null);
   const [search,setSearch]=useState("");
+  const [templateSaved,setTemplateSaved]=useState(false);
+  const [firestoreTemplate,setFirestoreTemplate]=useState(null);
+
+  useEffect(()=>{
+    getDoc(doc(db,"settings","mealTemplate"))
+      .then(snap=>{if(snap.exists())setFirestoreTemplate(snap.data().meals||null);})
+      .catch(()=>{});
+  },[]);
 
   // Remonte les totaux en temps réel vers le parent pendant l'édition
   useEffect(()=>{
@@ -807,6 +816,14 @@ function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
     setEditing(false);
   };
   const cancel=()=>{setForm(initForm());if(onLiveChange)onLiveChange(null);setEditing(false);};
+
+  const applyTemplate=()=>{
+    if(!firestoreTemplate)return;
+    setForm(MEAL_SLOTS.map(s=>{
+      const tm=firestoreTemplate.find(m=>m.id===s.id);
+      return{id:s.id,label:s.label,icon:s.icon,items:tm?.items||[]};
+    }));
+  };
 
   const addItem=(mealId,foodId)=>{
     const food=foods.find(f=>f.id===foodId);
@@ -826,7 +843,20 @@ function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
       {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:0,padding:"14px 16px",background:G.bg2,borderRadius:"12px 12px 0 0",border:`1px solid ${G.border}`,borderBottom:"none"}}>
         <div style={{fontWeight:700,fontSize:14}}>Plan alimentaire</div>
-        <BtnSm variant={editing?"ghost":"gold"} onClick={()=>editing?cancel():setEditing(true)}>{editing?"Annuler":"✏️ Modifier"}</BtnSm>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {!editing&&hasPlan&&onSetAsTemplate&&(
+            <BtnSm variant="ghost" onClick={()=>{const meals=form.map(({icon,...r})=>r);onSetAsTemplate({meals});setTemplateSaved(true);setTimeout(()=>setTemplateSaved(false),2500);}}>
+              {templateSaved?"✓ Modèle enregistré":"⭐ Modèle par défaut"}
+            </BtnSm>
+          )}
+          {editing&&(
+            <BtnSm variant="ghost" onClick={applyTemplate}
+              style={!firestoreTemplate?{opacity:0.35,cursor:"default",pointerEvents:"none"}:{}}>
+              📋 Coller le template
+            </BtnSm>
+          )}
+          <BtnSm variant={editing?"ghost":"gold"} onClick={()=>editing?cancel():setEditing(true)}>{editing?"Annuler":"✏️ Modifier"}</BtnSm>
+        </div>
       </div>
 
       {/* Body */}
@@ -1135,9 +1165,14 @@ export default function App(){
   const [selClient,setSelClient]=useState(null);
   const [selProgram,setSelProgram]=useState(null);
   const [selClientForProgram,setSelClientForProgram]=useState(null);
+  const [defaultMealTemplate,setDefaultMealTemplate]=useState(()=>{try{const t=localStorage.getItem('defaultMealTemplate');return t?JSON.parse(t):null;}catch{return null;}});
+  const saveDefaultTemplate=(mp)=>{setDefaultMealTemplate(mp);localStorage.setItem('defaultMealTemplate',JSON.stringify(mp));};
 
   const login=code=>{
-    if(code.toUpperCase()==="COACH2025"){setAuth("coach");return true;}
+    if(code.toUpperCase()==="COACH2025"){
+      if(!IS_MOBILE){sessionStorage.setItem("wandy_coach_auth","coach");window.location.href="/coach";return true;}
+      setAuth("coach");return true;
+    }
     const c=clients.find(c=>c.code===code.toUpperCase());
     if(c){setCurrentClient(c);setAuth("client");return true;}
     return false;
@@ -1165,8 +1200,8 @@ export default function App(){
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {coachView==="dashboard"&&<Dashboard clients={clients} programs={programs} exercises={exercises} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}} selP={p=>{setSelProgram(p);setCoachView("program-detail");}} onLogout={logout}/>}
         {coachView==="clients"&&<ClientsList clients={clients} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}}/>}
-        {coachView==="client-detail"&&selClient&&<ClientDetail client={clients.find(c=>c.id===selClient.id)||selClient} clients={clients} setClients={setClients} setPrograms={setPrograms} setSel={setSelClient} programs={programs} exercises={exercises} foods={foods} go={setCoachView} selP={p=>{setSelProgram(p);setSelClientForProgram(clients.find(c=>c.id===selClient.id)||selClient);setCoachView("program-detail");}}/>}
-        {coachView==="new-client"&&<NewClient setClients={setClients} go={setCoachView}/>}
+        {coachView==="client-detail"&&selClient&&<ClientDetail client={clients.find(c=>c.id===selClient.id)||selClient} clients={clients} setClients={setClients} setPrograms={setPrograms} setSel={setSelClient} programs={programs} exercises={exercises} foods={foods} go={setCoachView} onSetAsTemplate={saveDefaultTemplate} selP={p=>{setSelProgram(p);setSelClientForProgram(clients.find(c=>c.id===selClient.id)||selClient);setCoachView("program-detail");}}/>}
+        {coachView==="new-client"&&<NewClient setClients={setClients} go={setCoachView} defaultMealTemplate={defaultMealTemplate}/>}
         {coachView==="programs"&&<ProgramsList programs={programs} setPrograms={setPrograms} setClients={setClients} exercises={exercises} go={setCoachView} sel={p=>{setSelProgram(p);setSelClientForProgram(null);setCoachView("program-detail");}} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
         {coachView==="program-detail"&&selProgram&&<ProgramDetail program={programs.find(x=>x.id===selProgram.id)||selProgram} exercises={exercises} go={setCoachView} client={selClientForProgram} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
         {coachView==="edit-program"&&selProgram&&<EditProgram program={programs.find(x=>x.id===selProgram.id)||selProgram} exercises={exercises} setPrograms={setPrograms} go={setCoachView} setSel={setSelProgram}/>}
@@ -1175,6 +1210,7 @@ export default function App(){
         {coachView==="new-exercise"&&<NewEx setExercises={setExercises} go={setCoachView}/>}
         {coachView==="ai-coach"&&<AICoach exercises={exercises} setPrograms={setPrograms} go={setCoachView}/>}
         {coachView==="foods"&&<FoodsManager foods={foods} setFoods={setFoods} go={setCoachView}/>}
+        {coachView==="pompiers"&&<PompiersProgram onBack={()=>setCoachView("programs")}/>}
       </div>
       <CoachNav view={coachView} setView={setCoachView}/>
     </Shell>
@@ -1329,7 +1365,7 @@ function ClientsList({clients,go,sel}){
 }
 
 // ─── CLIENT DETAIL (coach side) ───────────────────────────────────────────────
-function ClientDetail({client,clients,setClients,setPrograms,setSel,programs,exercises,go,selP,foods=FOODS_DB}){
+function ClientDetail({client,clients,setClients,setPrograms,setSel,programs,exercises,go,selP,foods=FOODS_DB,onSetAsTemplate}){
   const [tab,setTab]=useState("program");
   const [showLog,setShowLog]=useState(false);
   const [logForm,setLogForm]=useState({date:new Date().toISOString().split("T")[0],programId:"",weekIdx:"",dayIdx:"",completed:true,notes:""});
@@ -1450,6 +1486,7 @@ function ClientDetail({client,clients,setClients,setPrograms,setSel,programs,exe
             foods={foods}
             mealPlan={clients.find(c=>c.id===client.id)?.mealPlan||client.mealPlan}
             onLiveChange={setLiveNut}
+            onSetAsTemplate={onSetAsTemplate}
             onSave={(mp,totals)=>{
               setLiveNut(null);
               upd(c=>({
@@ -1509,11 +1546,11 @@ function ClientDetail({client,clients,setClients,setPrograms,setSel,programs,exe
 }
 
 // ─── NEW CLIENT ───────────────────────────────────────────────────────────────
-function NewClient({setClients,go}){
+function NewClient({setClients,go,defaultMealTemplate}){
   const [form,setForm]=useState({name:"",goal:"",color:G.goldLight});
   const colors=[G.goldLight,G.gold,"#C9A84C","#8a7040","#a08030"];
   const create=()=>{
-    setClients(p=>[...p,{...form,id:Date.now(),code:genCode(form.name),since:new Date().toLocaleDateString("fr-FR",{month:"short",year:"numeric"}),sessions:0,programs:[],mealPlan:emptyMealPlan(),nutrition:{calories:2000,proteins:150,carbs:200,fats:65,notes:""},sessionLogs:[]}]);
+    setClients(p=>[...p,{...form,id:Date.now(),code:genCode(form.name),since:new Date().toLocaleDateString("fr-FR",{month:"short",year:"numeric"}),sessions:0,programs:[],mealPlan:defaultMealTemplate||emptyMealPlan(),nutrition:{calories:2000,proteins:150,carbs:200,fats:65,notes:""},sessionLogs:[]}]);
     go("clients");
   };
   return(
@@ -1533,6 +1570,10 @@ function NewClient({setClients,go}){
         <div style={{fontFamily:"monospace",fontSize:22,color:G.goldLight,letterSpacing:3}}>{genCode(form.name)}</div>
         <div style={{fontSize:11,color:G.greyDim,marginTop:4}}>À transmettre à ton client</div>
       </div>}
+      {defaultMealTemplate&&<div style={{background:G.gold+"12",borderRadius:10,padding:"10px 14px",marginBottom:16,border:`1px solid ${G.gold}33`,display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:14}}>⭐</span>
+        <div style={{fontSize:12,color:G.goldLight}}>Le plan alimentaire modèle sera automatiquement appliqué</div>
+      </div>}
       <Btn onClick={create} disabled={!form.name||!form.goal}>Créer le client</Btn>
     </div>
   );
@@ -1547,6 +1588,20 @@ function ProgramsList({programs,setPrograms,setClients,exercises,go,sel,onEdit})
   return(
     <div style={{padding:"28px 20px 0"}} className="fu">
       <PageH title="PROGRAMMES" subtitle={`${programs.length} créés`} action={<BtnSm onClick={()=>go("new-program")}>+ Nouveau</BtnSm>}/>
+      {/* Carte Programme Pompiers */}
+      <div onClick={()=>go("pompiers")} style={{background:"linear-gradient(135deg,#1a1200,#0f0a00)",borderRadius:12,padding:16,marginBottom:16,border:`1px solid ${G.gold}50`,borderLeft:`3px solid ${G.gold}`,cursor:"pointer",display:"flex",alignItems:"center",gap:14}}>
+        <div style={{fontSize:36,flexShrink:0}}>🚒</div>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:G.fontD,fontSize:17,fontWeight:800,color:G.goldLight,letterSpacing:.5}}>PROGRAMME POMPIERS PROS</div>
+          <div style={{fontSize:12,color:G.grey,marginTop:3}}>8 semaines · Luc-Léger · Force · Maison</div>
+          <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+            {["Luc-Léger","Foncier","Salle","Maison"].map(t=>(
+              <span key={t} style={{fontSize:10,background:G.gold+"25",color:G.gold,padding:"2px 8px",borderRadius:100,fontWeight:600}}>{t}</span>
+            ))}
+          </div>
+        </div>
+        <div style={{color:G.gold,fontSize:22,flexShrink:0}}>›</div>
+      </div>
       {programs.length===0&&<Empty text="Aucun programme créé"/>}
       {programs.map((p,i)=>(
         <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,animationDelay:`${i*50}ms`}} className="fu">
@@ -2136,6 +2191,11 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
     );
   }
 
+  // ── PROGRAMME POMPIERS ──
+  if(view==="pompiers"){
+    return <PompiersProgram onBack={()=>setView("list")}/>;
+  }
+
   // ── WEEK DETAIL (list of days) ──
   if(view==="week-detail"&&selProg&&selWeek!==null){
     const prog=programs.find(p=>p.id===selProg);
@@ -2223,6 +2283,20 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
       {tab==="programme"&&(
         <div className="fu">
           <PageH title="MES PROGRAMMES"/>
+          {/* Carte Programme Pompiers */}
+          <div onClick={()=>setView("pompiers")} style={{background:"linear-gradient(135deg,#1a1200,#0f0a00)",borderRadius:12,padding:16,marginBottom:16,border:`1px solid ${G.gold}50`,borderLeft:`3px solid ${G.gold}`,cursor:"pointer",display:"flex",alignItems:"center",gap:14}}>
+            <div style={{fontSize:36,flexShrink:0}}>🚒</div>
+            <div style={{flex:1}}>
+              <div style={{fontFamily:G.fontD,fontSize:17,fontWeight:800,color:G.goldLight,letterSpacing:.5}}>PROGRAMME POMPIERS PROS</div>
+              <div style={{fontSize:12,color:G.grey,marginTop:3}}>8 semaines · Luc-Léger · Force · Maison</div>
+              <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+                {["Luc-Léger","Foncier","Salle","Maison"].map(t=>(
+                  <span key={t} style={{fontSize:10,background:G.gold+"25",color:G.gold,padding:"2px 8px",borderRadius:100,fontWeight:600}}>{t}</span>
+                ))}
+              </div>
+            </div>
+            <div style={{color:G.gold,fontSize:22,flexShrink:0}}>›</div>
+          </div>
           {assigned.length===0&&<Empty text="Aucun programme assigné"/>}
           {assigned.map(p=>(
             <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${G.border}`}}>
