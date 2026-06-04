@@ -302,11 +302,11 @@ const SEED_PROGRAMS = [
 ];
 
 // ─── PROGRAMME POMPIERS (seed éditable) ──────────────────────────────────────
-const POMPIERS_PROG = {id:"pompiers_pros",_v:2,name:"Programme Pompiers Pros",category:"Pompiers",level:"Intermédiaire",weeks:[
+const POMPIERS_PROG = {id:"pompiers_pros",_v:3,name:"Programme Pompiers Pros",category:"Pompiers",level:"Intermédiaire",weeks:[
   // ── S1 : TESTS DE RÉFÉRENCE ─────────────────────────────────────────────────
   {label:"S1 — Tests de référence",days:[
     {label:"🏃 Foncier — Calibrage allure",exercises:[
-      mkEx(119,1,"40 min","—","RPE 4-5/10"),
+      mkEx(119,1,"5 km","—","RPE 4-5/10","Note ton pace (min/km) en zone conversationnelle — c'est ta référence footing pour tout le programme"),
     ]},
     {label:"⚡ Luc-Léger — Test initial",exercises:[
       mkEx(119,1,"15 min","—","RPE 3/10","Footing léger + mobilité chevilles + 4 accélérations progressives sur 20m"),
@@ -331,7 +331,7 @@ const POMPIERS_PROG = {id:"pompiers_pros",_v:2,name:"Programme Pompiers Pros",ca
   // ── S2 : BASE — PRISE DE REPÈRES ────────────────────────────────────────────
   {label:"S2 — Base · Prise de repères",days:[
     {label:"🏃 Foncier",exercises:[
-      mkEx(119,1,"40 min","—","RPE 4/10"),
+      mkEx(119,1,"5 km","—","RPE 4/10","Zone conversationnelle tout au long — tu dois pouvoir parler"),
     ]},
     {label:"⚡ Luc-Léger",exercises:[
       mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
@@ -356,7 +356,7 @@ const POMPIERS_PROG = {id:"pompiers_pros",_v:2,name:"Programme Pompiers Pros",ca
   // ── S3 : BASE — MONTÉE EN VOLUME ────────────────────────────────────────────
   {label:"S3 — Base · Montée en volume",days:[
     {label:"🏃 Foncier",exercises:[
-      mkEx(119,1,"45 min","—","RPE 4/10"),
+      mkEx(119,1,"6 km","—","RPE 4/10","Zone conversationnelle — même allure qu'en S2"),
     ]},
     {label:"⚡ Luc-Léger",exercises:[
       mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
@@ -382,8 +382,8 @@ const POMPIERS_PROG = {id:"pompiers_pros",_v:2,name:"Programme Pompiers Pros",ca
   // ── S4 : CONSTRUCTION ───────────────────────────────────────────────────────
   {label:"S4 — Construction · Intensité progressive",days:[
     {label:"🏃 Foncier + Sprints",exercises:[
-      mkEx(119,1,"45 min","—","RPE 4/10"),
-      mkEx(121,4,"100m sprint","3 min","RPE 8/10"),
+      mkEx(119,1,"6 km","—","RPE 4/10","Footing conversationnel, puis récupère 3 min avant les sprints"),
+      mkEx(121,4,"100m sprint","3 min","RPE 8/10","Sprint maximal sur 100m, marche retour. Bien récupérer entre chaque."),
     ]},
     {label:"⚡ Luc-Léger — Transition 1min",exercises:[
       mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
@@ -408,8 +408,8 @@ const POMPIERS_PROG = {id:"pompiers_pros",_v:2,name:"Programme Pompiers Pros",ca
   // ── S5 : DÉVELOPPEMENT ──────────────────────────────────────────────────────
   {label:"S5 — Développement · Spécifique",days:[
     {label:"🏃 Foncier + Sprints",exercises:[
-      mkEx(119,1,"50 min","—","RPE 4-5/10"),
-      mkEx(121,6,"100m sprint","3 min","RPE 8-9/10"),
+      mkEx(119,1,"7 km","—","RPE 4-5/10","Légèrement plus soutenu qu'en S4 — allure ferme mais contrôlée"),
+      mkEx(121,6,"100m sprint","3 min","RPE 8-9/10","Sprints explosifs — cherche à accélérer progressivement sur les 100m"),
     ]},
     {label:"⚡ Luc-Léger — Intervalles 1min",exercises:[
       mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
@@ -435,8 +435,8 @@ const POMPIERS_PROG = {id:"pompiers_pros",_v:2,name:"Programme Pompiers Pros",ca
   // ── S6 : PIC DE CHARGE ──────────────────────────────────────────────────────
   {label:"S6 — Pic de charge",days:[
     {label:"🏃 Foncier — Variation allure",exercises:[
-      mkEx(119,1,"55 min","—","RPE 4/10"),
-      mkEx(119,1,"dont 10 min en continu","—","RPE 6-7/10"),
+      mkEx(119,1,"8 km","—","RPE 4/10","Distance totale — inclut la portion à allure soutenue ci-dessous"),
+      mkEx(119,1,"dont 1,5 km en continu","—","RPE 6-7/10","Au milieu de la sortie — allure soutenue sans sprint, retour en RPE 4/10 ensuite"),
     ]},
     {label:"⚡ Luc-Léger — Volume max",exercises:[
       mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
@@ -460,7 +460,7 @@ const POMPIERS_PROG = {id:"pompiers_pros",_v:2,name:"Programme Pompiers Pros",ca
   // ── S7 : AFFÛTAGE ───────────────────────────────────────────────────────────
   {label:"S7 — Affûtage · Fraîcheur physique",days:[
     {label:"🏃 Foncier — Qualité",exercises:[
-      mkEx(119,1,"40 min","—","RPE 4/10 — qualité d'allure"),
+      mkEx(119,1,"5 km","—","RPE 4/10","Affûtage — priorité à la qualité du geste et de la respiration, pas à la performance"),
     ]},
     {label:"⚡ Luc-Léger — Volume réduit",exercises:[
       mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
@@ -483,7 +483,7 @@ const POMPIERS_PROG = {id:"pompiers_pros",_v:2,name:"Programme Pompiers Pros",ca
   // ── S8 : VALIDATION — RETESTS ───────────────────────────────────────────────
   {label:"S8 — Validation · Retests",days:[
     {label:"🏃 Foncier — Retest allure",exercises:[
-      mkEx(119,1,"40 min","—","RPE 4-5/10 — compare ton pace à S1"),
+      mkEx(119,1,"5 km","—","RPE 4-5/10","Mêmes conditions qu'en S1. Compare ton pace (min/km) — c'est ta progression sur 8 semaines."),
     ]},
     {label:"⚡ Luc-Léger — Retest max",exercises:[
       mkEx(119,1,"15 min","—","RPE 3/10","Mêmes conditions qu'en S1 — footing léger + mobilité + 4 accélérations"),
