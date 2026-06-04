@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc } from "./firebase.js";
-import PompiersProgram from "./PompiersProgram.jsx";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
@@ -26,10 +25,11 @@ const css = `
 `;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
-const mkEx = (exId,sets,reps,rest,load="")=>({exId,sets,reps,rest,targetLoad:load});
+const mkEx = (exId,sets,reps,rest,load="")=>({exId,sets,reps,rest,targetLoad:load,loadRef:"none"});
+const mkPct= (exId,sets,reps,rest,pct,ref)=>({exId,sets,reps,rest,targetLoad:String(pct),loadRef:ref});
 const genCode = n=>n.split(" ")[0].toUpperCase().slice(0,4)+new Date().getFullYear();
 const uid = ()=>Math.random().toString(36).slice(2,9);
-const MUSCLES = ["Tous","Jambes","Pectoraux","Dos","Épaules","Biceps","Triceps","Abdominaux","Avant-bras"];
+const MUSCLES = ["Tous","Cardio","Jambes","Pectoraux","Dos","Épaules","Biceps","Triceps","Abdominaux","Avant-bras"];
 const EQUIPS = ["Aucun","Barre","Haltères","Poulie","Barre fixe","Machine","Élastique","Kettlebell","Poids du corps"];
 const MEAL_SLOTS=[
   {id:"breakfast",icon:"🌅",label:"Petit déjeuner"},
@@ -177,9 +177,18 @@ const SEED_EX = [
   // ── POWERLIFTING ──
   {id:117,name:"Squat Pause",muscle:"Jambes",equipment:"Barre",videoUrl:"",notes:"Pause 2-3s en bas, genoux alignés, sortie explosive — garder les abdos braqués"},
   {id:118,name:"Front Squat",muscle:"Jambes",equipment:"Barre",videoUrl:"",notes:"Coudes hauts, dos vertical, barre sur les deltoïdes antérieurs — descente lente"},
+
+  // ── CARDIO / POMPIERS ──
+  {id:119,name:"Footing foncier",muscle:"Cardio",equipment:"Poids du corps",videoUrl:"",notes:"Zone conversationnelle (RPE 4/10) — tu dois pouvoir parler normalement pendant tout l'effort. C'est la base aérobie."},
+  {id:120,name:"Luc-Léger (Navette)",muscle:"Cardio",equipment:"Poids du corps",videoUrl:"",notes:"App : 'Beep Test' ou 'Navette Test'. Depuis le niveau 1. Stop quand tu rates 2 lignes consécutives. VMA ≈ niveau atteint × 0,5 km/h."},
+  {id:121,name:"Fractionnés VMA",muscle:"Cardio",equipment:"Poids du corps",videoUrl:"",notes:"Effort à ~100% VMA sur la distance ou durée indiquée. Récupération complète entre chaque répétition. Ne pas partir trop vite sur le 1er."},
+  {id:122,name:"Burpees",muscle:"Cardio",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/TU8QYVW0gDU",notes:"Planche → pompe → relevé → saut bras levés. Corps rigide en planche. Rythme régulier, pas de course de vitesse."},
+  {id:123,name:"Squat Sauté",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/A-cFYWvaHr0",notes:"Réception souple genoux fléchis → rechainer immédiatement. Explosivité, genoux dans l'axe à chaque atterrissage."},
+  {id:124,name:"Fentes Sautées",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"",notes:"Changer de jambe dans les airs, atterrissage souple. Genoux dans l'axe, buste droit."},
 ];
 
 const SEED_PROGRAMS = [
+  POMPIERS_PROG,
   {id:1,name:"Full Body 3j/sem",category:"Force",level:"Intermédiaire",weeks:[
     {label:"Semaine 1 — Découverte",days:[
       {label:"Séance A",exercises:[mkEx(1,4,"8","90s","60kg"),mkEx(2,4,"8","90s","50kg"),mkEx(8,3,"45s","45s")]},
@@ -292,6 +301,205 @@ const SEED_PROGRAMS = [
     ]},
   ]},
 ];
+
+// ─── PROGRAMME POMPIERS (seed éditable) ──────────────────────────────────────
+const POMPIERS_PROG = {id:"pompiers_pros",name:"Programme Pompiers Pros",category:"Pompiers",level:"Intermédiaire",weeks:[
+  // ── S1 : TESTS DE RÉFÉRENCE ─────────────────────────────────────────────────
+  {label:"S1 — Tests de référence",days:[
+    {label:"🏃 Foncier — Calibrage allure",exercises:[
+      mkEx(119,1,"40 min","—","RPE 4-5/10"),
+    ]},
+    {label:"⚡ Luc-Léger — Test initial",exercises:[
+      mkEx(120,1,"Jusqu'à épuisement","15 min échauffement",""),
+    ]},
+    {label:"🏋️ Salle — Estimation 1RM & Technique",exercises:[
+      mkEx(1,4,"10 / 8 / 5 / 3","3 min","Montée progressive"),
+      mkEx(4,4,"10 / 8 / 5 / 3","3 min","Montée progressive"),
+      mkEx(2,4,"10 / 8 / 5 / 3","2 min","Montée progressive"),
+      mkEx(10,3,"12","90s","Technique"),
+      mkEx(5,3,"12","90s","Technique"),
+      mkEx(8,3,"Max (secondes)","60s",""),
+    ]},
+    {label:"🏠 Maison — Tests corps",exercises:[
+      mkEx(3,1,"Max","—",""),
+      mkEx(30,1,"Max","—",""),
+      mkEx(8,3,"Max (secondes)","60s",""),
+      mkEx(63,3,"30s","30s",""),
+    ]},
+  ]},
+  // ── S2 : BASE — PRISE DE REPÈRES ────────────────────────────────────────────
+  {label:"S2 — Base · Prise de repères",days:[
+    {label:"🏃 Foncier",exercises:[
+      mkEx(119,1,"40 min","—","RPE 4/10"),
+    ]},
+    {label:"⚡ Luc-Léger",exercises:[
+      mkEx(120,1,"10 min échauffement","—",""),
+      mkPct(121,8,"30s effort / 30s récup","Récup passive","100","vma"),
+      mkEx(119,1,"10 min retour calme","—","RPE 3/10"),
+    ]},
+    {label:"🏋️ Salle — Technique @60% 1RM",exercises:[
+      mkPct(1,3,"12","2 min","60","1rm_squat"),
+      mkPct(4,3,"10","2 min","60","1rm_sdt"),
+      mkPct(2,3,"12","90s","60","1rm_bench"),
+      mkEx(10,3,"12","90s","Technique"),
+      mkEx(5,3,"12","90s","Léger"),
+      mkEx(8,4,"40s","45s",""),
+    ]},
+    {label:"🏠 Maison — Circuit 3 tours",exercises:[
+      mkEx(3,3,"Max -2","90s",""),
+      mkEx(30,3,"15","60s",""),
+      mkEx(8,3,"45s","45s",""),
+      mkEx(63,3,"30s","30s",""),
+    ]},
+  ]},
+  // ── S3 : BASE — MONTÉE EN VOLUME ────────────────────────────────────────────
+  {label:"S3 — Base · Montée en volume",days:[
+    {label:"🏃 Foncier",exercises:[
+      mkEx(119,1,"45 min","—","RPE 4/10"),
+    ]},
+    {label:"⚡ Luc-Léger",exercises:[
+      mkEx(120,1,"10 min échauffement","—",""),
+      mkPct(121,10,"30s effort / 30s récup","Récup passive","100","vma"),
+      mkEx(119,1,"10 min retour calme","—","RPE 3/10"),
+    ]},
+    {label:"🏋️ Salle — Volume @65% 1RM",exercises:[
+      mkPct(1,4,"10","2 min","65","1rm_squat"),
+      mkPct(4,4,"8","2 min","65","1rm_sdt"),
+      mkPct(2,4,"10","90s","65","1rm_bench"),
+      mkEx(10,3,"12","90s","Charges moyennes"),
+      mkEx(5,3,"10","90s","Charges moyennes"),
+      mkEx(8,4,"45s","45s",""),
+      mkEx(66,3,"30s","30s",""),
+    ]},
+    {label:"🏠 Maison — Circuit 3 tours",exercises:[
+      mkEx(3,3,"Max -2","90s",""),
+      mkEx(30,3,"20","60s",""),
+      mkEx(122,3,"10","60s",""),
+      mkEx(8,3,"50s","45s",""),
+    ]},
+  ]},
+  // ── S4 : CONSTRUCTION ───────────────────────────────────────────────────────
+  {label:"S4 — Construction · Intensité progressive",days:[
+    {label:"🏃 Foncier + Sprints",exercises:[
+      mkEx(119,1,"45 min","—","RPE 4/10"),
+      mkEx(121,4,"100m sprint","3 min","RPE 8/10"),
+    ]},
+    {label:"⚡ Luc-Léger — Transition 1min",exercises:[
+      mkEx(120,1,"10 min échauffement","—",""),
+      mkPct(121,12,"30s effort / 30s récup","Récup passive","100","vma"),
+      mkEx(120,1,"10 min retour calme","—",""),
+    ]},
+    {label:"🏋️ Salle — Construction @70% 1RM",exercises:[
+      mkPct(1,4,"8","2 min","70","1rm_squat"),
+      mkPct(4,4,"6","2 min","70","1rm_sdt"),
+      mkPct(2,4,"8","2 min","70","1rm_bench"),
+      mkEx(10,4,"10","90s","Charges moyennes"),
+      mkEx(5,4,"8","90s","Charges moyennes"),
+      mkEx(8,4,"50s","45s",""),
+    ]},
+    {label:"🏠 Maison — Circuit 4 tours",exercises:[
+      mkEx(3,4,"Max -1","90s",""),
+      mkEx(30,4,"20","60s",""),
+      mkEx(122,4,"12","60s",""),
+      mkEx(123,3,"15","45s",""),
+    ]},
+  ]},
+  // ── S5 : DÉVELOPPEMENT ──────────────────────────────────────────────────────
+  {label:"S5 — Développement · Spécifique",days:[
+    {label:"🏃 Foncier + Sprints",exercises:[
+      mkEx(119,1,"50 min","—","RPE 4-5/10"),
+      mkEx(121,6,"100m sprint","3 min","RPE 8-9/10"),
+    ]},
+    {label:"⚡ Luc-Léger — Intervalles 1min",exercises:[
+      mkEx(120,1,"10 min échauffement","—",""),
+      mkPct(121,8,"1 min effort / 1 min récup","Récup passive","100","vma"),
+      mkEx(120,1,"10 min retour calme","—",""),
+    ]},
+    {label:"🏋️ Salle — Développement @75% 1RM",exercises:[
+      mkPct(1,4,"6","2 min 30s","75","1rm_squat"),
+      mkPct(4,4,"5","2 min 30s","75","1rm_sdt"),
+      mkPct(2,4,"6","2 min","75","1rm_bench"),
+      mkEx(10,4,"8","2 min","Charges lourdes"),
+      mkEx(5,4,"6","2 min","Charges lourdes"),
+      mkEx(8,4,"55s","45s",""),
+    ]},
+    {label:"🏠 Maison — Épreuve simulation",exercises:[
+      mkEx(3,4,"Max","90s",""),
+      mkEx(122,4,"15","60s",""),
+      mkEx(30,4,"25","45s",""),
+      mkEx(123,4,"20","45s",""),
+      mkEx(124,3,"20 (10/jambe)","45s",""),
+    ]},
+  ]},
+  // ── S6 : PIC DE CHARGE ──────────────────────────────────────────────────────
+  {label:"S6 — Pic de charge",days:[
+    {label:"🏃 Foncier — Variation allure",exercises:[
+      mkEx(119,1,"55 min","—","RPE 4/10"),
+      mkEx(119,1,"dont 10 min en continu","—","RPE 6-7/10"),
+    ]},
+    {label:"⚡ Luc-Léger — Volume max",exercises:[
+      mkEx(120,1,"10 min échauffement","—",""),
+      mkPct(121,10,"1 min effort / 1 min récup","Récup passive","100","vma"),
+      mkEx(120,1,"10 min retour calme","—",""),
+    ]},
+    {label:"🏋️ Salle — Pic @80% 1RM",exercises:[
+      mkPct(1,5,"5","3 min","80","1rm_squat"),
+      mkPct(4,5,"4","3 min","80","1rm_sdt"),
+      mkPct(2,5,"5","3 min","80","1rm_bench"),
+      mkEx(10,4,"8","2 min","Lourd"),
+      mkEx(5,4,"5","2 min 30s","Lourd"),
+    ]},
+    {label:"🏠 Maison — Circuit chrono",exercises:[
+      mkEx(3,5,"Max","90s",""),
+      mkEx(122,5,"15","60s",""),
+      mkEx(30,5,"25","45s",""),
+      mkEx(63,3,"40s","20s",""),
+    ]},
+  ]},
+  // ── S7 : AFFÛTAGE ───────────────────────────────────────────────────────────
+  {label:"S7 — Affûtage · Fraîcheur physique",days:[
+    {label:"🏃 Foncier — Qualité",exercises:[
+      mkEx(119,1,"40 min","—","RPE 4/10 — qualité d'allure"),
+    ]},
+    {label:"⚡ Luc-Léger — Volume réduit",exercises:[
+      mkEx(120,1,"10 min échauffement","—",""),
+      mkPct(121,6,"1 min effort / 1 min récup","Récup passive","100","vma"),
+      mkEx(120,1,"10 min retour calme","—",""),
+    ]},
+    {label:"🏋️ Salle — Affûtage @75% 1RM",exercises:[
+      mkPct(1,3,"5","3 min","75","1rm_squat"),
+      mkPct(4,3,"4","3 min","75","1rm_sdt"),
+      mkPct(2,3,"5","2 min","75","1rm_bench"),
+      mkEx(10,3,"8","90s","Technique"),
+      mkEx(5,3,"5","90s","Technique"),
+    ]},
+    {label:"🏠 Maison — Circuit allégé",exercises:[
+      mkEx(3,3,"Max -2","2 min",""),
+      mkEx(30,3,"20","60s",""),
+      mkEx(8,3,"45s","45s",""),
+    ]},
+  ]},
+  // ── S8 : VALIDATION — RETESTS ───────────────────────────────────────────────
+  {label:"S8 — Validation · Retests",days:[
+    {label:"🏃 Foncier — Retest allure",exercises:[
+      mkEx(119,1,"40 min","—","RPE 4-5/10 — compare ton pace à S1"),
+    ]},
+    {label:"⚡ Luc-Léger — Retest max",exercises:[
+      mkEx(120,1,"Jusqu'à épuisement","15 min échauffement","Mesure ta progression vs S1"),
+    ]},
+    {label:"🏋️ Salle — Retest 1RM",exercises:[
+      mkEx(1,4,"10 / 8 / 5 / 3","3 min","Montée progressive — compare à S1"),
+      mkEx(4,4,"10 / 8 / 5 / 3","3 min","Montée progressive — compare à S1"),
+      mkEx(2,4,"10 / 8 / 5 / 3","2 min","Montée progressive — compare à S1"),
+      mkEx(8,3,"Max (secondes)","60s","Compare à S1"),
+    ]},
+    {label:"🏠 Maison — Retests corps",exercises:[
+      mkEx(3,1,"Max","—","Compare à S1"),
+      mkEx(30,1,"Max","—","Compare à S1"),
+      mkEx(8,3,"Max (secondes)","60s","Compare à S1"),
+    ]},
+  ]},
+]};
 
 const SEED_CLIENTS = [
   {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
@@ -744,7 +952,7 @@ function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
 }
 
 // ─── CLIENT DETAIL PANEL ──────────────────────────────────────────────────────
-function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onViewProgram,onViewPompiers,onDelete,foods=FOODS_DB}){
+function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onViewProgram,onDelete,foods=FOODS_DB}){
   const [tab,setTab]=useState("program");
   const [editNut,setEditNut]=useState(false);
   const [nutForm,setNutForm]=useState({...client.nutrition});
@@ -808,20 +1016,7 @@ function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onVie
       <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
         {tab==="program"&&(
           <>
-            {/* Programme Pompiers assigné */}
-            {cur.pompiers&&(
-              <div style={{background:"#1a1200",borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.gold}44`,borderLeft:`3px solid ${G.gold}`}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                  <div style={{fontWeight:700,color:G.goldLight}}>🚒 Programme Pompiers Pros</div>
-                  <div style={{display:"flex",gap:6}}>
-                    <BtnSm variant="danger" onClick={()=>upd(c=>({...c,pompiers:false}))}>Retirer</BtnSm>
-                  </div>
-                </div>
-                <div style={{fontSize:12,color:G.grey,marginBottom:10}}>8 semaines · Luc-Léger · Force · Maison</div>
-                {onViewPompiers&&<BtnSm onClick={()=>onViewPompiers(cur)}>Voir séances & résultats →</BtnSm>}
-              </div>
-            )}
-            {assigned.length===0&&!cur.pompiers&&<Empty text="Aucun programme assigné" icon="▦"/>}
+            {assigned.length===0&&<Empty text="Aucun programme assigné" icon="▦"/>}
             {assigned.map(p=>(
               <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -846,17 +1041,6 @@ function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onVie
                   </div>
                 ))}
               </>
-            )}
-            {/* Programmes spéciaux — discret, coach seulement */}
-            {!cur.pompiers&&(
-              <div style={{marginTop:24,paddingTop:16,borderTop:`1px solid ${G.border}`}}>
-                <button onClick={()=>upd(c=>({...c,pompiers:true}))}
-                  style={{background:"none",border:"none",cursor:"pointer",color:G.greyDim,fontSize:12,display:"flex",alignItems:"center",gap:6,padding:0}}
-                  onMouseEnter={e=>e.currentTarget.style.color=G.gold}
-                  onMouseLeave={e=>e.currentTarget.style.color=G.greyDim}>
-                  🚒 <span style={{textDecoration:"underline"}}>Assigner le Programme Pompiers Pros</span>
-                </button>
-              </div>
             )}
           </>
         )}
@@ -1112,7 +1296,7 @@ function FoodsManager({foods,setFoods}){
 }
 
 // ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function ClientsView({clients,setClients,programs,setPrograms,onViewProgram,onViewPompiers,initialClient,foods=FOODS_DB}){
+function ClientsView({clients,setClients,programs,setPrograms,onViewProgram,initialClient,foods=FOODS_DB}){
   const [sel,setSel]=useState(initialClient||null);
   const [showNew,setShowNew]=useState(false);
   const [search,setSearch]=useState("");
@@ -1169,7 +1353,7 @@ function ClientsView({clients,setClients,programs,setPrograms,onViewProgram,onVi
       <div style={{flex:1,overflow:"hidden",background:G.bg}}>
         {selClient?(
           <ClientDetailPanel key={selClient.id} client={selClient} clients={clients} setClients={setClients}
-            programs={programs} setPrograms={setPrograms} onViewProgram={onViewProgram} onViewPompiers={onViewPompiers} onDelete={deleteClient} foods={foods}/>
+            programs={programs} setPrograms={setPrograms} onViewProgram={onViewProgram} onDelete={deleteClient} foods={foods}/>
         ):(
           <Empty text="Sélectionne un client pour voir son profil" icon="◉"/>
         )}
@@ -1493,20 +1677,6 @@ function ProgramsView({programs,setPrograms,exercises,initialProgram}){
             style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 12px",color:G.white,fontSize:13,outline:"none"}}/>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"6px 8px"}}>
-          {/* Carte Programme Pompiers */}
-          <div onClick={()=>{setSel(null);setSubView("pompiers");}}
-            style={{borderRadius:10,padding:"11px 12px",marginBottom:8,
-              border:`1px solid ${subView==="pompiers"?G.gold+"44":"#3a2a00"}`,
-              background:subView==="pompiers"?G.gold+"0a":"#1a1200",cursor:"pointer",
-              display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:24,flexShrink:0}}>🚒</span>
-            <div style={{flex:1,overflow:"hidden"}}>
-              <div style={{fontWeight:700,fontSize:13,color:G.goldLight,marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Programme Pompiers Pros</div>
-              <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                {["8 sem.","Luc-Léger","Force","Maison"].map(t=><Tag key={t} text={t} color={G.gold}/>)}
-              </div>
-            </div>
-          </div>
           {filtered.length===0&&<Empty text="Aucun programme" icon="▦"/>}
           {filtered.map(p=>(
             <div key={p.id} onClick={()=>{setSel(p);setSubView("detail");}}
@@ -1546,12 +1716,7 @@ function ProgramsView({programs,setPrograms,exercises,initialProgram}){
           <ProgramDetailView program={cur} programs={programs} exercises={exercises}
             onEdit={p=>{setSel(p);setSubView("edit");}} client={null}/>
         )}
-        {subView==="pompiers"&&(
-          <div style={{height:"100%",overflowY:"auto"}}>
-            <PompiersProgram onBack={()=>setSubView("empty")}/>
-          </div>
-        )}
-        {(subView==="empty"||(!cur&&subView!=="new"&&subView!=="pompiers"))&&(
+        {(subView==="empty"||(!cur&&subView!=="new"))&&(
           <Empty text="Sélectionne ou crée un programme" icon="▦"/>
         )}
       </div>
@@ -1666,19 +1831,15 @@ export default function CoachApp(){
   const [dashClient,setDashClient]=useState(null);
   const [dashProgram,setDashProgram]=useState(null);
   const [programFromClient,setProgramFromClient]=useState(null); // {program, client}
-  const [pompierClient,setPompierClient]=useState(null); // client object
-
   const navigateToClient=c=>{setDashClient(c);setView("clients");};
   const navigateToProgram=p=>{setDashProgram(p);setView("programs");};
   const viewProgramFromClient=(p,c)=>{setProgramFromClient({program:p,client:c});setView("program-from-client");};
-  const viewPompiersFromClient=c=>{setPompierClient(c);setView("pompiers-client");};
 
   const changeView=v=>{
     setView(v);
     if(v!=="clients")setDashClient(null);
     if(v!=="programs")setDashProgram(null);
     if(v!=="program-from-client")setProgramFromClient(null);
-    if(v!=="pompiers-client")setPompierClient(null);
   };
 
   if(!dbReady)return(
@@ -1712,7 +1873,7 @@ export default function CoachApp(){
         {view==="clients"&&(
           <div style={{flex:1,overflow:"hidden"}}>
             <ClientsView clients={clients} setClients={setClients} programs={programs} setPrograms={setPrograms}
-              onViewProgram={viewProgramFromClient} onViewPompiers={viewPompiersFromClient} initialClient={dashClient} foods={foods}/>
+              onViewProgram={viewProgramFromClient} initialClient={dashClient} foods={foods}/>
           </div>
         )}
         {view==="foods"&&(
@@ -1734,13 +1895,6 @@ export default function CoachApp(){
               client={clients.find(c=>c.id===programFromClient.client.id)||programFromClient.client}
               onEdit={p=>{setDashProgram(p);changeView("programs");}}
               onBack={()=>{setProgramFromClient(null);setView("clients");}}/>
-          </div>
-        )}
-        {view==="pompiers-client"&&pompierClient&&(
-          <div style={{flex:1,overflowY:"auto"}}>
-            <PompiersProgram
-              clientId={String(pompierClient.id)}
-              onBack={()=>{setPompierClient(null);setView("clients");}}/>
           </div>
         )}
         {view==="exercises"&&(
