@@ -25,8 +25,8 @@ const css = `
 `;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
-const mkEx = (exId,sets,reps,rest,load="")=>({exId,sets,reps,rest,targetLoad:load,loadRef:"none"});
-const mkPct= (exId,sets,reps,rest,pct,ref)=>({exId,sets,reps,rest,targetLoad:String(pct),loadRef:ref});
+const mkEx = (exId,sets,reps,rest,load="",note="")=>({exId,sets,reps,rest,targetLoad:load,loadRef:"none",note});
+const mkPct= (exId,sets,reps,rest,pct,ref,note="")=>({exId,sets,reps,rest,targetLoad:String(pct),loadRef:ref,note});
 const genCode = n=>n.split(" ")[0].toUpperCase().slice(0,4)+new Date().getFullYear();
 const uid = ()=>Math.random().toString(36).slice(2,9);
 const MUSCLES = ["Tous","Cardio","Jambes","Pectoraux","Dos","Épaules","Biceps","Triceps","Abdominaux","Avant-bras"];
@@ -302,14 +302,16 @@ const SEED_PROGRAMS = [
 ];
 
 // ─── PROGRAMME POMPIERS (seed éditable) ──────────────────────────────────────
-const POMPIERS_PROG = {id:"pompiers_pros",name:"Programme Pompiers Pros",category:"Pompiers",level:"Intermédiaire",weeks:[
+const POMPIERS_PROG = {id:"pompiers_pros",_v:2,name:"Programme Pompiers Pros",category:"Pompiers",level:"Intermédiaire",weeks:[
   // ── S1 : TESTS DE RÉFÉRENCE ─────────────────────────────────────────────────
   {label:"S1 — Tests de référence",days:[
     {label:"🏃 Foncier — Calibrage allure",exercises:[
       mkEx(119,1,"40 min","—","RPE 4-5/10"),
     ]},
     {label:"⚡ Luc-Léger — Test initial",exercises:[
-      mkEx(120,1,"Jusqu'à épuisement","15 min échauffement",""),
+      mkEx(119,1,"15 min","—","RPE 3/10","Footing léger + mobilité chevilles + 4 accélérations progressives sur 20m"),
+      mkEx(120,1,"Jusqu'à épuisement","—","","Depuis le niveau 1 jusqu'au max. Stop quand tu rates 2 lignes consécutives. Note le niveau atteint → VMA ≈ niveau × 0,5 km/h"),
+      mkEx(119,1,"10 min","—","RPE 2/10","Récupération active — trot très lent, ne pas s'asseoir"),
     ]},
     {label:"🏋️ Salle — Estimation 1RM & Technique",exercises:[
       mkEx(1,4,"10 / 8 / 5 / 3","3 min","Montée progressive"),
@@ -332,9 +334,9 @@ const POMPIERS_PROG = {id:"pompiers_pros",name:"Programme Pompiers Pros",categor
       mkEx(119,1,"40 min","—","RPE 4/10"),
     ]},
     {label:"⚡ Luc-Léger",exercises:[
-      mkEx(120,1,"10 min échauffement","—",""),
-      mkPct(121,8,"30s effort / 30s récup","Récup passive","100","vma"),
-      mkEx(119,1,"10 min retour calme","—","RPE 3/10"),
+      mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
+      mkPct(121,8,"30s effort / 30s récup","Récup passive","100","vma","Allure soutenue sur chaque répétition. Récup complète entre chaque."),
+      mkEx(119,1,"10 min","—","RPE 2/10","Retour au calme — trot léger"),
     ]},
     {label:"🏋️ Salle — Technique @60% 1RM",exercises:[
       mkPct(1,3,"12","2 min","60","1rm_squat"),
@@ -357,7 +359,7 @@ const POMPIERS_PROG = {id:"pompiers_pros",name:"Programme Pompiers Pros",categor
       mkEx(119,1,"45 min","—","RPE 4/10"),
     ]},
     {label:"⚡ Luc-Léger",exercises:[
-      mkEx(120,1,"10 min échauffement","—",""),
+      mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
       mkPct(121,10,"30s effort / 30s récup","Récup passive","100","vma"),
       mkEx(119,1,"10 min retour calme","—","RPE 3/10"),
     ]},
@@ -384,9 +386,9 @@ const POMPIERS_PROG = {id:"pompiers_pros",name:"Programme Pompiers Pros",categor
       mkEx(121,4,"100m sprint","3 min","RPE 8/10"),
     ]},
     {label:"⚡ Luc-Léger — Transition 1min",exercises:[
-      mkEx(120,1,"10 min échauffement","—",""),
+      mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
       mkPct(121,12,"30s effort / 30s récup","Récup passive","100","vma"),
-      mkEx(120,1,"10 min retour calme","—",""),
+      mkEx(119,1,"10 min","—","RPE 2/10","Retour au calme — trot léger"),
     ]},
     {label:"🏋️ Salle — Construction @70% 1RM",exercises:[
       mkPct(1,4,"8","2 min","70","1rm_squat"),
@@ -410,9 +412,9 @@ const POMPIERS_PROG = {id:"pompiers_pros",name:"Programme Pompiers Pros",categor
       mkEx(121,6,"100m sprint","3 min","RPE 8-9/10"),
     ]},
     {label:"⚡ Luc-Léger — Intervalles 1min",exercises:[
-      mkEx(120,1,"10 min échauffement","—",""),
+      mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
       mkPct(121,8,"1 min effort / 1 min récup","Récup passive","100","vma"),
-      mkEx(120,1,"10 min retour calme","—",""),
+      mkEx(119,1,"10 min","—","RPE 2/10","Retour au calme — trot léger"),
     ]},
     {label:"🏋️ Salle — Développement @75% 1RM",exercises:[
       mkPct(1,4,"6","2 min 30s","75","1rm_squat"),
@@ -437,9 +439,9 @@ const POMPIERS_PROG = {id:"pompiers_pros",name:"Programme Pompiers Pros",categor
       mkEx(119,1,"dont 10 min en continu","—","RPE 6-7/10"),
     ]},
     {label:"⚡ Luc-Léger — Volume max",exercises:[
-      mkEx(120,1,"10 min échauffement","—",""),
+      mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
       mkPct(121,10,"1 min effort / 1 min récup","Récup passive","100","vma"),
-      mkEx(120,1,"10 min retour calme","—",""),
+      mkEx(119,1,"10 min","—","RPE 2/10","Retour au calme — trot léger"),
     ]},
     {label:"🏋️ Salle — Pic @80% 1RM",exercises:[
       mkPct(1,5,"5","3 min","80","1rm_squat"),
@@ -461,9 +463,9 @@ const POMPIERS_PROG = {id:"pompiers_pros",name:"Programme Pompiers Pros",categor
       mkEx(119,1,"40 min","—","RPE 4/10 — qualité d'allure"),
     ]},
     {label:"⚡ Luc-Léger — Volume réduit",exercises:[
-      mkEx(120,1,"10 min échauffement","—",""),
+      mkEx(119,1,"10 min","—","RPE 3/10","Footing léger + mobilité — ne pas s'essouffler avant le travail"),
       mkPct(121,6,"1 min effort / 1 min récup","Récup passive","100","vma"),
-      mkEx(120,1,"10 min retour calme","—",""),
+      mkEx(119,1,"10 min","—","RPE 2/10","Retour au calme — trot léger"),
     ]},
     {label:"🏋️ Salle — Affûtage @75% 1RM",exercises:[
       mkPct(1,3,"5","3 min","75","1rm_squat"),
@@ -484,7 +486,9 @@ const POMPIERS_PROG = {id:"pompiers_pros",name:"Programme Pompiers Pros",categor
       mkEx(119,1,"40 min","—","RPE 4-5/10 — compare ton pace à S1"),
     ]},
     {label:"⚡ Luc-Léger — Retest max",exercises:[
-      mkEx(120,1,"Jusqu'à épuisement","15 min échauffement","Mesure ta progression vs S1"),
+      mkEx(119,1,"15 min","—","RPE 3/10","Mêmes conditions qu'en S1 — footing léger + mobilité + 4 accélérations"),
+      mkEx(120,1,"Jusqu'à épuisement","—","","Depuis le niveau 1. Note le niveau atteint et compare à S1. C'est ta progression sur 8 semaines."),
+      mkEx(119,1,"10 min","—","RPE 2/10","Récupération active"),
     ]},
     {label:"🏋️ Salle — Retest 1RM",exercises:[
       mkEx(1,4,"10 / 8 / 5 / 3","3 min","Montée progressive — compare à S1"),
@@ -542,14 +546,19 @@ function useFirestoreCollection(collectionName, seed) {
     );
     const timer = setTimeout(()=>{ if(!initDone){ initDone=true; setDataLocal(seed); setReady(true); } }, 5000);
     getDocs(colRef).then(snap=>{
-      const existingIds=new Set(snap.docs.map(d=>d.id));
-      const missing=seed.filter(item=>!existingIds.has(String(item.id)));
-      if(missing.length>0){
+      const existingMap=new Map(snap.docs.map(d=>[d.id,d.data()]));
+      const missing=seed.filter(item=>!existingMap.has(String(item.id)));
+      const outdated=seed.filter(item=>{
+        const ex=existingMap.get(String(item.id));
+        return ex&&item._v&&ex._v!==item._v;
+      });
+      const toWrite=[...missing,...outdated];
+      if(toWrite.length>0){
         const BATCH_SIZE=499;
         const batches=[];
-        for(let i=0;i<missing.length;i+=BATCH_SIZE){
+        for(let i=0;i<toWrite.length;i+=BATCH_SIZE){
           const b=writeBatch(db);
-          missing.slice(i,i+BATCH_SIZE).forEach(item=>b.set(doc(db,collectionName,String(item.id)),item));
+          toWrite.slice(i,i+BATCH_SIZE).forEach(item=>b.set(doc(db,collectionName,String(item.id)),item));
           batches.push(b.commit());
         }
         return Promise.all(batches);
@@ -1462,7 +1471,7 @@ function ProgramDetailView({program,programs,exercises,onEdit,client,onBack}){
                         </div>
                       );
                     })()}
-                    {ex.notes&&<div style={{fontSize:11,color:G.gold+"88",marginTop:4}}>📝 {ex.notes}</div>}
+                    {(pe.note||ex.notes)&&<div style={{fontSize:11,color:G.gold+"88",marginTop:4}}>📝 {pe.note||ex.notes}</div>}
                     <div style={{marginTop:6}}><Tag text={ex.muscle} color={G.grey}/></div>
                   </div>
                   {ex.videoUrl&&<BtnSm variant="ghost" onClick={()=>setPlaying(playing===key?null:key)}>{playing===key?"▼":"▶"}</BtnSm>}
@@ -1515,7 +1524,7 @@ function ProgramForm({init,exercises,onSave,onCancel,title}){
   const addDay=()=>{if(week.days.length>=7)return;const labels=["A","B","C","D","E","F","G"];const nd={label:`Séance ${labels[week.days.length]||week.days.length+1}`,exercises:[]};setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:[...w.days,nd]})}));setDayIdx(week.days.length);};
   const removeDay=di=>{if(week.days.length<=1)return;setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.filter((_,j)=>j!==di)})}));setDayIdx(Math.max(0,dayIdx-(di<=dayIdx?1:0)));};
   const updateLabel=(type,idx,val)=>{if(type==="week")setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==idx?w:{...w,label:val})}));else setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.map((d,j)=>j!==idx?d:{...d,label:val})})}));};
-  const toggleEx=ex=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.find(e=>e.exId===ex.id)?d.exercises.filter(e=>e.exId!==ex.id):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:"",loadRef:"none"}]})})}));};
+  const toggleEx=ex=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.find(e=>e.exId===ex.id)?d.exercises.filter(e=>e.exId!==ex.id):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:"",loadRef:"none",note:""}]})})}));};
   const updateExField=(exId,field,val)=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.map(e=>e.exId===exId?{...e,[field]:val}:e)})})}));};
   const moveEx=(from,to)=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:(()=>{const a=[...d.exercises];const[item]=a.splice(from,1);a.splice(to,0,item);return a;})()})})}));};
   const totalEx=form.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.exercises.length,0),0);
@@ -1610,6 +1619,13 @@ function ProgramForm({init,exercises,onSave,onCancel,title}){
                         style={{width:"100%",background:G.bg4,border:`1px solid ${pe.loadRef&&pe.loadRef!=="none"?G.gold+"66":G.border}`,borderRadius:6,padding:"6px 8px",color:pe.loadRef&&pe.loadRef!=="none"?G.goldLight:G.grey,fontSize:12,outline:"none",cursor:"pointer"}}>
                         {LOAD_REFS.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}
                       </select>
+                    </div>
+                    <div style={{marginTop:8}}>
+                      <div style={{fontSize:10,color:G.grey,letterSpacing:.8,textTransform:"uppercase",marginBottom:3}}>Note de séance</div>
+                      <textarea value={pe.note||""} onChange={e=>updateExField(pe.exId,"note",e.target.value)}
+                        placeholder="Instructions, coaching cues, consignes..."
+                        rows={2}
+                        style={{width:"100%",background:G.bg4,border:`1px solid ${pe.note?G.gold+"44":G.border}`,borderRadius:6,padding:"6px 8px",color:G.white,fontSize:12,outline:"none",resize:"vertical",fontFamily:G.font,lineHeight:1.4}}/>
                     </div>
                   </div>
                 );
