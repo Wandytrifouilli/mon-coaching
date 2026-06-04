@@ -188,7 +188,6 @@ const SEED_EX = [
 ];
 
 const SEED_PROGRAMS = [
-  POMPIERS_PROG,
   {id:1,name:"Full Body 3j/sem",category:"Force",level:"Intermédiaire",weeks:[
     {label:"Semaine 1 — Découverte",days:[
       {label:"Séance A",exercises:[mkEx(1,4,"8","90s","60kg"),mkEx(2,4,"8","90s","50kg"),mkEx(8,3,"45s","45s")]},
@@ -500,6 +499,7 @@ const POMPIERS_PROG = {id:"pompiers_pros",name:"Programme Pompiers Pros",categor
     ]},
   ]},
 ]};
+SEED_PROGRAMS.unshift(POMPIERS_PROG);
 
 const SEED_CLIENTS = [
   {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
