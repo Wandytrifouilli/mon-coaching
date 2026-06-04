@@ -505,6 +505,251 @@ const POMPIERS_PROG = {id:"pompiers_pros",_v:3,name:"Programme Pompiers Pros",ca
 ]};
 SEED_PROGRAMS.unshift(POMPIERS_PROG);
 
+// ─── PROGRAMME HYPERTROPHIE FONCTIONNELLE 7 SEMAINES ─────────────────────────
+const HYPERTRO_PROG = {id:"hypertro_fonctionnelle",name:"Hypertrophie Fonctionnelle 7 sem.",category:"Hypertrophie",level:"Intermédiaire",weeks:[
+  // ── S1 : ADAPTATION ─────────────────────────────────────────────────────────
+  {label:"S1 — Adaptation · Découverte",days:[
+    {label:"Séance A — Force & Poids de Corps",exercises:[
+      mkEx(14,3,"15","90s","Moyen","Squat Gobelet — dos droit, coudes hauts, profondeur max"),
+      mkEx(23,3,"12/jambe","—","","SUPERSET A1 → enchaîner sans repos. Pied arrière surélevé, buste droit."),
+      mkEx(30,3,"15","75s","","SUPERSET A2 → repos 75s après la paire. Corps gainé, coudes 45°."),
+      mkEx(16,3,"15","—","Moyen","SUPERSET B1 → enchaîner. Extension complète des hanches."),
+      mkEx(41,3,"12","75s","","SUPERSET B2 → repos 75s. Rotation des poignets pendant le mouvement."),
+      mkEx(123,2,"12","60s","","Finisher plyométrique — réception souple, rebond immédiat"),
+    ]},
+    {label:"Séance B — Tirage & Charnière",exercises:[
+      mkEx(15,3,"15","90s","Léger-Moyen","RDL — dos plat, charnière pure de hanche. Descendre jusqu'à tension ischio."),
+      mkEx(103,3,"12","90s","","Inverted Row — corps rigide, tirer le sternum vers la barre"),
+      mkEx(33,3,"12/côté","—","","SUPERSET A1 → enchaîner. Dos plat, tirer vers la hanche."),
+      mkEx(49,3,"15","75s","","SUPERSET A2 → repos 75s. Poignets neutres."),
+      mkEx(35,3,"15","—","","SUPERSET B1 → enchaîner. Ne pas dépasser la ligne du corps."),
+      mkEx(112,3,"10/jambe","75s","","SUPERSET B2 → repos 75s. Vitesse lente, dos plat."),
+      mkEx(66,3,"30s/côté","30s","","Planche latérale — hanches alignées"),
+    ]},
+    {label:"Séance C — EMOM 16 min Fonctionnel",exercises:[
+      mkEx(122,4,"6 reps","Reste de la minute","","EMOM 16 min — 4 rotations. Minute 1 : Burpees"),
+      mkEx(30,4,"10 reps","Reste de la minute","","EMOM 16 min — Minute 2 : Pompes. Coudes à 45°."),
+      mkEx(124,4,"10 reps","Reste de la minute","","EMOM 16 min — Minute 3 : Fentes Sautées. Atterrissage souple."),
+      mkEx(63,4,"20 reps","Reste de la minute","","EMOM 16 min — Minute 4 : Mountain Climbers. Hanches basses."),
+    ]},
+    {label:"Séance D — Supersets Haut du Corps",exercises:[
+      mkEx(26,3,"12","—","Moyen","SUPERSET A1 → enchaîner. Développé incliné, inclinaison 30°."),
+      mkEx(10,3,"12","75s","Moyen","SUPERSET A2 → repos 75s. Dos parallèle, coudes hauts."),
+      mkEx(40,3,"15","—","Léger","SUPERSET B1 → enchaîner. Montée lente, légère flexion coudes."),
+      mkEx(6,3,"15","75s","Léger-Moyen","SUPERSET B2 → repos 75s. Supination en haut."),
+      mkEx(54,3,"Max","—","","SUPERSET C1 → enchaîner. Corps droit, coudes le long du corps."),
+      mkEx(56,3,"12","75s","Léger","SUPERSET C2 → repos 75s. Coudes serrés, extension complète."),
+      mkEx(68,3,"8/côté","45s","","Dead Bug — dos plaqué au sol, mouvement lent"),
+    ]},
+  ]},
+  // ── S2 : ADAPTATION ++ ──────────────────────────────────────────────────────
+  {label:"S2 — Adaptation · Volume progressif",days:[
+    {label:"Séance A — Force & Poids de Corps",exercises:[
+      mkEx(1,3,"12","90s","65% 1RM","Squat barre — profondeur complète, tempo 3-1-1"),
+      mkEx(23,3,"12/jambe","—","","SUPERSET A1 → enchaîner"),
+      mkEx(30,3,"15","75s","","SUPERSET A2 → repos 75s"),
+      mkEx(16,3,"15","—","Moyen","SUPERSET B1 → enchaîner"),
+      mkEx(41,3,"12","75s","","SUPERSET B2 → repos 75s"),
+      mkEx(9,2,"16/jambe","60s","","Fentes marchées — buste droit, grand pas"),
+    ]},
+    {label:"Séance B — Tirage & Charnière",exercises:[
+      mkEx(15,3,"12","90s","Moyen","RDL — légère hausse charge vs S1"),
+      mkEx(3,3,"Max","90s","","Tractions — descendre jusqu'à extension complète"),
+      mkEx(33,3,"12/côté","—","Moyen","SUPERSET A1 → enchaîner"),
+      mkEx(49,3,"12","75s","","SUPERSET A2 → repos 75s"),
+      mkEx(35,3,"15","—","","SUPERSET B1 → enchaîner"),
+      mkEx(112,3,"10/jambe","75s","","SUPERSET B2 → repos 75s"),
+      mkEx(8,3,"45s","45s","","Gainage planche — bassin neutre"),
+    ]},
+    {label:"Séance C — EMOM 16 min Fonctionnel",exercises:[
+      mkEx(122,4,"7 reps","Reste de la minute","","EMOM 16 min — 4 rotations. Minute 1 : +1 rep vs S1."),
+      mkEx(30,4,"12 reps","Reste de la minute","","EMOM 16 min — Minute 2 : +2 reps vs S1."),
+      mkEx(124,4,"12 reps","Reste de la minute","","EMOM 16 min — Minute 3 : +2 reps vs S1."),
+      mkEx(63,4,"25 reps","Reste de la minute","","EMOM 16 min — Minute 4 : +5 reps vs S1."),
+    ]},
+    {label:"Séance D — Supersets Haut du Corps",exercises:[
+      mkEx(26,3,"12","—","Moyen","SUPERSET A1 → enchaîner"),
+      mkEx(10,3,"12","75s","Moyen","SUPERSET A2 → repos 75s"),
+      mkEx(40,3,"15","—","Léger","SUPERSET B1 → enchaîner"),
+      mkEx(6,3,"12","75s","Moyen","SUPERSET B2 → repos 75s"),
+      mkEx(54,3,"Max","—","","SUPERSET C1 → enchaîner"),
+      mkEx(56,3,"12","75s","Léger","SUPERSET C2 → repos 75s"),
+      mkEx(64,3,"20","45s","","Russian Twist — pieds décollés, rotation complète"),
+    ]},
+  ]},
+  // ── S3 : HYPERTROPHIE ───────────────────────────────────────────────────────
+  {label:"S3 — Hypertrophie · 4 séries",days:[
+    {label:"Séance A — Force & Poids de Corps",exercises:[
+      mkPct(1,4,"10","90s","70","1rm_squat","Squat — tempo contrôlé 3-0-1"),
+      mkEx(23,4,"10/jambe","—","","SUPERSET A1 → enchaîner"),
+      mkEx(30,4,"15","75s","","SUPERSET A2 → repos 75s"),
+      mkEx(16,4,"12","—","Lourd","SUPERSET B1 → enchaîner"),
+      mkEx(41,4,"10","75s","","SUPERSET B2 → repos 75s"),
+      mkEx(9,3,"14/jambe","60s","","Fentes marchées — allure continue"),
+    ]},
+    {label:"Séance B — Tirage & Charnière",exercises:[
+      mkPct(15,4,"10","90s","70","1rm_sdt","RDL — focus étirement ischio, phase excentrique lente"),
+      mkEx(3,4,"Max","90s","","Tractions — ajouter lest si plus de 10 reps propres"),
+      mkEx(33,4,"10/côté","—","Lourd","SUPERSET A1 → enchaîner"),
+      mkEx(49,4,"12","75s","Moyen","SUPERSET A2 → repos 75s"),
+      mkEx(17,4,"12/jambe","—","Moyen","SUPERSET B1 — Step Up → enchaîner"),
+      mkEx(35,4,"12","75s","","SUPERSET B2 → repos 75s"),
+      mkEx(62,3,"Max","60s","","Ab Wheel — creuser le ventre, ne pas cambrer"),
+    ]},
+    {label:"Séance C — EMOM 20 min Fonctionnel",exercises:[
+      mkEx(122,5,"8 reps","Reste de la minute","","EMOM 20 min — 5 rotations. Minute 1 : Burpees"),
+      mkEx(30,5,"12 reps","Reste de la minute","","EMOM 20 min — Minute 2 : Pompes"),
+      mkEx(124,5,"12 reps","Reste de la minute","","EMOM 20 min — Minute 3 : Fentes Sautées"),
+      mkEx(63,5,"25 reps","Reste de la minute","","EMOM 20 min — Minute 4 : Mountain Climbers"),
+    ]},
+    {label:"Séance D — Supersets Haut du Corps",exercises:[
+      mkEx(24,4,"10","—","Moyen-Lourd","SUPERSET A1 — Développé couché haltères → enchaîner"),
+      mkEx(10,4,"10","75s","Lourd","SUPERSET A2 → repos 75s"),
+      mkEx(40,4,"12","—","Moyen","SUPERSET B1 → enchaîner"),
+      mkEx(6,4,"12","75s","Moyen","SUPERSET B2 → repos 75s"),
+      mkEx(54,4,"Max","—","","SUPERSET C1 → enchaîner"),
+      mkEx(56,4,"10","75s","Moyen","SUPERSET C2 → repos 75s"),
+      mkEx(8,3,"50s","45s","","Gainage planche"),
+    ]},
+  ]},
+  // ── S4 : HYPERTROPHIE ++ ────────────────────────────────────────────────────
+  {label:"S4 — Hypertrophie · Progression charges",days:[
+    {label:"Séance A — Force & Poids de Corps",exercises:[
+      mkPct(1,4,"8","90s","72","1rm_squat","Squat — augmenter la charge vs S3"),
+      mkEx(23,4,"10/jambe","—","Lourd","SUPERSET A1 → enchaîner"),
+      mkEx(30,4,"20","75s","","SUPERSET A2 → repos 75s. Pompes déficit si possible."),
+      mkEx(16,4,"12","—","Lourd","SUPERSET B1 → enchaîner"),
+      mkEx(5,4,"10","75s","Moyen","SUPERSET B2 — Développé militaire barre → repos 75s"),
+      mkEx(123,3,"15","60s","","Finisher — squat sauté explosif"),
+    ]},
+    {label:"Séance B — Tirage & Charnière",exercises:[
+      mkPct(15,4,"8","90s","72","1rm_sdt","RDL — charge progressive vs S3"),
+      mkEx(3,4,"Max","90s","","Tractions — qualité avant quantité"),
+      mkEx(33,4,"10/côté","—","Lourd","SUPERSET A1 → enchaîner"),
+      mkEx(6,4,"12","75s","Moyen","SUPERSET A2 → repos 75s"),
+      mkEx(17,4,"12/jambe","—","Lourd","SUPERSET B1 — Step Up → enchaîner"),
+      mkEx(112,4,"10/jambe","75s","","SUPERSET B2 → repos 75s"),
+      mkEx(66,3,"35s/côté","30s","","Planche latérale — +5s vs S3"),
+    ]},
+    {label:"Séance C — EMOM 20 min Fonctionnel",exercises:[
+      mkEx(122,5,"9 reps","Reste de la minute","","EMOM 20 min — 5 rotations. Minute 1 : +1 rep vs S3."),
+      mkEx(30,5,"15 reps","Reste de la minute","","EMOM 20 min — Minute 2 : +3 reps."),
+      mkEx(124,5,"14 reps","Reste de la minute","","EMOM 20 min — Minute 3 : +2 reps."),
+      mkEx(63,5,"30 reps","Reste de la minute","","EMOM 20 min — Minute 4 : +5 reps."),
+    ]},
+    {label:"Séance D — Supersets Haut du Corps",exercises:[
+      mkEx(26,4,"10","—","Lourd","SUPERSET A1 → enchaîner"),
+      mkEx(10,4,"10","75s","Lourd","SUPERSET A2 → repos 75s"),
+      mkEx(40,4,"12","—","Moyen","SUPERSET B1 → enchaîner"),
+      mkEx(47,4,"12","75s","Moyen","SUPERSET B2 — Curl barre → repos 75s"),
+      mkEx(54,4,"Max","—","","SUPERSET C1 → enchaîner"),
+      mkEx(59,4,"12","75s","Moyen","SUPERSET C2 — Triceps corde poulie → repos 75s"),
+      mkEx(68,3,"10/côté","45s","","Dead Bug — lent et contrôlé"),
+    ]},
+  ]},
+  // ── S5 : INTENSIFICATION ────────────────────────────────────────────────────
+  {label:"S5 — Intensification · Charges lourdes",days:[
+    {label:"Séance A — Force & Poids de Corps",exercises:[
+      mkPct(1,4,"6","2min","77","1rm_squat","Squat — descente 3s, sortie explosive"),
+      mkEx(23,4,"8/jambe","—","Lourd","SUPERSET A1 → enchaîner"),
+      mkEx(30,4,"Max","75s","","SUPERSET A2 — Pompes jusqu'à l'échec → repos 75s"),
+      mkEx(16,4,"10","—","Lourd","SUPERSET B1 → enchaîner"),
+      mkEx(5,4,"8","90s","Lourd","SUPERSET B2 — Développé militaire → repos 90s"),
+      mkEx(9,3,"12/jambe","60s","Moyen","Fentes marchées — charge continue"),
+    ]},
+    {label:"Séance B — Tirage & Charnière",exercises:[
+      mkPct(15,4,"8","2min","75","1rm_sdt","RDL — tension continue, phase excentrique 3s"),
+      mkEx(3,4,"Max","2min","","Tractions — rest-pause si nécessaire"),
+      mkEx(33,4,"8/côté","—","Lourd","SUPERSET A1 → enchaîner"),
+      mkEx(49,4,"12","75s","Lourd","SUPERSET A2 → repos 75s"),
+      mkEx(17,4,"10/jambe","—","Lourd","SUPERSET B1 → enchaîner"),
+      mkEx(35,4,"12","75s","","SUPERSET B2 → repos 75s"),
+      mkEx(62,3,"Max","60s","","Ab Wheel — contrôle parfait"),
+    ]},
+    {label:"Séance C — EMOM 20 min Intensifié",exercises:[
+      mkEx(122,5,"10 reps","Reste de la minute","","EMOM 20 min — 5 rotations. Minute 1 : Burpees explosifs."),
+      mkEx(30,5,"15 reps","Reste de la minute","","EMOM 20 min — Minute 2 : Pompes explosives."),
+      mkEx(124,5,"14 reps","Reste de la minute","","EMOM 20 min — Minute 3 : Fentes sautées."),
+      mkEx(63,5,"30 reps","Reste de la minute","","EMOM 20 min — Minute 4 : Mountain Climbers rythme max."),
+    ]},
+    {label:"Séance D — Supersets Haut du Corps",exercises:[
+      mkEx(24,4,"8","—","Lourd","SUPERSET A1 → enchaîner. Phase excentrique 3s."),
+      mkEx(10,4,"8","90s","Lourd","SUPERSET A2 → repos 90s"),
+      mkEx(40,4,"12","—","Moyen","SUPERSET B1 → enchaîner"),
+      mkEx(6,4,"10","75s","Lourd","SUPERSET B2 → repos 75s"),
+      mkEx(54,4,"Max","—","","SUPERSET C1 → enchaîner"),
+      mkEx(56,4,"8","75s","Moyen-Lourd","SUPERSET C2 → repos 75s"),
+      mkEx(8,3,"55s","45s","","Gainage planche — +5s vs S4"),
+    ]},
+  ]},
+  // ── S6 : PIC DE CHARGE ──────────────────────────────────────────────────────
+  {label:"S6 — Pic de charge · Intensification max",days:[
+    {label:"Séance A — Force & Poids de Corps",exercises:[
+      mkPct(1,5,"5","2min","80","1rm_squat","Squat — 1 série supplémentaire vs S5. Pic de charge."),
+      mkEx(23,4,"8/jambe","—","Très lourd","SUPERSET A1 → enchaîner"),
+      mkEx(30,4,"Max","75s","","SUPERSET A2 — Pompes à l'échec → repos 75s"),
+      mkEx(16,4,"10","—","Très lourd","SUPERSET B1 → enchaîner"),
+      mkEx(5,4,"6","90s","Lourd","SUPERSET B2 → repos 90s"),
+      mkEx(123,3,"15","60s","","Finisher squat sauté explosif"),
+    ]},
+    {label:"Séance B — Tirage & Charnière",exercises:[
+      mkPct(15,5,"5","2min","80","1rm_sdt","RDL — pic de charge, rigueur technique"),
+      mkEx(3,5,"Max","2min","","Tractions — pic de volume"),
+      mkEx(33,4,"8/côté","—","Très lourd","SUPERSET A1 → enchaîner"),
+      mkEx(47,4,"10","75s","Lourd","SUPERSET A2 — Curl barre → repos 75s"),
+      mkEx(17,4,"10/jambe","—","Très lourd","SUPERSET B1 → enchaîner"),
+      mkEx(35,4,"12","75s","","SUPERSET B2 → repos 75s"),
+      mkEx(64,3,"25","45s","","Russian Twist — pieds décollés"),
+    ]},
+    {label:"Séance C — EMOM 20 min Peak",exercises:[
+      mkEx(122,5,"10 reps","Reste de la minute","","EMOM 20 min — 5 rotations. Minute 1 : Burpees — intensité maximale."),
+      mkEx(30,5,"Max reps","Reste de la minute","","EMOM 20 min — Minute 2 : Pompes jusqu'à l'échec."),
+      mkEx(124,5,"16 reps","Reste de la minute","","EMOM 20 min — Minute 3 : pic de volume."),
+      mkEx(63,5,"35 reps","Reste de la minute","","EMOM 20 min — Minute 4 : pic de volume."),
+    ]},
+    {label:"Séance D — Supersets Haut du Corps",exercises:[
+      mkEx(26,4,"8","—","Lourd","SUPERSET A1 → enchaîner"),
+      mkEx(10,4,"8","90s","Très lourd","SUPERSET A2 → repos 90s"),
+      mkEx(40,4,"12","—","Moyen","SUPERSET B1 → enchaîner"),
+      mkEx(6,4,"10","75s","Lourd","SUPERSET B2 → repos 75s"),
+      mkEx(54,4,"Max","—","","SUPERSET C1 → enchaîner"),
+      mkEx(56,4,"8","75s","Lourd","SUPERSET C2 → repos 75s"),
+      mkEx(62,3,"Max","60s","","Ab Wheel — pic"),
+    ]},
+  ]},
+  // ── S7 : DELOAD ─────────────────────────────────────────────────────────────
+  {label:"S7 — Deload · Récupération active",days:[
+    {label:"Séance A — Force & Poids de Corps",exercises:[
+      mkEx(14,2,"15","90s","Léger","Squat Gobelet — retour aux bases, qualité du mouvement"),
+      mkEx(23,2,"12/jambe","—","Léger","SUPERSET A1 → enchaîner"),
+      mkEx(30,2,"15","75s","","SUPERSET A2 → repos 75s"),
+      mkEx(16,2,"15","—","Léger","SUPERSET B1 → enchaîner"),
+      mkEx(41,2,"12","75s","","SUPERSET B2 → repos 75s"),
+    ]},
+    {label:"Séance B — Tirage & Charnière",exercises:[
+      mkEx(15,2,"15","90s","Léger","RDL — focus mobilité et technique, charges réduites"),
+      mkEx(103,2,"15","90s","","Inverted Row — volume réduit"),
+      mkEx(33,2,"12/côté","—","Léger","SUPERSET A1 → enchaîner"),
+      mkEx(49,2,"15","75s","Léger","SUPERSET A2 → repos 75s"),
+      mkEx(8,2,"40s","45s","","Gainage — récupération active"),
+    ]},
+    {label:"Séance C — EMOM 12 min Récupération",exercises:[
+      mkEx(30,3,"10 reps","Reste de la minute","","EMOM 12 min — 3 rotations. Minute 1 : Pompes. Allure légère."),
+      mkEx(9,3,"10/jambe","Reste de la minute","","EMOM 12 min — Minute 2 : Fentes marchées légères."),
+      mkEx(63,3,"15 reps","Reste de la minute","","EMOM 12 min — Minute 3 : Mountain Climbers, rythme modéré."),
+      mkEx(66,3,"25s/côté","Reste de la minute","","EMOM 12 min — Minute 4 : Planche latérale."),
+    ]},
+    {label:"Séance D — Supersets Légers",exercises:[
+      mkEx(26,2,"15","—","Léger","SUPERSET A1 → enchaîner"),
+      mkEx(10,2,"15","75s","Léger","SUPERSET A2 → repos 75s"),
+      mkEx(40,2,"15","—","Léger","SUPERSET B1 → enchaîner"),
+      mkEx(6,2,"15","75s","Léger","SUPERSET B2 → repos 75s"),
+      mkEx(68,2,"8/côté","45s","","Dead Bug — récupération active"),
+    ]},
+  ]},
+]};
+SEED_PROGRAMS.push(HYPERTRO_PROG);
+
 const SEED_CLIENTS = [
   {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
    mealPlan:emptyMealPlan(),
