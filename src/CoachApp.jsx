@@ -528,18 +528,19 @@ function useFirestoreCollection(collectionName, seed) {
 
   useEffect(()=>{
     const colRef = collection(db, collectionName);
-    let settled = false;
-    const settle = (items) => {
-      if (settled) return;
-      settled = true;
-      setDataLocal(items);
-      setReady(true);
-    };
+    let initDone = false;
     const unsub = onSnapshot(colRef,
-      snap => settle(snap.docs.map(d=>d.data())),
-      err => { console.error(`[Firebase] ${collectionName}:`, err); settle(seed); }
+      snap => {
+        const items = snap.docs.map(d=>d.data());
+        setDataLocal(items);
+        if(!initDone){ initDone=true; setReady(true); }
+      },
+      err => {
+        console.error(`[Firebase] ${collectionName}:`, err);
+        if(!initDone){ initDone=true; setDataLocal(seed); setReady(true); }
+      }
     );
-    const timer = setTimeout(() => settle(seed), 5000);
+    const timer = setTimeout(()=>{ if(!initDone){ initDone=true; setDataLocal(seed); setReady(true); } }, 5000);
     getDocs(colRef).then(snap=>{
       const existingIds=new Set(snap.docs.map(d=>d.id));
       const missing=seed.filter(item=>!existingIds.has(String(item.id)));
