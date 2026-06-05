@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc } from "./firebase.js";
-import PompiersProgram from "./PompiersProgram.jsx";
+
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
@@ -1210,7 +1210,6 @@ export default function App(){
         {coachView==="new-exercise"&&<NewEx setExercises={setExercises} go={setCoachView}/>}
         {coachView==="ai-coach"&&<AICoach exercises={exercises} setPrograms={setPrograms} go={setCoachView}/>}
         {coachView==="foods"&&<FoodsManager foods={foods} setFoods={setFoods} go={setCoachView}/>}
-        {coachView==="pompiers"&&<PompiersProgram onBack={()=>setCoachView("programs")}/>}
       </div>
       <CoachNav view={coachView} setView={setCoachView}/>
     </Shell>
@@ -1588,20 +1587,6 @@ function ProgramsList({programs,setPrograms,setClients,exercises,go,sel,onEdit})
   return(
     <div style={{padding:"28px 20px 0"}} className="fu">
       <PageH title="PROGRAMMES" subtitle={`${programs.length} créés`} action={<BtnSm onClick={()=>go("new-program")}>+ Nouveau</BtnSm>}/>
-      {/* Carte Programme Pompiers */}
-      <div onClick={()=>go("pompiers")} style={{background:"linear-gradient(135deg,#1a1200,#0f0a00)",borderRadius:12,padding:16,marginBottom:16,border:`1px solid ${G.gold}50`,borderLeft:`3px solid ${G.gold}`,cursor:"pointer",display:"flex",alignItems:"center",gap:14}}>
-        <div style={{fontSize:36,flexShrink:0}}>🚒</div>
-        <div style={{flex:1}}>
-          <div style={{fontFamily:G.fontD,fontSize:17,fontWeight:800,color:G.goldLight,letterSpacing:.5}}>PROGRAMME POMPIERS PROS</div>
-          <div style={{fontSize:12,color:G.grey,marginTop:3}}>8 semaines · Luc-Léger · Force · Maison</div>
-          <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
-            {["Luc-Léger","Foncier","Salle","Maison"].map(t=>(
-              <span key={t} style={{fontSize:10,background:G.gold+"25",color:G.gold,padding:"2px 8px",borderRadius:100,fontWeight:600}}>{t}</span>
-            ))}
-          </div>
-        </div>
-        <div style={{color:G.gold,fontSize:22,flexShrink:0}}>›</div>
-      </div>
       {programs.length===0&&<Empty text="Aucun programme créé"/>}
       {programs.map((p,i)=>(
         <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,animationDelay:`${i*50}ms`}} className="fu">
@@ -2191,11 +2176,6 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
     );
   }
 
-  // ── PROGRAMME POMPIERS ──
-  if(view==="pompiers"){
-    return <PompiersProgram onBack={()=>setView("list")}/>;
-  }
-
   // ── WEEK DETAIL (list of days) ──
   if(view==="week-detail"&&selProg&&selWeek!==null){
     const prog=programs.find(p=>p.id===selProg);
@@ -2283,20 +2263,6 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
       {tab==="programme"&&(
         <div className="fu">
           <PageH title="MES PROGRAMMES"/>
-          {/* Carte Programme Pompiers */}
-          <div onClick={()=>setView("pompiers")} style={{background:"linear-gradient(135deg,#1a1200,#0f0a00)",borderRadius:12,padding:16,marginBottom:16,border:`1px solid ${G.gold}50`,borderLeft:`3px solid ${G.gold}`,cursor:"pointer",display:"flex",alignItems:"center",gap:14}}>
-            <div style={{fontSize:36,flexShrink:0}}>🚒</div>
-            <div style={{flex:1}}>
-              <div style={{fontFamily:G.fontD,fontSize:17,fontWeight:800,color:G.goldLight,letterSpacing:.5}}>PROGRAMME POMPIERS PROS</div>
-              <div style={{fontSize:12,color:G.grey,marginTop:3}}>8 semaines · Luc-Léger · Force · Maison</div>
-              <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
-                {["Luc-Léger","Foncier","Salle","Maison"].map(t=>(
-                  <span key={t} style={{fontSize:10,background:G.gold+"25",color:G.gold,padding:"2px 8px",borderRadius:100,fontWeight:600}}>{t}</span>
-                ))}
-              </div>
-            </div>
-            <div style={{color:G.gold,fontSize:22,flexShrink:0}}>›</div>
-          </div>
           {assigned.length===0&&<Empty text="Aucun programme assigné"/>}
           {assigned.map(p=>(
             <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${G.border}`}}>
