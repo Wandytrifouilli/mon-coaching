@@ -750,6 +750,158 @@ const HYPERTRO_PROG = {id:"hypertro_fonctionnelle",name:"Hypertrophie Fonctionne
 ]};
 SEED_PROGRAMS.push(HYPERTRO_PROG);
 
+// ─── PROGRAMME MAISON 3j/sem — CYCLE 2 ──────────────────────────────────────
+const MAISON_CYCLE2 = {id:"maison_3j_cycle2",name:"Maison 3j/sem — Cycle 2",category:"Maison",level:"Débutant / Intermédiaire",weeks:[
+  // S1 — DÉCOUVERTE
+  {label:"S1 — Découverte · Maîtrise du mouvement",days:[
+    {label:"Séance A — Push · Pectoraux & Épaules",exercises:[
+      mkEx(24,3,"12","—","","SUPERSET A1 → enchaîner sans repos. Amplitude complète, descente lente 3s."),
+      mkEx(30,3,"12","90s","","SUPERSET A2 → repos 90s après la paire. Corps gainé, coudes à 45°."),
+      mkEx(41,3,"12","—","","SUPERSET B1 → enchaîner. Rotation des poignets pendant le mouvement."),
+      mkEx(40,3,"15","75s","","SUPERSET B2 → repos 75s. Légère flexion des coudes, montée lente."),
+      mkEx(54,3,"Max","—","","SUPERSET C1 → enchaîner. Corps droit, coudes le long du corps."),
+      mkEx(56,3,"12","75s","","SUPERSET C2 → repos 75s. Coudes serrés, extension complète."),
+      mkEx(68,3,"8/côté","45s","","Dead Bug — dos plaqué au sol, mouvement lent et contrôlé"),
+    ]},
+    {label:"Séance B — Pull · Dos & Biceps",exercises:[
+      mkEx(3,3,"Max","2min","","Tractions — descendre jusqu'à extension complète des bras"),
+      mkEx(33,3,"12/côté","—","","SUPERSET A1 → enchaîner. Dos plat, tirer vers la hanche."),
+      mkEx(49,3,"15","90s","","SUPERSET A2 → repos 90s. Poignets neutres, coudes fixes."),
+      mkEx(103,3,"12","—","","SUPERSET B1 → enchaîner. Corps rigide, tirer le sternum vers la barre."),
+      mkEx(6,3,"12","75s","","SUPERSET B2 → repos 75s. Supination en haut du mouvement."),
+      mkEx(90,3,"20m","90s","","Farmers Walk — dos droit, pas réguliers et rapides"),
+      mkEx(61,3,"12","60s","","Relevé de Jambes — jambes tendues, montée lente"),
+    ]},
+    {label:"Séance C — Jambes · Full Body",exercises:[
+      mkEx(23,3,"10/jambe","—","","SUPERSET A1 → enchaîner. Pied arrière surélevé, buste droit."),
+      mkEx(16,3,"15","90s","","SUPERSET A2 → repos 90s. Extension complète des hanches en haut."),
+      mkEx(9,3,"12/jambe","—","","SUPERSET B1 → enchaîner. Genou arrière proche du sol."),
+      mkEx(14,3,"15","90s","","SUPERSET B2 → repos 90s. Coudes hauts, profondeur maximale."),
+      mkEx(22,2,"8","90s","","Box Jump — réception souple, genoux fléchis, rebond immédiat"),
+      mkEx(63,3,"30s","—","","SUPERSET C1 → enchaîner. Hanches basses, rythme régulier."),
+      mkEx(66,3,"25s/côté","45s","","SUPERSET C2 → repos 45s. Hanches alignées, corps en planche."),
+    ]},
+  ]},
+  // S2 — CONSTRUCTION
+  {label:"S2 — Construction · Volume progressif",days:[
+    {label:"Séance A — Push · Pectoraux & Épaules",exercises:[
+      mkEx(24,4,"12","—","","SUPERSET A1 → enchaîner. +1 série vs S1."),
+      mkEx(30,4,"12","90s","","SUPERSET A2 → repos 90s"),
+      mkEx(41,4,"12","—","","SUPERSET B1 → enchaîner"),
+      mkEx(40,4,"15","75s","","SUPERSET B2 → repos 75s"),
+      mkEx(54,4,"Max","—","","SUPERSET C1 → enchaîner"),
+      mkEx(56,4,"12","75s","","SUPERSET C2 → repos 75s"),
+      mkEx(68,3,"8/côté","45s","","Dead Bug — dos plaqué, mouvement lent"),
+    ]},
+    {label:"Séance B — Pull · Dos & Biceps",exercises:[
+      mkEx(3,4,"Max","2min","","Tractions — +1 série vs S1, qualité avant quantité"),
+      mkEx(33,4,"12/côté","—","","SUPERSET A1 → enchaîner"),
+      mkEx(49,4,"12","90s","","SUPERSET A2 → repos 90s"),
+      mkEx(103,4,"12","—","","SUPERSET B1 → enchaîner"),
+      mkEx(6,4,"12","75s","","SUPERSET B2 → repos 75s"),
+      mkEx(90,4,"20m","90s","","Farmers Walk — +1 série vs S1"),
+      mkEx(61,3,"12","60s","","Relevé de Jambes"),
+    ]},
+    {label:"Séance C — Jambes · Full Body",exercises:[
+      mkEx(23,4,"10/jambe","—","","SUPERSET A1 → enchaîner. +1 série vs S1."),
+      mkEx(16,4,"15","90s","","SUPERSET A2 → repos 90s"),
+      mkEx(9,4,"12/jambe","—","","SUPERSET B1 → enchaîner"),
+      mkEx(14,4,"15","90s","","SUPERSET B2 → repos 90s"),
+      mkEx(22,3,"10","90s","","Box Jump — +1 série vs S1, réception souple"),
+      mkEx(63,3,"30s","—","","SUPERSET C1 → enchaîner"),
+      mkEx(66,3,"30s/côté","45s","","SUPERSET C2 → repos 45s. +5s vs S1."),
+    ]},
+  ]},
+  // S3 — INTENSIFICATION
+  {label:"S3 — Intensification · Charges montantes",days:[
+    {label:"Séance A — Push · Pectoraux & Épaules",exercises:[
+      mkEx(24,4,"10","—","","SUPERSET A1 → enchaîner. Charge progressive vs S2, descente 3s."),
+      mkEx(30,4,"15","90s","","SUPERSET A2 → repos 90s"),
+      mkEx(41,4,"10","—","","SUPERSET B1 → enchaîner. Charge progressive."),
+      mkEx(40,4,"12","75s","","SUPERSET B2 → repos 75s"),
+      mkEx(54,4,"Max","—","","SUPERSET C1 → enchaîner"),
+      mkEx(56,4,"10","75s","","SUPERSET C2 → repos 75s. Charge progressive."),
+      mkEx(8,3,"40s","45s","","Gainage planche — bassin neutre, respiration continue"),
+    ]},
+    {label:"Séance B — Pull · Dos & Biceps",exercises:[
+      mkEx(3,4,"Max","2min","","Tractions — ajouter lest si plus de 10 reps propres"),
+      mkEx(33,4,"10/côté","—","","SUPERSET A1 → enchaîner. Charge progressive."),
+      mkEx(49,4,"12","90s","","SUPERSET A2 → repos 90s"),
+      mkEx(103,4,"10","—","","SUPERSET B1 → enchaîner"),
+      mkEx(48,4,"12","75s","","SUPERSET B2 — Curl Incliné → repos 75s. Longue portion, coudes perpendiculaires au sol."),
+      mkEx(90,3,"25m","90s","","Farmers Walk — distance augmentée vs S2"),
+      mkEx(61,3,"15","60s","","Relevé de Jambes — +3 reps vs S2"),
+    ]},
+    {label:"Séance C — Jambes · Full Body",exercises:[
+      mkEx(23,4,"8/jambe","—","","SUPERSET A1 → enchaîner. Charge progressive, buste vertical."),
+      mkEx(16,4,"12","90s","","SUPERSET A2 → repos 90s. Charge progressive."),
+      mkEx(9,4,"14/jambe","—","","SUPERSET B1 → enchaîner"),
+      mkEx(14,4,"12","90s","","SUPERSET B2 → repos 90s. Kettlebell/haltère plus lourd."),
+      mkEx(123,3,"12","60s","","Squat Sauté — réception souple, rechainer immédiatement"),
+      mkEx(63,4,"35s","—","","SUPERSET C1 → enchaîner"),
+      mkEx(66,4,"30s/côté","45s","","SUPERSET C2 → repos 45s"),
+    ]},
+  ]},
+  // S4 — PIC
+  {label:"S4 — Pic · Intensité maximale",days:[
+    {label:"Séance A — Push · Pectoraux & Épaules",exercises:[
+      mkEx(24,5,"8","—","","SUPERSET A1 → enchaîner. Pic de charge — descente 3s, sortie explosive."),
+      mkEx(30,4,"Max","90s","","SUPERSET A2 — Pompes jusqu'à l'échec → repos 90s"),
+      mkEx(41,4,"8","—","","SUPERSET B1 → enchaîner. Charge maximale."),
+      mkEx(40,4,"12","75s","","SUPERSET B2 → repos 75s"),
+      mkEx(54,4,"Max","—","","SUPERSET C1 → enchaîner"),
+      mkEx(56,4,"8","75s","","SUPERSET C2 → repos 75s. Pic de charge."),
+      mkEx(8,3,"45s","45s","","Gainage planche — +5s vs S3"),
+    ]},
+    {label:"Séance B — Pull · Dos & Biceps",exercises:[
+      mkEx(3,5,"Max","2min","","Tractions — pic de volume, +1 série vs S3"),
+      mkEx(33,4,"8/côté","—","","SUPERSET A1 → enchaîner. Pic de charge."),
+      mkEx(49,4,"10","90s","","SUPERSET A2 → repos 90s"),
+      mkEx(103,4,"8","—","","SUPERSET B1 → enchaîner"),
+      mkEx(48,4,"10","75s","","SUPERSET B2 → repos 75s. Charge progressive vs S3."),
+      mkEx(90,4,"25m","90s","","Farmers Walk — charge maximale"),
+      mkEx(61,4,"15","60s","","Relevé de Jambes — +1 série vs S3"),
+    ]},
+    {label:"Séance C — Jambes · Full Body",exercises:[
+      mkEx(23,5,"8/jambe","—","","SUPERSET A1 → enchaîner. +1 série, charge maximale."),
+      mkEx(16,4,"10","90s","","SUPERSET A2 → repos 90s. Charge lourde."),
+      mkEx(9,4,"12/jambe","—","","SUPERSET B1 → enchaîner"),
+      mkEx(14,4,"10","90s","","SUPERSET B2 → repos 90s. Kettlebell/haltère lourd."),
+      mkEx(123,3,"15","60s","","Squat Sauté — +3 reps vs S3, explosivité maximale"),
+      mkEx(63,4,"40s","—","","SUPERSET C1 → enchaîner"),
+      mkEx(66,4,"35s/côté","45s","","SUPERSET C2 → repos 45s. Pic de gainage."),
+    ]},
+  ]},
+  // S5 — DELOAD
+  {label:"S5 — Deload · Récupération active",days:[
+    {label:"Séance A — Push · Récupération",exercises:[
+      mkEx(24,3,"12","—","Léger","SUPERSET A1 → enchaîner. Retour aux bases, qualité du mouvement."),
+      mkEx(30,3,"12","90s","","SUPERSET A2 → repos 90s. Charges réduites."),
+      mkEx(41,3,"12","—","Léger","SUPERSET B1 → enchaîner"),
+      mkEx(40,3,"15","75s","Léger","SUPERSET B2 → repos 75s"),
+      mkEx(56,2,"12","75s","Léger","Extension Triceps — léger, focus technique"),
+      mkEx(68,2,"8/côté","45s","","Dead Bug — récupération active"),
+    ]},
+    {label:"Séance B — Pull · Récupération",exercises:[
+      mkEx(3,3,"Max","2min","","Tractions — volume réduit, qualité technique"),
+      mkEx(33,3,"12/côté","—","Léger","SUPERSET A1 → enchaîner"),
+      mkEx(49,3,"15","90s","Léger","SUPERSET A2 → repos 90s"),
+      mkEx(103,3,"15","—","","SUPERSET B1 → enchaîner"),
+      mkEx(6,3,"15","75s","Léger","SUPERSET B2 → repos 75s"),
+      mkEx(61,2,"12","60s","","Relevé de Jambes — allure calme"),
+    ]},
+    {label:"Séance C — Jambes · Récupération",exercises:[
+      mkEx(23,3,"10/jambe","—","Léger","SUPERSET A1 → enchaîner"),
+      mkEx(16,3,"15","90s","Léger","SUPERSET A2 → repos 90s. Charges réduites."),
+      mkEx(14,3,"15","—","Léger","SUPERSET B1 → enchaîner. Squat Gobelet léger, focus qualité."),
+      mkEx(9,3,"12/jambe","75s","Léger","SUPERSET B2 → repos 75s"),
+      mkEx(63,2,"25s","—","","Mountain Climbers — allure modérée"),
+      mkEx(66,2,"25s/côté","45s","","Planche Latérale — deload actif"),
+    ]},
+  ]},
+]};
+SEED_PROGRAMS.push(MAISON_CYCLE2);
+
 const SEED_CLIENTS = [
   {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
    mealPlan:emptyMealPlan(),
