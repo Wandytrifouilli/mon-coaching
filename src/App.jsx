@@ -1217,8 +1217,9 @@ export default function App(){
 }
 
 const IS_MOBILE = window.innerWidth <= 480;
+const APP_H = IS_MOBILE ? `${window.innerHeight}px` : "100vh";
 const Shell=({children,css:c})=>(
-  <div style={{background:IS_MOBILE?"#080808":"#111",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:IS_MOBILE?"flex-start":"center"}}>
+  <div style={{background:IS_MOBILE?"#080808":"#111",height:IS_MOBILE?APP_H:"100vh",minHeight:IS_MOBILE?undefined:"100vh",display:"flex",justifyContent:"center",alignItems:IS_MOBILE?"flex-start":"center",overflow:"hidden"}}>
     <style>{c}</style>
     {!IS_MOBILE&&<div style={{width:390,height:844,borderRadius:44,background:"#1a1a1a",boxShadow:"0 40px 120px #000a, inset 0 0 0 1px #333",padding:"12px",flexShrink:0,position:"relative"}}>
       <div style={{position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",width:120,height:30,background:"#1a1a1a",borderRadius:"0 0 18px 18px",zIndex:10}}/>
@@ -1231,7 +1232,7 @@ const Shell=({children,css:c})=>(
         </div>
       </div>
     </div>}
-    {IS_MOBILE&&<div style={{background:G.bg,width:"100vw",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:G.font,color:G.white,margin:"0 auto"}}>
+    {IS_MOBILE&&<div style={{background:G.bg,width:"100vw",height:APP_H,display:"flex",flexDirection:"column",fontFamily:G.font,color:G.white,overflow:"hidden"}}>
       {children}
     </div>}
   </div>
