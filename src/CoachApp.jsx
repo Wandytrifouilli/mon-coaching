@@ -185,6 +185,10 @@ const SEED_EX = [
   {id:122,name:"Burpees",muscle:"Cardio",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/TU8QYVW0gDU",notes:"Planche → pompe → relevé → saut bras levés. Corps rigide en planche. Rythme régulier, pas de course de vitesse."},
   {id:123,name:"Squat Sauté",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/A-cFYWvaHr0",notes:"Réception souple genoux fléchis → rechainer immédiatement. Explosivité, genoux dans l'axe à chaque atterrissage."},
   {id:124,name:"Fentes Sautées",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"",notes:"Changer de jambe dans les airs, atterrissage souple. Genoux dans l'axe, buste droit."},
+
+  // ── GAINAGE CROSSFIT ──
+  {id:125,name:"Superman (Arch Hold)",muscle:"Dos",equipment:"Poids du corps",videoUrl:"",notes:"Face au sol, bras et jambes tendus. Soulever simultanément bras et jambes en contractant les lombaires et fessiers. Tenir 2-3s en haut, redescendre lentement. Renforce la chaîne postérieure."},
+  {id:126,name:"Hollow Hold",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"",notes:"Sur le dos, bas du dos plaqué au sol. Bras tendus derrière la tête, jambes tendues à 30-45° du sol. Contracter les abdos pour maintenir la position. Variante débutant : genoux fléchis. Mouvement de base en CrossFit et gymnastique."},
 ];
 
 const SEED_PROGRAMS = [
@@ -1194,6 +1198,209 @@ const HYPERTRO_CONFIRME = {id:"hypertro_confirme_6s",_v:2,name:"Hypertrophie Con
   ]},
 ]};
 SEED_PROGRAMS.push(HYPERTRO_CONFIRME);
+
+// ─── DÉBUTANT FULL BODY 3j/sem ───────────────────────────────────────────────
+const DEBUTANT_FB = {id:"debutant_fullbody_3j",name:"Débutant Full Body 3j/sem",category:"Débutant",level:"Débutant",weeks:[
+  // S1
+  {label:"S1 — Découverte · Apprentissage des mouvements",days:[
+    {label:"Séance A — Full Body Maison",exercises:[
+      mkEx(1,3,"15","2min","Léger","Squat Barre — dos droit, descente lente. Commence très léger pour apprendre le mouvement."),
+      mkEx(2,3,"12","90s","Léger","Développé Couché — coudes à 45°, amplitude complète. Charge légère, focus technique."),
+      mkEx(3,3,"Max","2min","","Tractions — si impossible : sauter en haut puis descente lente 3s (négatives). Viser minimum 3 reps."),
+      mkEx(15,3,"12","90s","Léger","RDL Haltères — dos plat, charnière de hanche. Descendre jusqu'à la tension dans les ischio."),
+      mkEx(6,3,"15","60s","Léger","Curl Haltères — coudes fixes, supination en haut"),
+      mkEx(56,3,"15","60s","Léger","Extension Triceps Haltère — coudes serrés, extension complète"),
+      mkEx(8,3,"30s","45s","","Gainage Planche — bassin neutre, respiration continue"),
+      mkEx(119,1,"15 min","—","RPE 4-5/10","Footing léger fin de séance — allure conversationnelle"),
+    ]},
+    {label:"Séance B — Full Body Salle (machines & poulies)",exercises:[
+      mkEx(11,3,"15","2min","Léger","Leg Press — pieds largeur épaules, amplitude complète. Apprendre le mouvement."),
+      mkEx(32,3,"12","90s","Léger","Tirage Vertical Poulie — omoplates rétractées, coudes vers le bas"),
+      mkEx(29,3,"15","90s","Léger","Pec Deck / Butterfly — contraction maximale en centre. Charge légère."),
+      mkEx(34,3,"12","75s","Léger","Tirage Horizontal Poulie — serrer les omoplates en fin de mouvement"),
+      mkEx(13,3,"15","75s","Léger","Leg Curl Allongé — hanches plaquées, descente contrôlée"),
+      mkEx(7,3,"15","60s","Léger","Triceps Poulie — coudes fixes, extension complète"),
+      mkEx(50,3,"15","60s","Léger","Curl Poulie Basse — coude fixe, tension constante"),
+      mkEx(8,3,"30s","45s","","Gainage Planche — bassin neutre"),
+      mkEx(119,1,"15 min","—","RPE 4-5/10","Footing léger fin de séance"),
+    ]},
+    {label:"Séance C — Cardio & Gainage CrossFit",exercises:[
+      mkEx(125,3,"10","30s","","Superman/Arch — soulever bras et jambes, tenir 2s en haut. Rebaisser lentement."),
+      mkEx(126,3,"20s","30s","","Hollow Hold — bas du dos au sol, jambes à 45°. Variante : genoux fléchis si trop difficile."),
+      mkEx(8,3,"30s","30s","","Gainage Planche — enchaîner dans le circuit"),
+      mkEx(66,3,"20s/côté","30s","","Planche Latérale — hanches alignées"),
+      mkEx(63,3,"20s","30s","","Mountain Climbers — hanches basses, rythme régulier"),
+      mkEx(122,2,"5","60s","","Burpees — rythme débutant, qualité du mouvement. Pas de rush."),
+      mkEx(119,1,"20 min","—","RPE 5/10","Footing — allure conversationnelle. Tu dois pouvoir parler normalement."),
+    ]},
+  ]},
+  // S2
+  {label:"S2 — Construction · Légère progression des charges",days:[
+    {label:"Séance A — Full Body Maison",exercises:[
+      mkEx(1,3,"12","2min","Léger","Squat Barre — même technique que S1, légère hausse de charge"),
+      mkEx(2,3,"10","90s","Léger","Développé Couché — légère progression"),
+      mkEx(3,3,"Max","2min","","Tractions — objectif +1 rep vs S1. Négatifs si besoin."),
+      mkEx(15,3,"12","90s","Léger","RDL — légère progression"),
+      mkEx(6,3,"12","60s","Léger","Curl Haltères"),
+      mkEx(56,3,"12","60s","Léger","Extension Triceps"),
+      mkEx(8,3,"35s","45s","","Gainage — +5s vs S1"),
+      mkEx(119,1,"15 min","—","RPE 5/10","Footing fin de séance"),
+    ]},
+    {label:"Séance B — Full Body Salle (machines & poulies)",exercises:[
+      mkEx(11,3,"12","2min","Léger","Leg Press — légère hausse de charge"),
+      mkEx(32,3,"12","90s","Léger","Tirage Vertical Poulie — légère progression"),
+      mkEx(29,3,"12","90s","Léger","Pec Deck — légère progression"),
+      mkEx(34,3,"12","75s","Léger","Tirage Horizontal Poulie"),
+      mkEx(13,3,"12","75s","Léger","Leg Curl"),
+      mkEx(7,3,"12","60s","Léger","Triceps Poulie"),
+      mkEx(50,3,"12","60s","Léger","Curl Poulie Basse"),
+      mkEx(8,3,"35s","45s","","Gainage — +5s vs S1"),
+      mkEx(119,1,"15 min","—","RPE 5/10","Footing fin de séance"),
+    ]},
+    {label:"Séance C — Cardio & Gainage CrossFit",exercises:[
+      mkEx(125,3,"12","30s","","Superman — +2 reps vs S1"),
+      mkEx(126,3,"25s","30s","","Hollow Hold — +5s vs S1"),
+      mkEx(8,3,"35s","30s","","Gainage — +5s"),
+      mkEx(66,3,"25s/côté","30s","","Planche Latérale — +5s"),
+      mkEx(63,3,"25s","30s","","Mountain Climbers — +5s"),
+      mkEx(122,2,"7","60s","","Burpees — +2 reps vs S1"),
+      mkEx(119,1,"20 min","—","RPE 5/10","Footing — même allure, continue la régularité"),
+    ]},
+  ]},
+  // S3
+  {label:"S3 — Progression · Charges modérées",days:[
+    {label:"Séance A — Full Body Maison",exercises:[
+      mkEx(1,3,"10","2min","Moyen","Squat Barre — nouvelle hausse de charge, maintenir la profondeur"),
+      mkEx(2,3,"10","90s","Moyen","Développé Couché — progression continue"),
+      mkEx(3,3,"Max","2min","","Tractions — objectif +1 rep vs S2"),
+      mkEx(15,3,"10","90s","Moyen","RDL — descente contrôlée, tension ischio"),
+      mkEx(6,3,"12","60s","Moyen","Curl Haltères"),
+      mkEx(56,3,"12","60s","Moyen","Extension Triceps"),
+      mkEx(8,4,"35s","45s","","Gainage — +1 série"),
+      mkEx(119,1,"15 min","—","RPE 5-6/10","Footing fin de séance — légère accélération possible"),
+    ]},
+    {label:"Séance B — Full Body Salle (machines & poulies)",exercises:[
+      mkEx(11,3,"10","2min","Moyen","Leg Press — charge progressive"),
+      mkEx(32,3,"10","90s","Moyen","Tirage Vertical Poulie"),
+      mkEx(29,3,"12","90s","Moyen","Pec Deck — progression"),
+      mkEx(34,3,"10","75s","Moyen","Tirage Horizontal Poulie"),
+      mkEx(13,3,"12","75s","Moyen","Leg Curl"),
+      mkEx(7,3,"12","60s","Moyen","Triceps Poulie"),
+      mkEx(50,3,"12","60s","Moyen","Curl Poulie Basse"),
+      mkEx(8,4,"35s","45s","","Gainage — +1 série"),
+      mkEx(119,1,"15 min","—","RPE 5-6/10","Footing fin de séance"),
+    ]},
+    {label:"Séance C — Cardio & Gainage CrossFit",exercises:[
+      mkEx(125,3,"15","30s","","Superman — +3 reps vs S2"),
+      mkEx(126,3,"30s","30s","","Hollow Hold — 30s. Si maîtrisé : jambes plus basses."),
+      mkEx(8,3,"40s","30s","","Gainage — +5s"),
+      mkEx(66,3,"30s/côté","30s","","Planche Latérale — +5s"),
+      mkEx(63,3,"30s","30s","","Mountain Climbers — +5s"),
+      mkEx(122,3,"8","60s","","Burpees — +1 série, +1 rep"),
+      mkEx(119,1,"25 min","—","RPE 5-6/10","Footing — 25 min. Légère progression vs S2."),
+    ]},
+  ]},
+  // S4
+  {label:"S4 — Consolidation · Ancrage de la technique",days:[
+    {label:"Séance A — Full Body Maison",exercises:[
+      mkEx(1,4,"10","2min","Moyen","Squat Barre — +1 série. Charge identique ou légère hausse."),
+      mkEx(2,4,"10","90s","Moyen","Développé Couché — +1 série"),
+      mkEx(3,4,"Max","2min","","Tractions — +1 série. Viser 3+ reps propres."),
+      mkEx(15,4,"10","90s","Moyen","RDL — +1 série"),
+      mkEx(6,3,"12","60s","Moyen","Curl Haltères"),
+      mkEx(56,3,"12","60s","Moyen","Extension Triceps"),
+      mkEx(8,4,"40s","45s","","Gainage — +5s vs S3"),
+      mkEx(119,1,"15 min","—","RPE 6/10","Footing fin de séance — légèrement plus soutenu"),
+    ]},
+    {label:"Séance B — Full Body Salle (machines & poulies)",exercises:[
+      mkEx(11,4,"10","2min","Moyen","Leg Press — +1 série"),
+      mkEx(32,4,"10","90s","Moyen","Tirage Vertical Poulie — +1 série"),
+      mkEx(29,4,"12","90s","Moyen","Pec Deck — +1 série"),
+      mkEx(34,4,"10","75s","Moyen","Tirage Horizontal Poulie — +1 série"),
+      mkEx(13,3,"12","75s","Moyen","Leg Curl"),
+      mkEx(7,3,"12","60s","Moyen","Triceps Poulie"),
+      mkEx(50,3,"12","60s","Moyen","Curl Poulie Basse"),
+      mkEx(8,4,"40s","45s","","Gainage — +5s"),
+      mkEx(119,1,"15 min","—","RPE 6/10","Footing fin de séance"),
+    ]},
+    {label:"Séance C — Cardio & Gainage CrossFit",exercises:[
+      mkEx(125,4,"15","30s","","Superman — +1 série"),
+      mkEx(126,4,"30s","30s","","Hollow Hold — +1 série. Jambes plus basses si maîtrisé."),
+      mkEx(8,4,"40s","30s","","Gainage — +1 série"),
+      mkEx(66,4,"30s/côté","30s","","Planche Latérale — +1 série"),
+      mkEx(63,3,"30s","30s","","Mountain Climbers"),
+      mkEx(122,3,"10","60s","","Burpees — +2 reps"),
+      mkEx(119,1,"25 min","—","RPE 6/10","Footing — 25 min, légère accélération"),
+    ]},
+  ]},
+  // S5
+  {label:"S5 — Intensification douce · Légère surcharge",days:[
+    {label:"Séance A — Full Body Maison",exercises:[
+      mkEx(1,4,"8","2min","Moyen","Squat Barre — légère hausse de charge vs S4, 8 reps contrôlés"),
+      mkEx(2,4,"8","90s","Moyen","Développé Couché — charge progressive"),
+      mkEx(3,4,"Max","2min","","Tractions — max reps par série. Lest si >8 reps propres."),
+      mkEx(15,4,"8","90s","Moyen","RDL — charge progressive, focus excentrique"),
+      mkEx(6,4,"10","60s","Moyen","Curl Haltères — +1 série"),
+      mkEx(56,4,"10","60s","Moyen","Extension Triceps — +1 série"),
+      mkEx(8,4,"45s","45s","","Gainage — +5s"),
+      mkEx(119,1,"15 min","—","RPE 6/10","Footing fin de séance"),
+    ]},
+    {label:"Séance B — Full Body Salle (machines & poulies)",exercises:[
+      mkEx(11,4,"8","2min","Moyen","Leg Press — charge progressive"),
+      mkEx(32,4,"8","90s","Moyen","Tirage Vertical Poulie — légère hausse de charge"),
+      mkEx(29,4,"10","90s","Moyen","Pec Deck — progression"),
+      mkEx(34,4,"10","75s","Moyen","Tirage Horizontal Poulie"),
+      mkEx(13,4,"10","75s","Moyen","Leg Curl — +1 série"),
+      mkEx(7,4,"12","60s","Moyen","Triceps Poulie — +1 série"),
+      mkEx(50,4,"12","60s","Moyen","Curl Poulie Basse — +1 série"),
+      mkEx(8,4,"45s","45s","","Gainage — +5s"),
+      mkEx(119,1,"15 min","—","RPE 6/10","Footing fin de séance"),
+    ]},
+    {label:"Séance C — Cardio & Gainage CrossFit",exercises:[
+      mkEx(125,4,"15","30s","","Superman — +1 série vs S4"),
+      mkEx(126,4,"35s","30s","","Hollow Hold — +5s"),
+      mkEx(8,4,"45s","30s","","Gainage — +5s"),
+      mkEx(66,4,"35s/côté","30s","","Planche Latérale — +5s"),
+      mkEx(63,4,"35s","30s","","Mountain Climbers — rythme plus soutenu"),
+      mkEx(122,3,"12","60s","","Burpees — +2 reps"),
+      mkEx(119,1,"30 min","—","RPE 6/10","Footing — 30 min. Belle progression !"),
+    ]},
+  ]},
+  // S6
+  {label:"S6 — Bilan · Consolidation finale",days:[
+    {label:"Séance A — Full Body Maison",exercises:[
+      mkEx(1,4,"10","2min","Moyen","Squat Barre — compare ta charge avec S1 : belle progression !"),
+      mkEx(2,4,"10","90s","Moyen","Développé Couché — bilan progression"),
+      mkEx(3,4,"Max","2min","","Tractions — compte tes reps et compare avec S1 !"),
+      mkEx(15,4,"10","90s","Moyen","RDL — consolidation"),
+      mkEx(6,4,"12","60s","Moyen","Curl Haltères"),
+      mkEx(56,4,"12","60s","Moyen","Extension Triceps"),
+      mkEx(8,4,"45s","45s","","Gainage — niveau S5 maintenu"),
+      mkEx(119,1,"15 min","—","RPE 6/10","Footing fin de séance"),
+    ]},
+    {label:"Séance B — Full Body Salle (machines & poulies)",exercises:[
+      mkEx(11,4,"10","2min","Moyen","Leg Press — compare ta charge vs S1 !"),
+      mkEx(32,4,"10","90s","Moyen","Tirage Vertical — bilan"),
+      mkEx(29,4,"12","90s","Moyen","Pec Deck — consolidation"),
+      mkEx(34,4,"10","75s","Moyen","Tirage Horizontal — bilan"),
+      mkEx(13,4,"12","75s","Moyen","Leg Curl"),
+      mkEx(7,4,"12","60s","Moyen","Triceps Poulie"),
+      mkEx(50,4,"12","60s","Moyen","Curl Poulie Basse"),
+      mkEx(8,4,"45s","45s","","Gainage — niveau maintenu"),
+      mkEx(119,1,"15 min","—","RPE 6/10","Footing fin de séance"),
+    ]},
+    {label:"Séance C — Cardio & Gainage CrossFit",exercises:[
+      mkEx(125,4,"15","30s","","Superman — niveau maintenu"),
+      mkEx(126,4,"35s","30s","","Hollow Hold — bilan"),
+      mkEx(8,4,"45s","30s","","Gainage — bilan"),
+      mkEx(66,4,"35s/côté","30s","","Planche Latérale — bilan"),
+      mkEx(63,4,"35s","30s","","Mountain Climbers"),
+      mkEx(122,3,"12","60s","","Burpees — bilan"),
+      mkEx(119,1,"30 min","—","RPE 6/10","Footing — 30 min. 6 semaines complètes, excellent travail !"),
+    ]},
+  ]},
+]};
+SEED_PROGRAMS.push(DEBUTANT_FB);
 
 const SEED_CLIENTS = [
   {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
