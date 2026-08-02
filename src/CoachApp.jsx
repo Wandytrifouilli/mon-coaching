@@ -39,7 +39,7 @@ const MEAL_SLOTS=[
   {id:"dinner",icon:"🌙",label:"Dîner"},
   {id:"other",icon:"💊",label:"Autre / Suppléments"},
 ];
-const emptyMealPlan=()=>({meals:MEAL_SLOTS.map(s=>({id:s.id,label:s.label,items:[]}))});
+const emptyMealPlan=()=>({meals:MEAL_SLOTS.map(s=>({id:s.id,label:s.label,items:[],note:""}))});
 
 // ─── BASE ALIMENTAIRE ─────────────────────────────────────────────────────────
 // unit:"g" → valeurs pour 100g | unit:"portion" → valeurs pour 1 portion
@@ -1670,7 +1670,7 @@ function Dashboard({clients,programs,exercises,onSelClient,onSelProgram}){
 function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
   const initForm=()=>MEAL_SLOTS.map(s=>{
     const ex=(mealPlan?.meals||[]).find(m=>m.id===s.id);
-    return{id:s.id,label:s.label,icon:s.icon,items:ex?.items||[]};
+    return{id:s.id,label:s.label,icon:s.icon,items:ex?.items||[],note:ex?.note||""};
   });
   const [editing,setEditing]=useState(false);
   const [form,setForm]=useState(initForm);
@@ -1723,6 +1723,7 @@ function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
   };
   const removeItem=(mealId,idx)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:m.items.filter((_,i)=>i!==idx)}));
   const updateQty=(mealId,idx,val)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:m.items.map((it,i)=>i!==idx?it:{...it,qty:parseFloat(val)||0})}));
+  const updateNote=(mealId,val)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,note:val}));
 
   const filteredFoods=foods.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
   const totalMacros=calcMacros(form.flatMap(m=>m.items),foods);
@@ -1792,6 +1793,14 @@ function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.grey;}}>
                   + Ajouter un aliment
                 </button>
+                <textarea value={meal.note||""} onChange={e=>updateNote(meal.id,e.target.value)}
+                  placeholder="Note pour ce repas (préparation, timing, conseils…)"
+                  rows={2}
+                  style={{width:"100%",marginTop:8,background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,
+                    padding:"8px 10px",color:G.white,fontSize:12,fontFamily:G.font,resize:"vertical",
+                    outline:"none",boxSizing:"border-box",lineHeight:1.5}}
+                  onFocus={e=>e.currentTarget.style.borderColor=G.gold}
+                  onBlur={e=>e.currentTarget.style.borderColor=G.border}/>
               </div>
             );
           })}
@@ -1828,6 +1837,10 @@ function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
                     </div>
                   );
                 })}
+                {meal.note&&<div style={{marginTop:8,padding:"7px 10px",background:G.bg3,borderRadius:8,
+                  borderLeft:`3px solid ${G.gold}55`,fontSize:12,color:G.grey,lineHeight:1.5,whiteSpace:"pre-wrap"}}>
+                  {meal.note}
+                </div>}
               </div>
             );
           })
