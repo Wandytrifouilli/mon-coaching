@@ -1242,38 +1242,119 @@ const Shell=({children,css:c})=>(
 function LoginScreen({onLogin}){
   const [code,setCode]=useState("");
   const [err,setErr]=useState(false);
+  const [focused,setFocused]=useState(false);
   const attempt=()=>{if(!onLogin(code)){setErr(true);setTimeout(()=>setErr(false),2500);}};
+
   const loginContent=(
-    <>
-      <div style={{marginBottom:36,textAlign:"center"}} className="fu">
-        <div style={{width:74,height:74,borderRadius:22,background:`linear-gradient(135deg,${G.goldLight}20,${G.gold}40)`,border:`1.5px solid ${G.gold}55`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 18px",fontSize:32}}>⚡</div>
-        <div style={{fontFamily:G.fontD,fontSize:36,fontWeight:800,color:G.white,letterSpacing:-1}}>WANDY<span style={{color:G.goldLight}}> COACH</span></div>
-        <div style={{fontSize:11,color:G.grey,marginTop:5,letterSpacing:3,textTransform:"uppercase"}}>Espace personnel</div>
+    <div style={{width:"100%",display:"flex",flexDirection:"column",alignItems:"center",gap:0}}>
+      {/* Logo */}
+      <div style={{marginBottom:40,textAlign:"center"}}>
+        <div style={{
+          width:80,height:80,borderRadius:24,
+          background:`linear-gradient(145deg,${G.gold}33,${G.goldLight}18)`,
+          border:`1.5px solid ${G.gold}44`,
+          display:"flex",alignItems:"center",justifyContent:"center",
+          margin:"0 auto 20px",fontSize:34,
+          boxShadow:`0 8px 32px ${G.gold}22`
+        }}>⚡</div>
+        <div style={{fontFamily:G.fontD,fontSize:38,fontWeight:900,color:G.white,letterSpacing:-1.5,lineHeight:1}}>
+          WANDY<span style={{color:G.goldLight}}> COACH</span>
+        </div>
+        <div style={{fontSize:11,color:G.greyDim,marginTop:8,letterSpacing:4,textTransform:"uppercase"}}>
+          Espace personnel
+        </div>
       </div>
-      <div style={{width:"100%"}} className="fu">
-        <Label>Code d'accès</Label>
-        <input value={code} onChange={e=>{setCode(e.target.value.toUpperCase());setErr(false);}} onKeyDown={e=>e.key==="Enter"&&attempt()} placeholder="Entre ton code..."
-          style={{width:"100%",background:G.bg3,border:`1.5px solid ${err?G.red:G.border}`,borderRadius:10,padding:"14px 16px",color:G.white,fontSize:18,outline:"none",letterSpacing:3,textAlign:"center",marginBottom:8,transition:"border .2s"}}/>
-        {err&&<div style={{color:G.red,fontSize:12,textAlign:"center",marginBottom:8}}>Code invalide — contacte ton coach.</div>}
-        <div style={{height:8}}/>
-        <Btn onClick={attempt} disabled={!code}>Accéder →</Btn>
+
+      {/* Card */}
+      <div style={{
+        width:"100%",background:G.bg2,
+        borderRadius:20,padding:"28px 24px",
+        border:`1px solid ${G.border}`,
+        boxShadow:"0 20px 60px #0008"
+      }}>
+        <div style={{fontSize:12,color:G.grey,letterSpacing:.5,marginBottom:10,fontWeight:600,textTransform:"uppercase"}}>
+          Code d'accès
+        </div>
+        <input
+          value={code}
+          onChange={e=>{setCode(e.target.value.toUpperCase());setErr(false);}}
+          onKeyDown={e=>e.key==="Enter"&&attempt()}
+          onFocus={()=>setFocused(true)}
+          onBlur={()=>setFocused(false)}
+          placeholder="XXXX0000"
+          autoCapitalize="characters"
+          style={{
+            width:"100%",background:G.bg3,
+            border:`1.5px solid ${err?G.red:focused?G.gold:G.border}`,
+            borderRadius:12,padding:"16px 18px",
+            color:G.white,fontSize:22,outline:"none",
+            letterSpacing:5,textAlign:"center",
+            fontWeight:700,fontFamily:G.font,
+            transition:"border .15s",boxSizing:"border-box"
+          }}/>
+        <div style={{height:10,display:"flex",alignItems:"center",justifyContent:"center",marginTop:6,marginBottom:4}}>
+          {err&&<div style={{color:G.red,fontSize:12}}>Code invalide — contacte ton coach.</div>}
+        </div>
+        <button
+          onClick={attempt}
+          disabled={!code}
+          style={{
+            width:"100%",padding:"15px 0",
+            background:code?`linear-gradient(135deg,${G.gold},${G.goldLight})`:"#2a2a2a",
+            border:"none",borderRadius:12,
+            color:code?G.bg:"#555",
+            fontSize:15,fontWeight:800,
+            fontFamily:G.font,letterSpacing:.5,
+            cursor:code?"pointer":"default",
+            transition:"background .2s, color .2s",
+            boxShadow:code?`0 4px 20px ${G.gold}44`:"none"
+          }}>
+          Accéder →
+        </button>
       </div>
-    </>
+
+      <div style={{marginTop:28,fontSize:11,color:G.greyDim,textAlign:"center",lineHeight:1.6}}>
+        Tu n'as pas de code ?<br/>
+        <span style={{color:G.grey}}>Contacte ton coach pour en obtenir un.</span>
+      </div>
+    </div>
   );
+
   return(
-    <div style={{background:"#111",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:IS_MOBILE?"flex-start":"center"}}>
+    <div style={{background:G.bg,minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:"center",fontFamily:G.font,color:G.white}}>
       <style>{css}</style>
-      {!IS_MOBILE&&<div style={{width:390,height:844,borderRadius:44,background:"#1a1a1a",boxShadow:"0 40px 120px #000a, inset 0 0 0 1px #333",padding:"12px",flexShrink:0,position:"relative"}}>
-        <div style={{position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",width:120,height:30,background:"#1a1a1a",borderRadius:"0 0 18px 18px",zIndex:10}}/>
-        <div style={{width:"100%",height:"100%",borderRadius:34,overflow:"hidden",background:G.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:28,fontFamily:G.font,color:G.white}}>
-          {loginContent}
+      {/* Fond décoratif */}
+      <div style={{position:"fixed",inset:0,pointerEvents:"none",overflow:"hidden",zIndex:0}}>
+        <div style={{position:"absolute",top:"-20%",left:"-10%",width:"60vw",height:"60vw",borderRadius:"50%",background:`radial-gradient(circle,${G.gold}0a 0%,transparent 70%)`}}/>
+        <div style={{position:"absolute",bottom:"-15%",right:"-10%",width:"50vw",height:"50vw",borderRadius:"50%",background:`radial-gradient(circle,${G.goldLight}07 0%,transparent 70%)`}}/>
+      </div>
+
+      {/* Simulation téléphone (desktop) */}
+      {!IS_MOBILE&&(
+        <div style={{width:390,height:844,borderRadius:44,background:"#1a1a1a",boxShadow:"0 40px 120px #000a, inset 0 0 0 1px #333",padding:"12px",flexShrink:0,position:"relative",zIndex:1}}>
+          <div style={{position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",width:120,height:30,background:"#1a1a1a",borderRadius:"0 0 18px 18px",zIndex:10}}/>
+          <div style={{width:"100%",height:"100%",borderRadius:34,overflow:"hidden",background:G.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:28}}>
+            {loginContent}
+          </div>
         </div>
-      </div>}
-      {IS_MOBILE&&<div style={{background:G.bg,width:"100vw",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:"28px 24px",fontFamily:G.font,color:G.white}}>
-        <div style={{width:"100%",maxWidth:400}}>
-          {loginContent}
+      )}
+
+      {/* Mobile réel */}
+      {IS_MOBILE&&(
+        <div style={{
+          position:"fixed",inset:0,
+          background:G.bg,
+          display:"flex",flexDirection:"column",
+          alignItems:"center",justifyContent:"center",
+          padding:"32px 24px",
+          overflowY:"auto",
+          zIndex:1
+        }}>
+          <div style={{width:"100%",maxWidth:400}}>
+            {loginContent}
+          </div>
         </div>
-      </div>}
+      )}
     </div>
   );
 }
