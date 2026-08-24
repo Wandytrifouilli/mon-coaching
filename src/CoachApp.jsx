@@ -1699,7 +1699,7 @@ const _wC={label:"Séance C — Salle · Optionnelle (même chaque semaine)",exe
   mkEx(50,3,"12","60s","","Curl Poulie Basse — coude fixe, tension constante sur tout l'arc."),
 ]};
 
-const CYCLE1_WILLIAM={id:"cycle1_william_fb3j",name:"Cycle 1 William — Full Body 3j",category:"Débutant",level:"Débutant",weeks:[
+const CYCLE1_WILLIAM={id:"cycle1_william_fb3j",_v:2,name:"Cycle 1 William — Full Body 3j",category:"Débutant",level:"Débutant",weeks:[
   // ── S1 ──────────────────────────────────────────────────────────────────
   {label:"S1 — Découverte · Apprentissage des mouvements",days:[
     {label:"Séance A — Full Body Maison",exercises:[
