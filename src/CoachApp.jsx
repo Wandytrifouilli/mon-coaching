@@ -1712,7 +1712,7 @@ const CYCLE1_WILLIAM={id:"cycle1_william_fb3j",name:"Cycle 1 William — Full Bo
     ]},
     {label:"Séance B — Full Body Maison",exercises:[
       mkEx(15,3,"12","90s","Léger","Romanian Deadlift — dos plat, hanches en arrière, descente jusqu'à l'étirement des ischio. Très léger pour apprendre le mouvement."),
-      mkEx(16,3,"12","90s","Léger","Hip Thrust Barre — épaules sur le banc, poussée des hanches vers le haut, fessiers contractés 1s en haut."),
+      mkEx(9,3,"10/jambe","90s","Léger","Fentes Marchées — grand pas en avant, genou arrière proche du sol, buste droit. Haltères légers ou poids du corps. Focus : équilibre et alignement du genou."),
       mkEx(10,3,"10","90s","Léger","Rowing Barre — dos parallèle au sol, coudes hauts, tirer la barre vers le nombril. Amplitude complète."),
       mkEx(5,3,"10","90s","Léger","Développé Militaire — gainage actif, amplitude complète, pas de cambrure lombaire."),
       mkEx(49,3,"12","60s","Léger","Curl Marteau — prise neutre, coudes fixes. Biceps et brachioradial."),
@@ -1732,7 +1732,7 @@ const CYCLE1_WILLIAM={id:"cycle1_william_fb3j",name:"Cycle 1 William — Full Bo
     ]},
     {label:"Séance B — Full Body Maison (variante)",exercises:[
       mkEx(15,3,"12","90s","Léger","Romanian Deadlift — légère hausse si S1 maîtrisé."),
-      mkEx(16,3,"12","90s","Léger","Hip Thrust Barre — légère progression. Pause 1s en haut."),
+      mkEx(9,3,"10/jambe","90s","Léger","Fentes Marchées — légère hausse si S1 maîtrisé. Même alignement."),
       mkEx(10,3,"10","90s","Léger","Rowing Barre — légère progression. Même technique."),
       mkEx(5,3,"10","90s","Léger","Développé Militaire — légère progression."),
       mkEx(6,3,"12","60s","Léger","Curl Haltères — variation vs S1."),
@@ -1752,7 +1752,7 @@ const CYCLE1_WILLIAM={id:"cycle1_william_fb3j",name:"Cycle 1 William — Full Bo
     ]},
     {label:"Séance B — Full Body Maison (variante)",exercises:[
       mkEx(15,3,"10","90s","Moyen","Romanian Deadlift — reps réduites, charge augmentée."),
-      mkEx(16,3,"10","90s","Moyen","Hip Thrust Barre — charge progressive. Pause 1s en haut."),
+      mkEx(9,3,"10/jambe","90s","Moyen","Fentes Marchées — haltères légèrement plus lourds. Contrôle du genou et de l'équilibre."),
       mkEx(10,3,"10","90s","Moyen","Rowing Barre — progression charge."),
       mkEx(5,3,"10","90s","Moyen","Développé Militaire — progression."),
       mkEx(49,3,"12","60s","Moyen","Curl Marteau — variation vs S2."),
@@ -1772,7 +1772,7 @@ const CYCLE1_WILLIAM={id:"cycle1_william_fb3j",name:"Cycle 1 William — Full Bo
     ]},
     {label:"Séance B — Full Body Maison",exercises:[
       mkEx(15,4,"10","90s","Moyen","Romanian Deadlift — +1 série vs S3."),
-      mkEx(16,4,"10","90s","Moyen","Hip Thrust Barre — +1 série. Pause 1s en haut."),
+      mkEx(9,4,"10/jambe","90s","Moyen","Fentes Marchées — +1 série vs S3. Charge maintenue ou légère hausse."),
       mkEx(10,4,"10","90s","Moyen","Rowing Barre — +1 série."),
       mkEx(5,3,"10","90s","Moyen","Développé Militaire — maintien."),
       mkEx(6,3,"12","60s","Moyen","Curl Haltères — variation."),
@@ -1792,7 +1792,7 @@ const CYCLE1_WILLIAM={id:"cycle1_william_fb3j",name:"Cycle 1 William — Full Bo
     ]},
     {label:"Séance B — Full Body Maison (variante)",exercises:[
       mkEx(15,4,"8","90s","Moyen","Romanian Deadlift — reps réduites, charge augmentée."),
-      mkEx(16,4,"10","90s","Moyen","Hip Thrust Barre — charge progressive. Pause 1s en haut."),
+      mkEx(9,4,"10/jambe","90s","Moyen","Fentes Marchées — progression charge. Buste droit, genou arrière proche du sol."),
       mkEx(10,4,"8","90s","Moyen","Rowing Barre — reps réduites, charge augmentée."),
       mkEx(5,3,"10","90s","Moyen","Développé Militaire — maintien."),
       mkEx(49,3,"12","60s","Moyen","Curl Marteau — variation."),
@@ -1812,7 +1812,7 @@ const CYCLE1_WILLIAM={id:"cycle1_william_fb3j",name:"Cycle 1 William — Full Bo
     ]},
     {label:"Séance B — Full Body Maison (bilan)",exercises:[
       mkEx(15,4,"10","90s","Moyen","Romanian Deadlift — compare ta charge vs S1."),
-      mkEx(16,4,"10","90s","Moyen","Hip Thrust Barre — bilan progression."),
+      mkEx(9,4,"10/jambe","90s","Moyen","Fentes Marchées — bilan. Compare ta maîtrise et ta charge avec S1."),
       mkEx(10,4,"10","90s","Moyen","Rowing Barre — bilan."),
       mkEx(5,3,"10","90s","Moyen","Développé Militaire — bilan."),
       mkEx(49,3,"12","60s","Moyen","Curl Marteau — consolidation."),
