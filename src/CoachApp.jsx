@@ -1687,6 +1687,142 @@ const BASES_SOLIDES = {id:"bases_solides_8s",_v:2,name:"Bases Solides — 8 sem.
 ]};
 SEED_PROGRAMS.push(BASES_SOLIDES);
 
+// ─── CYCLE 1 WILLIAM — FULL BODY 3j/sem ──────────────────────────────────────
+// Séance C identique chaque semaine (fixe, salle, optionnelle)
+const _wC={label:"Séance C — Salle · Optionnelle (même chaque semaine)",exercises:[
+  mkEx(11,3,"12","90s","","Leg Press — pieds largeur épaules, amplitude complète, genoux alignés. Augmente la charge dès que tu maîtrises toutes les reps proprement."),
+  mkEx(29,3,"12","75s","","Pec Deck — amplitude complète, contraction max au centre, descente contrôlée."),
+  mkEx(32,3,"12","75s","","Tirage Vertical Poulie — omoplates rétractées, coudes vers le bas, amplitude complète."),
+  mkEx(34,3,"12","75s","","Tirage Horizontal Poulie — serrer les omoplates en fin de mouvement."),
+  mkEx(13,3,"12","60s","","Leg Curl Allongé — hanches plaquées au banc, descente contrôlée."),
+  mkEx(7,3,"12","60s","","Triceps Poulie — coudes fixes au corps, extension complète."),
+  mkEx(50,3,"12","60s","","Curl Poulie Basse — coude fixe, tension constante sur tout l'arc."),
+]};
+
+const CYCLE1_WILLIAM={id:"cycle1_william_fb3j",name:"Cycle 1 William — Full Body 3j",category:"Débutant",level:"Débutant",weeks:[
+  // ── S1 ──────────────────────────────────────────────────────────────────
+  {label:"S1 — Découverte · Apprentissage des mouvements",days:[
+    {label:"Séance A — Full Body Maison",exercises:[
+      mkEx(1,3,"12","90s","Léger","Squat Barre — descente lente jusqu'à la parallèle. Commence très léger : genoux alignés sur les pointes de pieds, dos plat, regard droit."),
+      mkEx(2,3,"10","90s","Léger","Développé Couché — coudes à 45°, barre touche légèrement la poitrine, amplitude complète. Charge légère, focus technique."),
+      mkEx(3,3,"Max","90s","","Tractions — amplitude complète. Si impossible : sauter en haut et descendre lentement 3s (négatifs). Objectif : 3 reps propres minimum."),
+      mkEx(6,3,"12","60s","Léger","Curl Haltères — coudes fixes, supination en haut, amplitude complète."),
+      mkEx(56,3,"12","60s","Léger","Extension Triceps Haltère — coude serré près de la tête, amplitude complète."),
+      mkEx(8,3,"30s","45s","","Gainage Planche — bassin neutre, respiration continue."),
+    ]},
+    {label:"Séance B — Full Body Maison",exercises:[
+      mkEx(15,3,"12","90s","Léger","Romanian Deadlift — dos plat, hanches en arrière, descente jusqu'à l'étirement des ischio. Très léger pour apprendre le mouvement."),
+      mkEx(16,3,"12","90s","Léger","Hip Thrust Barre — épaules sur le banc, poussée des hanches vers le haut, fessiers contractés 1s en haut."),
+      mkEx(10,3,"10","90s","Léger","Rowing Barre — dos parallèle au sol, coudes hauts, tirer la barre vers le nombril. Amplitude complète."),
+      mkEx(5,3,"10","90s","Léger","Développé Militaire — gainage actif, amplitude complète, pas de cambrure lombaire."),
+      mkEx(49,3,"12","60s","Léger","Curl Marteau — prise neutre, coudes fixes. Biceps et brachioradial."),
+      mkEx(66,3,"20s","45s","","Planche Latérale — hanches alignées, corps bien droit."),
+    ]},
+    _wC,
+  ]},
+  // ── S2 ──────────────────────────────────────────────────────────────────
+  {label:"S2 — Consolidation · Légère progression",days:[
+    {label:"Séance A — Full Body Maison (variante)",exercises:[
+      mkEx(1,3,"12","90s","Léger","Squat Barre — légère hausse de charge si S1 maîtrisé. Même technique."),
+      mkEx(2,3,"10","90s","Léger","Développé Couché — légère progression. Amplitude complète."),
+      mkEx(103,3,"10","90s","Léger","Inverted Row — corps rigide sous la barre, tirer le sternum vers la barre. Variante du dos différente des tractions."),
+      mkEx(49,3,"12","60s","Léger","Curl Marteau — variation biceps vs S1. Prise neutre, coudes fixes."),
+      mkEx(56,3,"12","60s","Léger","Extension Triceps — légère progression."),
+      mkEx(66,3,"25s","45s","","Planche Latérale — +5s vs S1. Variation gainage."),
+    ]},
+    {label:"Séance B — Full Body Maison (variante)",exercises:[
+      mkEx(15,3,"12","90s","Léger","Romanian Deadlift — légère hausse si S1 maîtrisé."),
+      mkEx(16,3,"12","90s","Léger","Hip Thrust Barre — légère progression. Pause 1s en haut."),
+      mkEx(10,3,"10","90s","Léger","Rowing Barre — légère progression. Même technique."),
+      mkEx(5,3,"10","90s","Léger","Développé Militaire — légère progression."),
+      mkEx(6,3,"12","60s","Léger","Curl Haltères — variation vs S1."),
+      mkEx(8,3,"35s","45s","","Gainage Planche — +5s vs S1. Variation vs Planche Latérale."),
+    ]},
+    _wC,
+  ]},
+  // ── S3 ──────────────────────────────────────────────────────────────────
+  {label:"S3 — Construction · 3×10 · Charges modérées",days:[
+    {label:"Séance A — Full Body Maison",exercises:[
+      mkEx(1,3,"10","90s","Moyen","Squat Barre — reps réduites, charge augmentée. Même technique."),
+      mkEx(2,3,"10","90s","Moyen","Développé Couché — progression continue."),
+      mkEx(3,3,"Max","90s","","Tractions — viser +1 rep par série vs S1. Négatifs si besoin."),
+      mkEx(6,3,"12","60s","Moyen","Curl Haltères — légère progression."),
+      mkEx(56,3,"12","60s","Moyen","Extension Triceps — légère progression."),
+      mkEx(8,3,"40s","45s","","Gainage — +10s vs S1."),
+    ]},
+    {label:"Séance B — Full Body Maison (variante)",exercises:[
+      mkEx(15,3,"10","90s","Moyen","Romanian Deadlift — reps réduites, charge augmentée."),
+      mkEx(16,3,"10","90s","Moyen","Hip Thrust Barre — charge progressive. Pause 1s en haut."),
+      mkEx(10,3,"10","90s","Moyen","Rowing Barre — progression charge."),
+      mkEx(5,3,"10","90s","Moyen","Développé Militaire — progression."),
+      mkEx(49,3,"12","60s","Moyen","Curl Marteau — variation vs S2."),
+      mkEx(66,3,"30s","45s","","Planche Latérale — +10s vs S1."),
+    ]},
+    _wC,
+  ]},
+  // ── S4 ──────────────────────────────────────────────────────────────────
+  {label:"S4 — Consolidation · +1 Série sur les gros mouvements",days:[
+    {label:"Séance A — Full Body Maison (variante)",exercises:[
+      mkEx(1,4,"10","90s","Moyen","Squat Barre — +1 série vs S3. Charge identique ou légère hausse."),
+      mkEx(2,4,"10","90s","Moyen","Développé Couché — +1 série."),
+      mkEx(103,4,"10","90s","Moyen","Inverted Row — +1 série. Corps rigide, amplitude complète."),
+      mkEx(49,3,"12","60s","Moyen","Curl Marteau — maintien."),
+      mkEx(56,3,"12","60s","Moyen","Extension Triceps — maintien."),
+      mkEx(66,3,"30s","45s","","Planche Latérale — maintien."),
+    ]},
+    {label:"Séance B — Full Body Maison",exercises:[
+      mkEx(15,4,"10","90s","Moyen","Romanian Deadlift — +1 série vs S3."),
+      mkEx(16,4,"10","90s","Moyen","Hip Thrust Barre — +1 série. Pause 1s en haut."),
+      mkEx(10,4,"10","90s","Moyen","Rowing Barre — +1 série."),
+      mkEx(5,3,"10","90s","Moyen","Développé Militaire — maintien."),
+      mkEx(6,3,"12","60s","Moyen","Curl Haltères — variation."),
+      mkEx(8,3,"45s","45s","","Gainage — +5s vs S3."),
+    ]},
+    _wC,
+  ]},
+  // ── S5 ──────────────────────────────────────────────────────────────────
+  {label:"S5 — Progression · 4×8 · Légère intensification",days:[
+    {label:"Séance A — Full Body Maison",exercises:[
+      mkEx(1,4,"8","90s","Moyen","Squat Barre — reps réduites, nouvelle hausse de charge. Qualité du mouvement maintenue."),
+      mkEx(2,4,"8","90s","Moyen","Développé Couché — charge progressive, technique identique."),
+      mkEx(3,4,"Max","90s","","Tractions — +1 série. Viser 3-5 reps propres minimum par série."),
+      mkEx(6,3,"12","60s","Moyen","Curl Haltères — maintien volume."),
+      mkEx(56,3,"12","60s","Moyen","Extension Triceps — maintien."),
+      mkEx(8,4,"45s","45s","","Gainage — +1 série, 45s."),
+    ]},
+    {label:"Séance B — Full Body Maison (variante)",exercises:[
+      mkEx(15,4,"8","90s","Moyen","Romanian Deadlift — reps réduites, charge augmentée."),
+      mkEx(16,4,"10","90s","Moyen","Hip Thrust Barre — charge progressive. Pause 1s en haut."),
+      mkEx(10,4,"8","90s","Moyen","Rowing Barre — reps réduites, charge augmentée."),
+      mkEx(5,3,"10","90s","Moyen","Développé Militaire — maintien."),
+      mkEx(49,3,"12","60s","Moyen","Curl Marteau — variation."),
+      mkEx(66,4,"35s","45s","","Planche Latérale — +1 série, +5s."),
+    ]},
+    _wC,
+  ]},
+  // ── S6 ──────────────────────────────────────────────────────────────────
+  {label:"S6 — Bilan · Consolidation finale · 6 semaines ✓",days:[
+    {label:"Séance A — Full Body Maison (bilan)",exercises:[
+      mkEx(1,4,"10","90s","Moyen","Squat Barre — compare ta charge avec S1 : belle progression ! Même technique."),
+      mkEx(2,4,"10","90s","Moyen","Développé Couché — bilan progression."),
+      mkEx(3,4,"Max","90s","","Tractions — compte tes reps et compare avec S1 !"),
+      mkEx(6,3,"12","60s","Moyen","Curl Haltères — maintien."),
+      mkEx(56,3,"12","60s","Moyen","Extension Triceps — maintien."),
+      mkEx(8,4,"45s","45s","","Gainage — niveau S5 maintenu."),
+    ]},
+    {label:"Séance B — Full Body Maison (bilan)",exercises:[
+      mkEx(15,4,"10","90s","Moyen","Romanian Deadlift — compare ta charge vs S1."),
+      mkEx(16,4,"10","90s","Moyen","Hip Thrust Barre — bilan progression."),
+      mkEx(10,4,"10","90s","Moyen","Rowing Barre — bilan."),
+      mkEx(5,3,"10","90s","Moyen","Développé Militaire — bilan."),
+      mkEx(49,3,"12","60s","Moyen","Curl Marteau — consolidation."),
+      mkEx(66,4,"35s","45s","","Planche Latérale — bilan."),
+    ]},
+    _wC,
+  ]},
+]};
+SEED_PROGRAMS.push(CYCLE1_WILLIAM);
+
 const SEED_CLIENTS = [
   {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
    mealPlan:emptyMealPlan(),
