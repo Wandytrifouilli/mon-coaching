@@ -1402,6 +1402,289 @@ const DEBUTANT_FB = {id:"debutant_fullbody_3j",name:"Débutant Full Body 3j/sem"
 ]};
 SEED_PROGRAMS.push(DEBUTANT_FB);
 
+// ─── BASES SOLIDES — 8 SEMAINES ──────────────────────────────────────────────
+// Tempo: E-PB-C-PH (Excentrique – Pause Bas – Concentrique – Pause Haut)
+// ex: 3-2-1-0 = 3s descente → 2s pause en bas → 1s montée → 0s pause en haut
+const BASES_SOLIDES = {id:"bases_solides_8s",name:"Bases Solides — 8 sem.",category:"Powerbuilding",level:"Intermédiaire",weeks:[
+  // ── S1 ────────────────────────────────────────────────────────────────────
+  {label:"S1 — Activation Technique · Tempo 3-2-1-0 · 55-60%",days:[
+    {label:"Séance A — Squat · Positions & Tensions",exercises:[
+      mkEx(1,4,"5","3min","55% 1RM","⏱ TEMPO 3-2-1-0 — 3s descente → PAUSE 2s en bas (cuisse ≥ parallèle) → sortie explosive → pas de pause en haut. Charge ultra-légère. Stimulus : apprendre à maintenir la tension abdominale et la neutralité vertébrale sous position de stress. Focus : genoux alignés sur les pointes de pieds, dos plat, regard droit."),
+      mkEx(118,3,"5","2min","45% 1RM","Front Squat TEMPO 3-1-1-0 — Coudes à l'horizontale, barre sur les deltoïdes antérieurs. Force à garder un tronc vertical. Stimulus : mobilité cheville/hanche et positionnement tronc. Très léger, technique prioritaire."),
+      mkEx(15,3,"8","90s","52% 1RM SDT","RDL TEMPO 3-1-0-0 — 3s descente, 1s étirement ischio-jambiers en bas, remontée explosive. Dos plat, hanches reculées. Stimulus : renforcement de la charnière de hanche et des ischio-jambiers en position allongée — transfert direct au SDT."),
+      mkEx(16,3,"12","75s","Modéré","Hip Thrust Barre — PAUSE 1s en haut, fessiers contractés max, gainage abdominal actif. Stimulus : stabilité pelvienne et force des fessiers. Prépare le verrouillage du bassin en squat lourd."),
+      mkEx(109,3,"8","45s","Léger","Bird Dog Lestés — 2s PAUSE en extension complète (bras et jambe opposée). Dos parfaitement plat, genoux à 5 cm du sol. Stimulus : anti-flexion lombaire et coordination, essentiel pour protéger les lombaires en SDT et en squat."),
+      mkEx(108,3,"12","45s","Léger","Pallof Press Câble — 2s PAUSE bras tendus, résistance à la rotation. Stimulus : core anti-rotation. Transfert direct sur la stabilité latérale en squat et SDT."),
+    ]},
+    {label:"Séance B — Bench · Pause Poitrine & Soutien Dorsal",exercises:[
+      mkEx(2,4,"5","3min","55% 1RM","⏱ TEMPO 3-2-1-0 — 3s descente → PAUSE 2s sur la poitrine (barre immobile, sans rebond) → poussée explosive → pas de pause en haut. Charge très légère. Stimulus : renforcer la position de départ du bench et l'explosivité à partir du bas du mouvement. Coudes à 45-60° du tronc."),
+      mkEx(10,4,"6","2min","55% 1RM","Rowing Barre TEMPO 3-1-1-0 — 3s descente bras, 1s pause en bas (bras tendus, étirement dorsaux), montée explosive, 1s contraction omoplates en haut. Dos parallèle au sol. Stimulus : soutien dorsal pour bench lourd — les dorsaux assurent la stabilité de la trajectoire de barre."),
+      mkEx(5,3,"8","90s","50% 1RM","Développé Militaire TEMPO 2-1-1-0 — Gainage abdominal total, fessiers contractés, pas de cambrure lombaire. Stimulus : force des épaules et triceps complémentaire au bench, stabilité du core."),
+      mkEx(3,3,"Max","2min","","Tractions Prise Large TEMPO 3-0-1-0 — Montée explosive, 3s descente contrôlée. Si >8 reps propres : ajouter lest. Stimulus : grand dorsal et biceps, rétraction scapulaire — fondation pour la stabilité au bench."),
+      mkEx(6,3,"12","60s","Léger","Curl Haltères TEMPO 2-0-1-1 — 1s montée, 1s contraction en haut, 2s descente. Stimulus excentrique prioritaire. Renforcement du biceps en position d'assistance au rowing et aux tractions."),
+      mkEx(40,3,"15","60s","Léger","Élévations Latérales TEMPO 2-0-1-1 — Pas d'élan, montée lente, pause 1s en haut. Stimulus : faisceau moyen du deltoïde, santé de l'épaule à long terme."),
+    ]},
+    {label:"Séance C — Deadlift · Engagement & Positionnement",exercises:[
+      mkEx(4,4,"4","3min","55% 1RM","⏱ TEMPO CONTRÔLÉ — Mise en position 3s : barre au-dessus des orteils (tibia vertical), dos plat, grand dorsal engagé (\"enrouler les aisselles\"), omoplates rétractées, regard au sol 2m devant. PAUSE 1s à hauteur du genou. Remontée explosive en \"poussant le sol\". Descente contrôlée 2s. Stimulus : apprendre à s'engager dans la position la plus difficile (hauteur genou). Charge très légère."),
+      mkEx(15,3,"8","90s","52% 1RM SDT","RDL TEMPO 3-2-0-0 — 3s descente, 2s étirement maximal des ischio-jambiers en bas. Stimulus : renforcement de la chaîne postérieure en position allongée, indispensable pour les SDT lourds."),
+      mkEx(20,3,"10","90s","Léger","Good Morning TEMPO 3-1-1-0 — Barre sur les trapèzes hauts. Dos plat, légère flexion des genoux, charnière de hanche pure. Stimulus : renforcement des érecteurs spinaux et ischio-jambiers en inclinaison avant — transfert direct au bas du SDT."),
+      mkEx(16,3,"12","75s","Modéré","Hip Thrust — PAUSE 1s en haut. Stimulus fessiers et extension de hanche complémentaire."),
+      mkEx(8,4,"45s","45s","","Gainage Planche — 45s de tension abdominale maximale. Stimulus : protection des lombaires sous charge SDT. Bassin neutre, pas de rotation."),
+      mkEx(109,3,"8","45s","","Bird Dog — 2s pause. Stabilisation lombaire profonde."),
+    ]},
+    {label:"Séance D — Volume & Hypertrophie",exercises:[
+      mkEx(117,3,"6","2min","55% 1RM","Squat Pause TEMPO 2-3-1-0 — PAUSE 3s en bas. Stimulus hypertrophique quadriceps en position de squat. Isométrique de bas de mouvement. Léger."),
+      mkEx(2,4,"10","90s","57% 1RM","Bench Volume TEMPO 2-0-1-0 — Sans pause, charges légères, sensation musculaire pectoraux et triceps prioritaire. Stimulus : volume d'entraînement hypertrophique sur les patterns du bench."),
+      mkEx(32,4,"12","75s","Modéré","Tirage Vertical Poulie TEMPO 2-1-1-0 — Étirement complet en haut, contraction maximale en bas. Stimulus grand dorsal. Volume dorsal après le bench."),
+      mkEx(15,3,"12","60s","Léger","RDL Volume TEMPO 2-1-0-0 — Charges légères, sensation des ischio-jambiers. Stimulus : volume additionnel chaîne postérieure."),
+      mkEx(13,3,"15","60s","Léger","Leg Curl TEMPO 2-0-1-1 — Contraction max en haut, 1s. Volume ischio-jambiers isolé."),
+      mkEx(19,3,"20","45s","Modéré","Mollets Debout — PAUSE 1s en bas (étirement) + PAUSE 1s en haut (contraction max). Amplitude totale obligatoire."),
+    ]},
+  ]},
+  // ── S2 ────────────────────────────────────────────────────────────────────
+  {label:"S2 — Consolidation Technique · Tempo 3-2-1-0 · 60-65%",days:[
+    {label:"Séance A — Squat · Position & Tension (+5%)",exercises:[
+      mkEx(1,4,"5","3min","60% 1RM","⏱ TEMPO 3-2-1-0 — Identique S1. Légère hausse de charge. La technique NE DOIT PAS changer avec la charge. Si la position se dégrade (demi-squat, genoux en dedans, dos arrondi), revenir à 55%. Stimulus identique, charge légèrement plus ressentie."),
+      mkEx(118,3,"5","2min","50% 1RM","Front Squat TEMPO 3-1-1-0 — +5% vs S1. Progresser uniquement si technique S1 impeccable."),
+      mkEx(15,3,"8","90s","57% 1RM SDT","RDL TEMPO 3-1-0-0 — Légère hausse. Focus : étirement ischio sans arrondir le dos."),
+      mkEx(16,3,"12","75s","Modéré","Hip Thrust — Pause 1s haut. Même charge ou légère hausse."),
+      mkEx(109,3,"10","45s","Léger","Bird Dog — +2 reps vs S1, qualité identique."),
+      mkEx(108,3,"12","45s","Léger","Pallof Press — Câble légèrement augmenté si S1 maîtrisé."),
+    ]},
+    {label:"Séance B — Bench · Pause Poitrine (+5%)",exercises:[
+      mkEx(2,4,"5","3min","60% 1RM","⏱ TEMPO 3-2-1-0 — PAUSE 2s sur la poitrine, barre immobile. +5% vs S1. Si la barre rebondit sur la poitrine ou si la pause disparaît, revenir à 55%. Stimulus identique, charge plus lourde."),
+      mkEx(10,4,"6","2min","60% 1RM","Rowing Barre TEMPO 3-1-1-0 — +5%. Maintien du tempo."),
+      mkEx(5,3,"8","90s","55% 1RM","Développé Militaire TEMPO 2-1-1-0 — +5%."),
+      mkEx(3,3,"Max","2min","","Tractions TEMPO 3-0-1-0 — Viser +1 rep par série vs S1."),
+      mkEx(6,3,"12","60s","Léger","Curl TEMPO 2-0-1-1 — Progression légère."),
+      mkEx(40,3,"15","60s","Léger","Élévations Latérales TEMPO 2-0-1-1."),
+    ]},
+    {label:"Séance C — Deadlift · Engagement (+5%)",exercises:[
+      mkEx(4,4,"4","3min","60% 1RM","⏱ TEMPO CONTRÔLÉ — +5% vs S1. PAUSE 1s au genou maintenue. La position ne change pas avec la charge. Engagement grand dorsal avant de tirer, impératif. Chaque rep réinitialisée."),
+      mkEx(15,3,"8","90s","57% 1RM SDT","RDL TEMPO 3-2-0-0 — Légère hausse."),
+      mkEx(20,3,"10","90s","Léger","Good Morning TEMPO 3-1-1-0 — Légère hausse si position S1 impeccable."),
+      mkEx(16,3,"12","75s","Modéré","Hip Thrust — +5% si S1 maîtrisé."),
+      mkEx(8,4,"50s","45s","","Gainage — +5s vs S1."),
+      mkEx(109,3,"10","45s","","Bird Dog — +2 reps."),
+    ]},
+    {label:"Séance D — Volume & Hypertrophie",exercises:[
+      mkEx(117,3,"6","2min","57% 1RM","Squat Pause TEMPO 2-3-1-0 — PAUSE 3s. +2% vs S1."),
+      mkEx(2,4,"10","90s","60% 1RM","Bench Volume TEMPO 2-0-1-0 — +3% vs S1."),
+      mkEx(32,4,"12","75s","Modéré","Tirage Vertical TEMPO 2-1-1-0 — Légère progression."),
+      mkEx(15,3,"12","60s","Léger","RDL Volume."),
+      mkEx(13,3,"15","60s","Léger","Leg Curl TEMPO 2-0-1-1."),
+      mkEx(19,3,"20","45s","Modéré","Mollets — Pause 1s bas + 1s haut."),
+    ]},
+  ]},
+  // ── S3 ────────────────────────────────────────────────────────────────────
+  {label:"S3 — Construction · Tempo 3-1-1-0 · 65-70%",days:[
+    {label:"Séance A — Squat · Tempo Réduit + Volume",exercises:[
+      mkEx(1,4,"5","3min","65% 1RM","⏱ TEMPO 3-1-1-0 — La pause passe à 1s en bas. La charge monte significativement. L'intention de sortie explosive augmente. Stimulus : début du transfert technique → force. La position doit être identique à S1-S2, mais l'intention de pousser le sol est maximale dès la fin de la pause."),
+      mkEx(118,3,"4","2min","55% 1RM","Front Squat TEMPO 3-1-1-0 — Reps réduites, charge en hausse."),
+      mkEx(15,4,"8","90s","60% 1RM SDT","RDL TEMPO 3-1-0-0 — +1 série vs S1-S2. Volume chaîne postérieure."),
+      mkEx(16,3,"10","75s","Modéré","Hip Thrust TEMPO 2-1-1-0 — Reps réduites, charge augmentée."),
+      mkEx(109,3,"10","45s","Modéré","Bird Dog — Lest augmenté."),
+      mkEx(108,3,"12","45s","Modéré","Pallof Press — Câble plus lourd."),
+    ]},
+    {label:"Séance B — Bench · Pause 1s + Volume Dorsal",exercises:[
+      mkEx(2,4,"5","3min","65% 1RM","⏱ TEMPO 3-1-1-0 — Pause réduite à 1s sur la poitrine. La barre marque toujours un arrêt net — pas de rebond. Intention explosive maximale après la pause. Stimulus : forcer l'explosivité à partir d'une position statique avec charge réelle."),
+      mkEx(10,4,"8","2min","62.5% 1RM","Rowing Barre TEMPO 3-1-1-0 — +2 reps vs S1-S2, légère hausse charge. Volume dorsal en montée."),
+      mkEx(5,3,"8","90s","55% 1RM","Développé Militaire TEMPO 2-1-1-0 — Maintien volume."),
+      mkEx(3,4,"Max","2min","","Tractions TEMPO 3-0-1-0 — +1 série vs S1-S2."),
+      mkEx(6,3,"12","60s","Léger","Curl TEMPO 2-0-1-1."),
+      mkEx(40,3,"15","60s","Léger","Élévations Latérales."),
+    ]},
+    {label:"Séance C — Deadlift · Construction Volume",exercises:[
+      mkEx(4,4,"4","3min","65% 1RM","⏱ TEMPO CONTRÔLÉ — Pause au genou maintenue 1s. +10% vs S1. Stimulus : construire de la force dans la position de levier difficile (hauteur genou). Engagement grand dorsal AVANT de tirer, impératif. Reset complet entre chaque rep."),
+      mkEx(15,4,"8","90s","60% 1RM SDT","RDL TEMPO 3-1-0-0 — +1 série. Volume ischio-jambiers."),
+      mkEx(20,3,"10","90s","Modéré","Good Morning TEMPO 3-1-1-0 — Légère hausse de charge."),
+      mkEx(16,3,"10","75s","Modéré","Hip Thrust — Hausse charge, reps réduites."),
+      mkEx(8,4,"50s","45s","","Gainage — 50s."),
+      mkEx(109,3,"10","45s","","Bird Dog."),
+    ]},
+    {label:"Séance D — Volume & Hypertrophie",exercises:[
+      mkEx(117,3,"6","2min","62.5% 1RM","Squat Pause TEMPO 2-2-1-0 — PAUSE réduite à 2s. Charge augmentée vs S1-S2."),
+      mkEx(2,4,"10","90s","65% 1RM","Bench Volume TEMPO 2-0-1-0 — Volume pectoraux en montée."),
+      mkEx(32,4,"12","75s","Modéré","Tirage Vertical TEMPO 2-1-1-0."),
+      mkEx(15,3,"12","60s","Modéré","RDL Volume."),
+      mkEx(13,4,"12","60s","Modéré","Leg Curl — +1 série."),
+      mkEx(19,3,"20","45s","Modéré","Mollets — Pause 1s bas + 1s haut."),
+    ]},
+  ]},
+  // ── S4 ────────────────────────────────────────────────────────────────────
+  {label:"S4 — Consolidation Construction · Tempo 3-1-1-0 · 67.5-72.5%",days:[
+    {label:"Séance A — Squat · +1 Série / 4 Reps",exercises:[
+      mkEx(1,5,"4","3min","67.5% 1RM","⏱ TEMPO 3-1-1-0 — 5 séries de 4 reps, pause 1s en bas. Charge en hausse. Stimulus : premier vrai volume de force. Si la technique flanche à la série 5, retirer la dernière série plutôt que de compromettre la position. La qualité prime sur la quantité."),
+      mkEx(118,3,"4","2min","57.5% 1RM","Front Squat TEMPO 3-1-1-0."),
+      mkEx(15,4,"6","90s","65% 1RM SDT","RDL — Reps réduites, charge augmentée."),
+      mkEx(16,3,"10","75s","Modéré","Hip Thrust — Hausse de charge."),
+      mkEx(109,3,"10","45s","Modéré","Bird Dog."),
+      mkEx(108,3,"12","45s","Modéré","Pallof Press."),
+    ]},
+    {label:"Séance B — Bench · +1 Série / 4 Reps",exercises:[
+      mkEx(2,5,"4","3min","67.5% 1RM","⏱ TEMPO 3-1-1-0 — 5×4 avec PAUSE 1s sur la poitrine. La charge est ressentie. L'intention explosive doit compenser. Stimulus : volume de force sur le bench. Repos complet entre les séries."),
+      mkEx(10,4,"8","2min","65% 1RM","Rowing Barre TEMPO 3-1-1-0 — Même structure. Charge augmentée."),
+      mkEx(5,3,"8","90s","57.5% 1RM","Développé Militaire TEMPO 2-1-1-0."),
+      mkEx(3,4,"Max","2min","","Tractions TEMPO 3-0-1-0."),
+      mkEx(6,3,"12","60s","Modéré","Curl."),
+      mkEx(40,3,"15","60s","Léger","Élévations Latérales."),
+    ]},
+    {label:"Séance C — Deadlift · +1 Série / 3 Reps",exercises:[
+      mkEx(4,5,"3","3min","67.5% 1RM","⏱ TEMPO CONTRÔLÉ — 5×3, PAUSE 1s au genou. Stimulus : volume de force sur le SDT. Concentration maximale sur chaque rep. Reset complet entre chaque rep (not touch-and-go). Chaque rep est une répétition unique."),
+      mkEx(15,4,"6","90s","65% 1RM SDT","RDL — Reps réduites, charge augmentée."),
+      mkEx(20,3,"10","90s","Modéré","Good Morning TEMPO 3-1-1-0."),
+      mkEx(16,3,"10","75s","Modéré","Hip Thrust."),
+      mkEx(8,4,"55s","45s","","Gainage — +5s."),
+      mkEx(109,3,"10","45s","","Bird Dog."),
+    ]},
+    {label:"Séance D — Volume & Hypertrophie",exercises:[
+      mkEx(117,3,"5","2min","65% 1RM","Squat Pause TEMPO 2-2-1-0 — PAUSE 2s. Charge augmentée."),
+      mkEx(2,4,"10","90s","67.5% 1RM","Bench Volume TEMPO 2-0-1-0."),
+      mkEx(32,4,"10","75s","Modéré","Tirage Vertical TEMPO 2-1-1-0 — Reps réduites, charge augmentée."),
+      mkEx(15,3,"10","60s","Modéré","RDL Volume."),
+      mkEx(13,4,"12","60s","Modéré","Leg Curl."),
+      mkEx(19,3,"20","45s","Modéré","Mollets."),
+    ]},
+  ]},
+  // ── S5 ────────────────────────────────────────────────────────────────────
+  {label:"S5 — Intensification · Tempo 2-1-1-0 · 72.5-77.5%",days:[
+    {label:"Séance A — Squat · Charges Montantes",exercises:[
+      mkEx(1,4,"4","3min","72.5% 1RM","⏱ TEMPO 2-1-1-0 — Tempo raccourci, pause 1s en bas. Stimulus : les charges sont maintenant significatives. L'intention de sortie explosive doit être maximale. Objectif : transférer la technique acquise en S1-S4 vers de la force réelle. La position doit rester identique à 55%."),
+      mkEx(118,3,"4","2min","60% 1RM","Front Squat TEMPO 2-1-1-0."),
+      mkEx(15,4,"6","90s","67.5% 1RM SDT","RDL TEMPO 3-1-0-0 — Maintien du tempo excentrique long."),
+      mkEx(16,3,"8","75s","Lourd","Hip Thrust — Charge progressive."),
+      mkEx(109,3,"10","45s","Modéré","Bird Dog."),
+      mkEx(108,3,"12","45s","Modéré","Pallof Press."),
+    ]},
+    {label:"Séance B — Bench · Charges Montantes",exercises:[
+      mkEx(2,4,"4","3min","72.5% 1RM","⏱ TEMPO 2-1-1-0 — 1s pause sur la poitrine, charges en hausse notable. L'intention explosive à partir du bas est primordiale. Stimulus : bench avec intention de force, la technique de S1-S4 est maintenant testée sous charge réelle."),
+      mkEx(10,4,"8","2min","67.5% 1RM","Rowing Barre TEMPO 3-1-1-0 — Maintien du tempo excentrique."),
+      mkEx(5,3,"6","90s","60% 1RM","Développé Militaire TEMPO 2-1-1-0 — Reps réduites, charge augmentée."),
+      mkEx(3,4,"Max","2min","","Tractions — Lestées si > 8 reps propres."),
+      mkEx(6,3,"10","60s","Modéré","Curl TEMPO 2-0-1-1."),
+      mkEx(40,3,"12","60s","Modéré","Élévations Latérales."),
+    ]},
+    {label:"Séance C — Deadlift · Charges Montantes",exercises:[
+      mkEx(4,4,"3","3min","72.5% 1RM","⏱ TEMPO CONTRÔLÉ — Pause 1s au genou maintenue. Mise en position 2s. Stimulus : les charges font maintenant ressentir le mouvement. Chaque rep compte. L'engagement du grand dorsal prend tout son sens. Reset complet entre chaque rep."),
+      mkEx(15,4,"6","90s","67.5% 1RM SDT","RDL TEMPO 3-1-0-0."),
+      mkEx(20,3,"8","90s","Modéré","Good Morning TEMPO 3-1-1-0."),
+      mkEx(16,3,"8","75s","Lourd","Hip Thrust."),
+      mkEx(8,4,"55s","45s","","Gainage."),
+      mkEx(109,3,"10","45s","","Bird Dog."),
+    ]},
+    {label:"Séance D — Volume & Hypertrophie",exercises:[
+      mkEx(117,3,"5","2min","67.5% 1RM","Squat Pause TEMPO 2-2-1-0 — PAUSE 2s. Charge en hausse."),
+      mkEx(2,4,"8","90s","70% 1RM","Bench Volume TEMPO 2-0-1-0 — Reps réduites, charges montantes."),
+      mkEx(32,4,"10","75s","Modéré","Tirage Vertical TEMPO 2-1-1-0."),
+      mkEx(15,3,"10","60s","Modéré","RDL Volume."),
+      mkEx(13,4,"10","60s","Modéré","Leg Curl — Reps réduites, charge augmentée."),
+      mkEx(19,3,"15","45s","Lourd","Mollets — Pause 1s bas + 1s haut."),
+    ]},
+  ]},
+  // ── S6 ────────────────────────────────────────────────────────────────────
+  {label:"S6 — Intensification Haute · Tempo 2-0-1-0 · 77.5-82.5%",days:[
+    {label:"Séance A — Squat · Sans Pause en Bas",exercises:[
+      mkEx(1,4,"3","3min","77.5% 1RM","⏱ TEMPO 2-0-1-0 — La pause en bas disparaît. Descente contrôlée 2s, inversion immédiate et explosive. Stimulus : utilisation de l'élan élastique (réflexe myotatique) à partir d'une position maîtrisée. Charge haute : la technique reste non-négociable. C'est ici que les semaines de travail technique paient."),
+      mkEx(118,3,"3","2min","62.5% 1RM","Front Squat TEMPO 2-1-1-0 — Maintien pause légère pour préserver le travail de position."),
+      mkEx(15,3,"6","90s","72.5% 1RM SDT","RDL TEMPO 3-1-0-0 — Maintien excentrique long."),
+      mkEx(16,3,"8","75s","Lourd","Hip Thrust."),
+      mkEx(109,3,"10","45s","Modéré","Bird Dog."),
+      mkEx(108,3,"12","45s","Modéré","Pallof Press."),
+    ]},
+    {label:"Séance B — Bench · Sans Pause / Charges Hautes",exercises:[
+      mkEx(2,4,"3","3min","77.5% 1RM","⏱ TEMPO 2-0-1-0 — Descente 2s, toucher-repousser immédiatement de façon explosive. La barre touche toujours la poitrine — pas de rebond brutal. Stimulus : bench avec intention force maximale, transfert des fondations vers la performance réelle."),
+      mkEx(10,4,"6","2min","70% 1RM","Rowing Barre TEMPO 3-1-1-0 — Charges hautes, reps réduites."),
+      mkEx(5,3,"5","90s","65% 1RM","Développé Militaire TEMPO 2-1-1-0 — Charge haute."),
+      mkEx(3,4,"Max","2min","","Tractions — Lestées. Tempo 3-0-1-0."),
+      mkEx(6,3,"10","60s","Modéré","Curl."),
+      mkEx(40,3,"12","60s","Modéré","Élévations Latérales."),
+    ]},
+    {label:"Séance C — Deadlift · Sans Pause au Genou",exercises:[
+      mkEx(4,4,"3","3min","77.5% 1RM","⏱ TEMPO ACCÉLÉRÉ — La pause au genou disparaît. Mise en position 2s, tirage explosif immédiat. Stimulus : SDT complet à intention maximale. La charge est haute — chaque centimètre doit être tiré en position parfaite. Descente contrôlée 2s. Reset entre chaque rep."),
+      mkEx(15,3,"6","90s","72.5% 1RM SDT","RDL TEMPO 3-1-0-0 — Charges hautes."),
+      mkEx(20,3,"8","90s","Modéré","Good Morning — Charge modérée maintenue."),
+      mkEx(16,3,"8","75s","Lourd","Hip Thrust."),
+      mkEx(8,4,"60s","45s","","Gainage — 60s."),
+      mkEx(109,3,"10","45s","","Bird Dog."),
+    ]},
+    {label:"Séance D — Volume & Hypertrophie",exercises:[
+      mkEx(117,3,"4","2min","70% 1RM","Squat Pause TEMPO 2-2-1-0 — PAUSE 2s. Charge haute."),
+      mkEx(2,4,"8","90s","75% 1RM","Bench Volume TEMPO 2-0-1-0 — Charge haute."),
+      mkEx(32,4,"10","75s","Modéré","Tirage Vertical TEMPO 2-1-1-0."),
+      mkEx(15,3,"8","60s","Modéré","RDL Volume."),
+      mkEx(13,4,"10","60s","Modéré","Leg Curl."),
+      mkEx(19,3,"15","45s","Lourd","Mollets."),
+    ]},
+  ]},
+  // ── S7 ────────────────────────────────────────────────────────────────────
+  {label:"S7 — Approche Force · 80-87.5% · Intention Maximale",days:[
+    {label:"Séance A — Squat Lourd",exercises:[
+      mkEx(1,1,"3","4min","80% 1RM","SÉRIE D'ACTIVATION — 3 reps, tempo 2-0-1-0. Bracing abdominal maximal avant de débloquer la barre. Se concentrer, visualiser la descente."),
+      mkEx(1,3,"3","4min","82.5% 1RM","TRAVAIL PRINCIPAL 3×3 @ 82.5% — Intention maximale. Sortir le plus vite possible tout en maintenant la position. Si une rep est compromise en position, arrêter la série. Repos complet (4-5 min si besoin)."),
+      mkEx(1,1,"1","5min","87.5% 1RM","SINGLE DE FORCE @ 87.5% — 1 répétition maximale technique. Seulement si les 3×3 étaient impeccables. Pas d'égo : si doute sur la position, rester sur les 3×3."),
+      mkEx(15,3,"6","90s","72.5% 1RM SDT","RDL TEMPO 3-1-0-0 — Maintien technique."),
+      mkEx(16,3,"8","75s","Lourd","Hip Thrust."),
+      mkEx(8,4,"60s","45s","","Gainage — 60s."),
+    ]},
+    {label:"Séance B — Bench Lourd",exercises:[
+      mkEx(2,1,"3","4min","80% 1RM","SÉRIE D'ACTIVATION — 3 reps avec PAUSE 1s poitrine. Bracing. Descente 2s. Préparer mentalement."),
+      mkEx(2,3,"3","4min","82.5% 1RM","TRAVAIL PRINCIPAL 3×3 @ 82.5% — PAUSE 1s poitrine sur chaque rep. Intention de poussée maximale. Repos complet 4-5 min."),
+      mkEx(2,1,"1","5min","87.5% 1RM","SINGLE @ 87.5% — 1 rep avec PAUSE sur la poitrine. Seulement si 3×3 impeccables."),
+      mkEx(10,4,"6","2min","72.5% 1RM","Rowing Barre TEMPO 3-1-1-0 — Maintien volume dorsal."),
+      mkEx(5,3,"5","90s","67.5% 1RM","Développé Militaire — Volume épaules."),
+      mkEx(3,4,"Max","2min","","Tractions — Volume dos/biceps."),
+    ]},
+    {label:"Séance C — Deadlift Lourd",exercises:[
+      mkEx(4,1,"3","4min","80% 1RM","SÉRIE D'ACTIVATION — 3 reps. Mise en position impeccable. Engagement grand dorsal. Chaque rep réinitialisée."),
+      mkEx(4,3,"3","4min","82.5% 1RM","TRAVAIL PRINCIPAL 3×3 @ 82.5% — Intention de pousser le sol vers le bas. Pas de touch-and-go. Reset complet entre chaque rep. Repos complet 4-5 min."),
+      mkEx(4,1,"1","5min","87.5% 1RM","SINGLE @ 87.5% — 1 répétition maximale technique. Seulement si 3×3 propres. La barre peut ralentir mais ne doit pas s'arrêter."),
+      mkEx(15,3,"6","90s","72.5% 1RM SDT","RDL — Maintien technique."),
+      mkEx(20,3,"8","90s","Modéré","Good Morning — Maintien."),
+      mkEx(8,4,"60s","45s","","Gainage."),
+    ]},
+    {label:"Séance D — Récupération Active (Volume Léger)",exercises:[
+      mkEx(1,3,"8","90s","60% 1RM","Squat Volume Léger — TEMPO 2-1-1-0. Récupération active après la semaine lourde. Focus sensation quadriceps."),
+      mkEx(2,3,"8","90s","62.5% 1RM","Bench Volume Léger — TEMPO 2-0-1-0. Sensation pectoraux, pas de performance."),
+      mkEx(32,4,"12","75s","Léger","Tirage Vertical — Volume dos."),
+      mkEx(13,3,"12","60s","Léger","Leg Curl."),
+      mkEx(6,3,"12","60s","Léger","Curl — Accessoire bras."),
+      mkEx(19,3,"20","45s","Modéré","Mollets — Amplitude complète."),
+    ]},
+  ]},
+  // ── S8 ────────────────────────────────────────────────────────────────────
+  {label:"S8 — Deload · Récupération & Bilan · 50-60%",days:[
+    {label:"Séance A — Squat Technique Deload",exercises:[
+      mkEx(1,3,"5","2min","55% 1RM","DELOAD TECHNIQUE — Retour au TEMPO 3-2-1-0 de S1. PAUSE 2s en bas. Stimulus : récupération des structures tendineuses et articulaires (genoux, hanches, cheville). Comparer avec S1 : la position doit être nettement plus fluide, le contrôle plus instinctif. Bilan sensoriel."),
+      mkEx(118,3,"5","2min","45% 1RM","Front Squat TEMPO 3-1-1-0 — Retour aux bases. Récupération mobilité."),
+      mkEx(15,3,"8","90s","50% 1RM SDT","RDL TEMPO 3-1-0-0 — Très léger, récupération ischio-jambiers."),
+      mkEx(109,3,"10","45s","Léger","Bird Dog — Ancrage de la stabilité acquise."),
+      mkEx(108,3,"12","45s","Léger","Pallof Press — Très léger."),
+    ]},
+    {label:"Séance B — Bench Technique Deload",exercises:[
+      mkEx(2,3,"5","2min","55% 1RM","DELOAD TECHNIQUE — Retour TEMPO 3-2-1-0, PAUSE 2s sur la poitrine. Récupération des tendons (coudes, épaules). Comparer la sensation technique vs S1. L'amplitude et le contrôle doivent être nettement améliorés."),
+      mkEx(10,3,"6","2min","55% 1RM","Rowing Barre TEMPO 3-1-1-0 — Très léger."),
+      mkEx(5,3,"8","90s","50% 1RM","Développé Militaire TEMPO 2-1-1-0 — Très léger."),
+      mkEx(3,3,"Max","2min","","Tractions — Sans lest, deload."),
+      mkEx(6,3,"12","60s","Léger","Curl — Léger."),
+    ]},
+    {label:"Séance C — Deadlift Technique Deload",exercises:[
+      mkEx(4,3,"4","2min","55% 1RM","DELOAD TECHNIQUE — Retour au TEMPO CONTRÔLÉ de S1. Mise en position 3s, PAUSE 1s au genou. Récupération des disques intervertébraux et des érecteurs. Se concentrer sur la qualité de chaque centimètre du mouvement. Récupération totale."),
+      mkEx(15,3,"8","90s","50% 1RM SDT","RDL TEMPO 3-2-0-0 — Très léger."),
+      mkEx(20,3,"10","90s","Léger","Good Morning — Très léger. Récupération érecteurs."),
+      mkEx(8,3,"45s","45s","","Gainage — Retour S1."),
+    ]},
+    {label:"Séance D — Bilan Final",exercises:[
+      mkEx(1,2,"5","2min","55% 1RM","Squat Bilan — Compare ta technique avec S1. Quelles positions sont plus naturelles ? Où ressens-tu plus de contrôle et de stabilité ? Le retour aux bases révèle les progrès réels."),
+      mkEx(2,2,"5","2min","55% 1RM","Bench Bilan — Compare la sensation en bas du mouvement et la stabilité des épaules avec S1."),
+      mkEx(4,2,"4","2min","55% 1RM","SDT Bilan — Compare l'engagement du grand dorsal et la position vertébrale avec S1. Le cycle suivant peut commencer sur les bases construites ici."),
+      mkEx(32,3,"12","75s","Léger","Tirage Vertical — Volume léger."),
+      mkEx(13,3,"15","60s","Léger","Leg Curl — Léger."),
+      mkEx(19,3,"20","45s","Léger","Mollets — Léger."),
+    ]},
+  ]},
+]};
+SEED_PROGRAMS.push(BASES_SOLIDES);
+
 const SEED_CLIENTS = [
   {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
    mealPlan:emptyMealPlan(),
