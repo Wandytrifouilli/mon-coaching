@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Secrets serveur (clé de compte de service Firebase, variables locales)
+.env
+.env.*
+*firebase-adminsdk*.json
+service-account*.json

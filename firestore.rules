@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// Coach : compte e-mail Firebase Auth avec la custom claim coach == true (scripts/set-coach.mjs).
+// Client : custom token émis par api/client-login.js après vérification du code, claims { clientId, code }.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isCoach() {
+      return request.auth != null && request.auth.token.coach == true;
+    }
+
+    function isClient() {
+      return request.auth != null && request.auth.token.clientId is string;
+    }
+
+    // Le code du token doit toujours correspondre à la fiche : si le coach change le code, l'accès est coupé.
+    function ownsClientDoc(clientId) {
+      return isClient()
+        && request.auth.token.clientId == clientId
+        && resource.data.code == request.auth.token.code;
+    }
+
+    match /clients/{clientId} {
+      allow read: if isCoach() || ownsClientDoc(clientId);
+      // Le client met à jour sa fiche (séances, notes…) sans pouvoir changer son identité
+      allow update: if isCoach() || (
+        ownsClientDoc(clientId)
+        && request.resource.data.code == resource.data.code
+        && request.resource.data.get('id', null) == resource.data.get('id', null)
+      );
+      allow create, delete: if isCoach();
+    }
+
+    match /programs/{docId} {
+      allow read: if isCoach() || isClient();
+      allow write: if isCoach();
+    }
+
+    match /exercises/{docId} {
+      allow read: if isCoach() || isClient();
+      allow write: if isCoach();
+    }
+
+    match /foods/{docId} {
+      allow read: if isCoach() || isClient();
+      allow write: if isCoach();
+    }
+
+    // Le coach garde la main sur tout le reste (settings, compteurs anti force brute…).
+    match /{document=**} {
+      allow read, write: if isCoach();
+    }
+  }
+}

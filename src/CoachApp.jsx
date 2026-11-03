@@ -1,15 +1,14 @@
 import { useState, useEffect } from "react";
-import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc } from "./firebase.js";
+import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginCoach } from "./firebase.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
   bg:"#080808",bg2:"#0f0f0f",bg3:"#161616",bg4:"#1c1c1c",
   gold:"#C9A84C",goldLight:"#E8C547",
-  white:"#F5F0E8",grey:"#888",greyDim:"#444",border:"#2a2a2a",
+  white:"#F5F0E8",grey:"#888888",greyDim:"#444444",border:"#2a2a2a",
   red:"#E05252",green:"#52C07A",
   font:"'Barlow',sans-serif",fontD:"'Barlow Condensed',sans-serif",
 };
-const COACH_CODE = "COACH2025";
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@700;800&display=swap');
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -27,7 +26,15 @@ const css = `
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const mkEx = (exId,sets,reps,rest,load="",note="")=>({exId,sets,reps,rest,targetLoad:load,loadRef:"none",note});
 const mkPct= (exId,sets,reps,rest,pct,ref,note="")=>({exId,sets,reps,rest,targetLoad:String(pct),loadRef:ref,note});
-const genCode = n=>n.split(" ")[0].toUpperCase().slice(0,4)+new Date().getFullYear();
+// Code d’accès client : 4 premières lettres du prénom (sans accents) + année.
+// Si le code existe déjà (deux « Thomas »…), on ajoute un suffixe pour qu’il reste unique.
+const genCode=(n,existing=[])=>{
+  const base=(n||"").trim().split(/\s+/)[0].normalize("NFD").replace(/[̀-ͯ]/g,"").toUpperCase().replace(/[^A-Z]/g,"").slice(0,4)||"CLIE";
+  const used=new Set(existing.map(c=>(c.code||"").toUpperCase()));
+  let code=base+new Date().getFullYear(),i=2;
+  while(used.has(code)) code=base+new Date().getFullYear()+"-"+i++;
+  return code;
+};
 const uid = ()=>Math.random().toString(36).slice(2,9);
 const MUSCLES = ["Tous","Cardio","Jambes","Pectoraux","Dos","Épaules","Biceps","Triceps","Abdominaux","Avant-bras"];
 const EQUIPS = ["Aucun","Barre","Haltères","Poulie","Barre fixe","Machine","Élastique","Kettlebell","Poids du corps"];
@@ -1823,25 +1830,7 @@ const CYCLE1_WILLIAM={id:"cycle1_william_fb3j",_v:2,name:"Cycle 1 William — Fu
 ]};
 SEED_PROGRAMS.push(CYCLE1_WILLIAM);
 
-const SEED_CLIENTS = [
-  {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
-   mealPlan:emptyMealPlan(),
-   nutrition:{calories:1800,proteins:130,carbs:180,fats:60,notes:"Éviter le gluten."},
-   sessionLogs:[
-     {id:"log1",date:"2025-03-10",programId:1,weekIdx:0,dayIdx:0,dayLabel:"Séance A",completed:true,notes:"Bonne séance",
-      exercises:[
-        {exId:1,name:"Squat Barre",sensation:"😊",sets:[{reps:"8",load:"55kg"},{reps:"8",load:"55kg"},{reps:"8",load:"60kg"},{reps:"7",load:"60kg"}]},
-        {exId:2,name:"Développé Couché",sensation:"😐",sets:[{reps:"8",load:"45kg"},{reps:"8",load:"50kg"},{reps:"7",load:"50kg"},{reps:"6",load:"50kg"}]},
-        {exId:8,name:"Gainage Planche",sensation:"",sets:[{reps:"45s",load:""},{reps:"45s",load:""},{reps:"40s",load:""}]},
-      ]}
-   ]},
-  {id:2,name:"Thomas Dubois",code:"THOM2025",goal:"Prise de masse",since:"Fév 2025",sessions:2,color:G.gold,programs:[2],
-   mealPlan:emptyMealPlan(),
-   nutrition:{calories:3200,proteins:200,carbs:380,fats:90,notes:"Shake post-workout."},sessionLogs:[]},
-  {id:3,name:"Camille Roy",code:"CAMI2025",goal:"Tonification",since:"Mar 2025",sessions:0,color:"#8a7040",programs:[],
-   mealPlan:emptyMealPlan(),
-   nutrition:{calories:2000,proteins:150,carbs:220,fats:65,notes:""},sessionLogs:[]},
-];
+// Pas de fiches clients de démonstration : leurs codes seraient des accès valides lisibles dans le bundle.
 
 // ─── FIRESTORE HOOK ───────────────────────────────────────────────────────────
 function useFirestoreCollection(collectionName, seed) {
@@ -1967,25 +1956,37 @@ const Empty=({text,icon="○"})=>(
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 function CoachLogin({onLogin}){
-  const [code,setCode]=useState("");
-  const [err,setErr]=useState(false);
-  const attempt=()=>{if(!onLogin(code)){setErr(true);setTimeout(()=>setErr(false),2500);}};
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [err,setErr]=useState(null); // null | "invalid" | "notcoach" | "network"
+  const [busy,setBusy]=useState(false);
+  const attempt=async e=>{
+    e?.preventDefault();
+    if(!email.trim()||!password||busy)return;
+    setBusy(true);
+    const r=await onLogin(email,password);
+    setBusy(false);
+    if(r!=="ok")setErr(r);
+  };
+  const field={width:"100%",background:G.bg3,border:`1.5px solid ${err?G.red:G.border}`,borderRadius:10,padding:"14px 16px",color:G.white,fontSize:15,outline:"none",marginBottom:12};
   return(
     <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.font,color:G.white}}>
       <style>{css}</style>
-      <div style={{width:380,padding:40,background:G.bg2,borderRadius:20,border:`1px solid ${G.border}`}} className="fu">
+      <form onSubmit={attempt} style={{width:380,padding:40,background:G.bg2,borderRadius:20,border:`1px solid ${G.border}`}} className="fu">
         <div style={{textAlign:"center",marginBottom:36}}>
           <div style={{width:64,height:64,borderRadius:18,background:`linear-gradient(135deg,${G.goldLight}20,${G.gold}40)`,border:`1.5px solid ${G.gold}55`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 18px",fontSize:28}}>⚡</div>
           <div style={{fontFamily:G.fontD,fontSize:32,fontWeight:800,letterSpacing:-1}}>WANDY<span style={{color:G.goldLight}}> COACH</span></div>
           <div style={{fontSize:11,color:G.grey,marginTop:4,letterSpacing:3,textTransform:"uppercase"}}>Espace Coach — Bureau</div>
         </div>
-        <Label>Code coach</Label>
-        <input value={code} onChange={e=>{setCode(e.target.value.toUpperCase());setErr(false);}}
-          onKeyDown={e=>e.key==="Enter"&&attempt()} placeholder="COACH2025"
-          style={{width:"100%",background:G.bg3,border:`1.5px solid ${err?G.red:G.border}`,borderRadius:10,padding:"14px 16px",color:G.white,fontSize:18,outline:"none",letterSpacing:4,textAlign:"center",marginBottom:err?8:16}}/>
-        {err&&<div style={{color:G.red,fontSize:12,textAlign:"center",marginBottom:12}}>Code invalide</div>}
-        <Btn onClick={attempt} disabled={!code} style={{width:"100%"}}>Accéder →</Btn>
-      </div>
+        <Label>E-mail</Label>
+        <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr(null);}} autoComplete="username" autoFocus style={field}/>
+        <Label>Mot de passe</Label>
+        <input type="password" value={password} onChange={e=>{setPassword(e.target.value);setErr(null);}} autoComplete="current-password" style={field}/>
+        {err&&<div style={{color:G.red,fontSize:12,textAlign:"center",marginBottom:12}}>
+          {err==="notcoach"?"Ce compte n'a pas accès à l'espace coach":err==="network"?"Connexion impossible — vérifie ton réseau":"E-mail ou mot de passe incorrect"}
+        </div>}
+        <Btn type="submit" disabled={!email.trim()||!password||busy} style={{width:"100%"}}>{busy?"Connexion…":"Accéder →"}</Btn>
+      </form>
     </div>
   );
 }
@@ -2650,7 +2651,7 @@ function ClientsView({clients,setClients,programs,setPrograms,onViewProgram,init
 
   const createClient=()=>{
     if(!newForm.name)return;
-    const nc={id:Date.now(),name:newForm.name,code:genCode(newForm.name),goal:newForm.goal||"Objectif à définir",
+    const nc={id:Date.now(),name:newForm.name,code:genCode(newForm.name,clients),goal:newForm.goal||"Objectif à définir",
       since:new Date().toLocaleDateString("fr-FR",{month:"short",year:"numeric"}),sessions:0,
       color:["#E8C547","#C9A84C","#52C07A","#5285C0","#C05252","#9B59B6"][clients.length%6],
       programs:[],sessionLogs:[],
@@ -3166,12 +3167,37 @@ function ExercisesView({exercises,setExercises}){
 }
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
+// Firebase Auth : les données ne sont chargées qu'une fois le coach connecté (règles Firestore).
 export default function CoachApp(){
-  const [auth,setAuth]=useState(()=>sessionStorage.getItem("wandy_coach_auth")||"login");
+  const [status,setStatus]=useState("loading"); // "loading" | "login" | "coach"
+  useEffect(()=>onAuthStateChanged(auth,async u=>{
+    if(u&&await isCoachUser(u)){setStatus("coach");return;}
+    // Session client (ou compte sans rôle) sur cet appareil : on la ferme pour l'espace coach
+    if(u)await signOut(auth).catch(()=>{});
+    setStatus("login");
+  }),[]);
+
+  if(status==="loading")return <LoadingScreen/>;
+  if(status==="login")return <CoachLogin onLogin={loginCoach}/>;
+  return <CoachMain onLogout={()=>signOut(auth).catch(e=>console.error("[Auth] Déconnexion:",e))}/>;
+}
+
+function LoadingScreen(){
+  return(
+    <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,fontFamily:G.font,color:G.white}}>
+      <style>{css}</style>
+      <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,color:G.goldLight}}>WANDY COACH</div>
+      <div style={{fontSize:13,color:G.grey}}>Connexion à la base de données…</div>
+      <div style={{width:36,height:36,border:`3px solid ${G.border}`,borderTop:`3px solid ${G.goldLight}`,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+    </div>
+  );
+}
+
+function CoachMain({onLogout}){
   const [view,setView]=useState("dashboard");
   const [exercises,setExercises,exReady]=useFirestoreCollection("exercises",SEED_EX);
   const [programs,setPrograms,pgReady]=useFirestoreCollection("programs",SEED_PROGRAMS);
-  const [clients,setClients,clReady]=useFirestoreCollection("clients",SEED_CLIENTS);
+  const [clients,setClients,clReady]=useFirestoreCollection("clients",[]);
   const [foods,setFoods,foodsReady]=useFirestoreCollection("foods",FOODS_DB);
   const dbReady=exReady&&pgReady&&clReady&&foodsReady;
 
@@ -3190,18 +3216,7 @@ export default function CoachApp(){
     if(v!=="program-from-client")setProgramFromClient(null);
   };
 
-  if(!dbReady)return(
-    <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,fontFamily:G.font,color:G.white}}>
-      <style>{css}</style>
-      <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,color:G.goldLight}}>WANDY COACH</div>
-      <div style={{fontSize:13,color:G.grey}}>Connexion à la base de données…</div>
-      <div style={{width:36,height:36,border:`3px solid ${G.border}`,borderTop:`3px solid ${G.goldLight}`,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
-    </div>
-  );
-
-  if(auth==="login")return(
-    <CoachLogin onLogin={code=>{if(code===COACH_CODE){sessionStorage.setItem("wandy_coach_auth","coach");setAuth("coach");return true;}return false;}}/>
-  );
+  if(!dbReady)return <LoadingScreen/>;
 
   return(
     <div style={{display:"flex",minHeight:"100vh",fontFamily:G.font,color:G.white}}>
@@ -3209,7 +3224,7 @@ export default function CoachApp(){
       <Sidebar
         view={view}
         setView={changeView}
-        onLogout={()=>{sessionStorage.removeItem("wandy_coach_auth");setAuth("login");setView("dashboard");}}
+        onLogout={onLogout}
         counts={{clients:clients.length,programs:programs.length,exercises:exercises.length,foods:foods.length}}/>
       <main style={{flex:1,height:"100vh",overflow:"hidden",display:"flex",flexDirection:"column"}}>
         {view==="dashboard"&&(

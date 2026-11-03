@@ -1,668 +1,47 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc } from "./firebase.js";
+import { db, doc, collection, onSnapshot, setDoc, deleteDoc, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginClientWithCode, loginCoach, API_BASE } from "./firebase.js";
 
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
   bg:"#080808",bg2:"#0f0f0f",bg3:"#161616",bg4:"#1c1c1c",
   gold:"#C9A84C",goldLight:"#E8C547",
-  white:"#F5F0E8",grey:"#888",greyDim:"#444",border:"#2a2a2a",
+  white:"#F5F0E8",grey:"#888888",greyDim:"#444444",border:"#2a2a2a",
   red:"#E05252",green:"#52C07A",
   font:"'Barlow',sans-serif",fontD:"'Barlow Condensed',sans-serif",
 };
 const css=`
-  @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@700;800&display=swap');
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  body{background:${G.bg};}
+  html,body{background:${G.bg};color-scheme:dark;overscroll-behavior:none;-webkit-text-size-adjust:100%;}
   input,textarea,select{font-family:${G.font};}
-  button{touch-action:manipulation;}
+  button{touch-action:manipulation;font-family:${G.font};-webkit-user-select:none;user-select:none;}
+  button:not(:disabled):active{transform:scale(.97);opacity:.85;}
+  button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid ${G.gold};outline-offset:2px;}
   ::-webkit-scrollbar{width:0;}
+  .app-h{height:100vh;height:100dvh;}
+  .sb{padding-bottom:env(safe-area-inset-bottom);}
+  .st{padding-top:env(safe-area-inset-top);}
+  /* iOS zoome automatiquement sur les champs < 16px : on force 16px sur écrans tactiles */
+  @media (pointer:coarse){input:not(.big),select,textarea{font-size:16px!important;}}
   @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes pulseGold{0%,100%{box-shadow:0 0 0 0 ${G.gold}44}50%{box-shadow:0 0 0 6px ${G.gold}00}}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important;}}
+  .sx{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
   .fu{animation:fadeUp .3s ease both;}
   .gl::after{content:'';display:block;width:36px;height:3px;background:linear-gradient(90deg,${G.goldLight},${G.gold});border-radius:2px;margin-top:7px;}
 `;
 
-// ─── SEED DATA ────────────────────────────────────────────────────────────────
+// ─── MODÈLE DE DONNÉES ───────────────────────────────────────────────────────
+// Les données de départ (seed) sont gérées uniquement par l’espace coach (CoachApp.jsx).
+// L’app mobile ne fait que lire/écrire les documents existants : elle ne recrée plus
+// les éléments supprimés par le coach.
 // Exercise: { id, name, muscle, equipment, videoUrl, notes }
 // Program exercise slot: { exId, sets, reps, rest, targetLoad:"" }
 // Day: { label, exercises:[] }
 // Week: { label, days:[] }
 // Program: { id, name, category, level, weeks:[] }
 // SessionLog: { id, date, programId, weekIdx, dayIdx, dayLabel, exercises:[{exId, name, sets:[{reps,load}]}], notes, completed }
-
-const SEED_EX = [
-  // ── JAMBES ──
-  {id:1,name:"Squat Barre",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/ultWZbUMPL8",notes:"Dos droit, genoux alignés"},
-  {id:9,name:"Fentes Marchées",muscle:"Jambes",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/D7KaRcUTQeE",notes:"Genou arrière proche du sol"},
-  {id:11,name:"Leg Press",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/IZxyjW7MPJQ",notes:"Pieds écartés largeur épaules"},
-  {id:12,name:"Leg Extension",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/YyvSfVjQeL0",notes:"Extension complète, descente contrôlée"},
-  {id:13,name:"Leg Curl Allongé",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/1Tq3QdYUuHs",notes:"Hanches plaquées sur le banc"},
-  {id:14,name:"Squat Gobelet",muscle:"Jambes",equipment:"Kettlebell",videoUrl:"https://www.youtube.com/embed/MxsFDhcyFyE",notes:"Coudes entre les genoux en bas"},
-  {id:15,name:"Romanian Deadlift",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/JCXUYuzwNrM",notes:"Dos plat, hanches en arrière"},
-  {id:16,name:"Hip Thrust",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/xDmFkJxPzeM",notes:"Extension complète des hanches"},
-  {id:17,name:"Step Up",muscle:"Jambes",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/dQqApCGd5Ss",notes:"Genou à 90° en haut"},
-  {id:18,name:"Hack Squat",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/0tn5K9NlCfo",notes:"Descendre à 90°, genoux alignés"},
-  {id:19,name:"Mollets Debout",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/gwLzBJYoWlI",notes:"Amplitude maximale, pause en haut"},
-  {id:20,name:"Good Morning",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/YA-h3n9L4YU",notes:"Dos plat, légère flexion genoux"},
-  {id:21,name:"Wall Sit",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/y-wV4Venusw",notes:"Cuisses parallèles au sol"},
-  {id:22,name:"Box Jump",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/52r_Ul5k03g",notes:"Réception souple, genoux fléchis"},
-  {id:23,name:"Bulgarian Split Squat",muscle:"Jambes",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/2C-uNgKwPLE",notes:"Pied arrière surélevé, descente verticale"},
-
-  // ── PECTORAUX ──
-  {id:2,name:"Développé Couché",muscle:"Pectoraux",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/rT7DgCr-3pg",notes:"Coudes à 45°, amplitude complète"},
-  {id:24,name:"Développé Couché Haltères",muscle:"Pectoraux",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/VmB1G1K7v94",notes:"Rotation des poignets en haut"},
-  {id:25,name:"Développé Incliné Barre",muscle:"Pectoraux",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/jPLdzuHckI8",notes:"Inclinaison 30-45°, faisceau sup"},
-  {id:26,name:"Développé Incliné Haltères",muscle:"Pectoraux",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/8iPEnn-ltC8",notes:"Coudes légèrement fléchis en haut"},
-  {id:27,name:"Écarté Haltères Plat",muscle:"Pectoraux",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/eozdVDA78K0",notes:"Arc léger, ne pas descendre trop bas"},
-  {id:28,name:"Dips Pectoraux",muscle:"Pectoraux",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/2z8JmcrW-As",notes:"Penché en avant, coudes écartés"},
-  {id:29,name:"Pec Deck Machine",muscle:"Pectoraux",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/Z57CtFmRMxA",notes:"Contraction maximale en centre"},
-  {id:30,name:"Pompes",muscle:"Pectoraux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/IODxDxX7oi4",notes:"Corps gainé, coudes à 45°"},
-  {id:31,name:"Cable Crossover",muscle:"Pectoraux",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/taI4XduLpTk",notes:"Mains se croisent en bas du mouvement"},
-
-  // ── DOS ──
-  {id:3,name:"Tractions",muscle:"Dos",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/eGo4IYlbE5g",notes:"Pleine amplitude, sans élan"},
-  {id:4,name:"Soulevé de Terre",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/op9kVnSso6Q",notes:"Barre proche du corps"},
-  {id:10,name:"Rowing Barre",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/G8l_8chR5BE",notes:"Dos parallèle au sol, coudes hauts"},
-  {id:32,name:"Tirage Vertical Poulie",muscle:"Dos",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/CAwf7n6Luuc",notes:"Coudes vers le bas, omoplate rétractées"},
-  {id:33,name:"Rowing Haltère Unilatéral",muscle:"Dos",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/roCP3W-lfKo",notes:"Dos plat, tirer vers la hanche"},
-  {id:34,name:"Tirage Horizontal Poulie",muscle:"Dos",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/GZbfZ033f74",notes:"Serrer les omoplates en fin de mouvement"},
-  {id:35,name:"Hyperextension",muscle:"Dos",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/ph3pddpKzzw",notes:"Extension sans dépasser la ligne du corps"},
-  {id:36,name:"Tirage Nuque Poulie",muscle:"Dos",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/eSYBCuBDDHo",notes:"Barre derrière la tête, coudes pointés vers le bas"},
-  {id:37,name:"Face Pull",muscle:"Dos",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/rep-qVOkqgk",notes:"Tirer vers le visage, coudes hauts"},
-  {id:38,name:"Shrugs Barre",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/cJRVVxmytaM",notes:"Élévation verticale, pas de rotation"},
-  {id:39,name:"Déficit Deadlift",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/bDFBSNNSjUs",notes:"Sur plateforme surélevée, amplitude accrue"},
-
-  // ── ÉPAULES ──
-  {id:5,name:"Développé Militaire",muscle:"Épaules",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/2yjwXTZQDDI",notes:"Core serré, regard droit"},
-  {id:40,name:"Élévations Latérales",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/3VcKaXpzqRo",notes:"Légère flexion des coudes, montée lente"},
-  {id:41,name:"Développé Arnold",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/6Z15_WdXmVw",notes:"Rotation des poignets pendant le mouvement"},
-  {id:42,name:"Oiseau Haltères",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/Z6n49aQTHFs",notes:"Buste penché, coudes légèrement fléchis"},
-  {id:43,name:"Upright Row",muscle:"Épaules",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/um3SX3fZSqc",notes:"Coudes au-dessus des poignets"},
-  {id:44,name:"Élévations Frontales",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/sOiBHNGlBzU",notes:"Montée jusqu'à hauteur des épaules"},
-  {id:45,name:"Développé Haltères Assis",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/qEwKCR5JCog",notes:"Dos droit contre le banc"},
-  {id:46,name:"Reverse Fly Poulie",muscle:"Épaules",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/ea7TXQMiMnE",notes:"Câbles croisés, bras légèrement fléchis"},
-
-  // ── BICEPS ──
-  {id:6,name:"Curl Haltères",muscle:"Biceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/sAq_ocpRh_I",notes:"Supination en haut du mouvement"},
-  {id:47,name:"Curl Barre",muscle:"Biceps",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/kwG2ipFRgfo",notes:"Coudes fixes le long du corps"},
-  {id:48,name:"Curl Incliné",muscle:"Biceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/soxrZlIl35U",notes:"Bras perpendiculaires au sol, longue portion"},
-  {id:49,name:"Curl Marteau",muscle:"Biceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/TwD-YGVP4Bk",notes:"Poignets neutres, brachial ciblé"},
-  {id:50,name:"Curl Poulie Basse",muscle:"Biceps",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/NFzTWp2qpiE",notes:"Tension constante, coude fixe"},
-  {id:51,name:"Curl Concentration",muscle:"Biceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/0AUGkch3tzc",notes:"Coude contre la cuisse, isolation maximale"},
-  {id:52,name:"Curl Barre EZ",muscle:"Biceps",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/zG2-v6RxOEo",notes:"Prise en supination, moins de stress poignets"},
-  {id:53,name:"Curl Spider",muscle:"Biceps",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/N0bLDTFcRug",notes:"Poitrine contre le banc incliné"},
-
-  // ── TRICEPS ──
-  {id:7,name:"Triceps Poulie",muscle:"Triceps",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/2-LAMcpzODU",notes:"Coudes fixes, extension complète"},
-  {id:54,name:"Dips Triceps",muscle:"Triceps",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/0326dy_-CzM",notes:"Corps droit, coudes le long du corps"},
-  {id:55,name:"Skull Crusher",muscle:"Triceps",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/d_KZxkY_0cM",notes:"Descendre vers le front, coudes fixes"},
-  {id:56,name:"Extension Triceps Haltère",muscle:"Triceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/YbX7Wd8jQ-Q",notes:"Coudes serrés, longue portion ciblée"},
-  {id:57,name:"Kickback Triceps",muscle:"Triceps",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/6SS6K3lAwZ8",notes:"Buste parallèle au sol, extension complète"},
-  {id:58,name:"Close Grip Bench Press",muscle:"Triceps",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/nEF0bv2FW94",notes:"Prise serrée, coudes le long du corps"},
-  {id:59,name:"Triceps Corde Poulie",muscle:"Triceps",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/kiuVA0gs3EI",notes:"Écarter la corde en bas du mouvement"},
-
-  // ── ABDOMINAUX ──
-  {id:8,name:"Gainage Planche",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/pSHjTRCQxIw",notes:"Bassin neutre, respiration continue"},
-  {id:60,name:"Crunch",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/Xyd_fa5zoEU",notes:"Mains derrière la tête, menton décollé"},
-  {id:61,name:"Relevé de Jambes",muscle:"Abdominaux",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/Pr1ieGZ5atk",notes:"Jambes tendues, montée lente"},
-  {id:62,name:"Ab Wheel",muscle:"Abdominaux",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/ZJOG6_5gNUI",notes:"Creuser le ventre, ne pas cambrer"},
-  {id:63,name:"Mountain Climbers",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/nmwgirgXLYM",notes:"Hanches basses, rythme rapide"},
-  {id:64,name:"Russian Twist",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/wkD8rjkodUI",notes:"Pieds décollés, rotation complète"},
-  {id:65,name:"Crunch Poulie Haute",muscle:"Abdominaux",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/AV5PGc8E4-4",notes:"Contracte les abdos vers les genoux"},
-  {id:66,name:"Planche Latérale",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/K2gOjwfj-lA",notes:"Hanches alignées, corps en planche"},
-  {id:67,name:"V-Sit",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/7UGzOJrKSqw",notes:"Corps en V, abdos contractés"},
-  {id:68,name:"Dead Bug",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/4XLEnwUr1d8",notes:"Dos plaqué au sol, mouvement lent"},
-
-  // ── CROSSFIT / FONCTIONNEL ──
-  {id:69,name:"Burpees",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/dZgVxmf6jkA",notes:"Réception souple, saut vertical complet"},
-  {id:70,name:"Kettlebell Swing",muscle:"Dos",equipment:"Kettlebell",videoUrl:"https://www.youtube.com/embed/YSxHifyI6s8",notes:"Propulsion des hanches, bras passifs"},
-  {id:71,name:"Thruster",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/L219ltL15zk",notes:"Squat + développé en un mouvement fluide"},
-  {id:72,name:"Wall Ball",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/fpUD0mcFp_0",notes:"Squat profond, lancer haut sur le mur"},
-  {id:73,name:"Box Jump",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/52r_Xl5k03g",notes:"Réception souple, extension complète"},
-  {id:74,name:"Clean & Jerk",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/oxYIjfNBsZ0",notes:"Puissance des hanches, saisie rapide"},
-  {id:75,name:"Snatch",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/9xQp2sldyts",notes:"Prise large, extension explosive"},
-  {id:76,name:"Power Clean",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/KjGvwQl8tis",notes:"Triple extension, amortissement actif"},
-  {id:77,name:"Toes to Bar",muscle:"Abdominaux",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/6dHvNBDMQY4",notes:"Élan contrôlé, toucher la barre avec les pieds"},
-  {id:78,name:"Double Under",muscle:"Jambes",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/82rd87EMTP4",notes:"Poignets souples, saut régulier"},
-  {id:79,name:"Rope Climb",muscle:"Dos",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/mMJpFrJEnc4",notes:"Prise alternée, jambes en appui"},
-  {id:80,name:"Push Press",muscle:"Épaules",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/iaBVSJm78ko",notes:"Légère flexion genoux, extension explosive"},
-  {id:81,name:"Rowing Ergomètre",muscle:"Dos",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/zBjCMFGkYOU",notes:"Jambes, hanches, bras dans l'ordre"},
-  {id:82,name:"Devil Press",muscle:"Pectoraux",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/aHPfuFmhiGE",notes:"Burpee + Snatch haltères combinés"},
-  {id:83,name:"Sandbag Carry",muscle:"Dos",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/iqKLjNBFjcA",notes:"Sac sur l'épaule, pas réguliers"},
-  {id:84,name:"GHD Sit-Up",muscle:"Abdominaux",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/1pbZ8mX3hDY",notes:"Amplitude complète, contrôle la descente"},
-  {id:85,name:"L-Sit",muscle:"Abdominaux",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/IUZJoSP66HI",notes:"Jambes parallèles au sol, bras tendus"},
-  {id:86,name:"Muscle Up",muscle:"Dos",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/bN5_V1OKlSY",notes:"Transition rapide traction → dips"},
-  {id:87,name:"Handstand Push-Up",muscle:"Épaules",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/4qeNMjmQNfM",notes:"Mains à largeur épaules, descente contrôlée"},
-  {id:88,name:"Ring Dips",muscle:"Pectoraux",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/MMnIVymOEXo",notes:"Anneaux stables, coudes le long du corps"},
-  {id:89,name:"Pistol Squat",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/vq5-vdgJc0I",notes:"Jambe tendue devant, descente lente"},
-  {id:90,name:"Farmers Walk",muscle:"Dos",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/Fkzk_RqlYig",notes:"Dos droit, pas réguliers et rapides"},
-  {id:91,name:"Battle Rope",muscle:"Épaules",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/dNE4ZCsHDoo",notes:"Genoux fléchis, ondes régulières"},
-  {id:92,name:"Turkish Get-Up",muscle:"Épaules",equipment:"Kettlebell",videoUrl:"https://www.youtube.com/embed/0bWRPC49-KI",notes:"Bras tendu, regard sur la cloche"},
-  {id:93,name:"Sumo Deadlift High Pull",muscle:"Dos",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/g5kLayl1UQI",notes:"Prise étroite, extension + tirage"},
-  {id:94,name:"Push-Up Ring",muscle:"Pectoraux",equipment:"Aucun",videoUrl:"https://www.youtube.com/embed/7ueVPPVoqRQ",notes:"Anneaux instables, gainage maximal"},
-  {id:95,name:"Sled Push",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/bGIoSc1Cj8I",notes:"Corps incliné, pousser depuis les hanches"},
-  {id:96,name:"Air Squat",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/C_VtOYc6j5c",notes:"Genoux dans l'axe, talons au sol"},
-  {id:97,name:"Kettlebell Clean",muscle:"Dos",equipment:"Kettlebell",videoUrl:"https://www.youtube.com/embed/0Z0oBUPL0P8",notes:"Rotation du poignet en haut"},
-  {id:98,name:"Planche Push-Up",muscle:"Pectoraux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/IODxDxX7oi4",notes:"Position basse, corps gainé"},
-  {id:99,name:"Overhead Squat",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/RD_vUnqwqqI",notes:"Barre au-dessus de la tête, dos droit"},
-  {id:100,name:"Atlas Stone",muscle:"Dos",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/p4cn0TQOAPA",notes:"Soulever en serrant la pierre contre le corps"},
-  {id:101,name:"Bear Crawl",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/gBEAzBMdQ-8",notes:"Genoux à 5cm du sol, dos plat"},
-  {id:102,name:"Dumbbell Snatch",muscle:"Épaules",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/yhh_R2Nt_08",notes:"Extension explosive, verrouillage en haut"},
-  {id:103,name:"Inverted Row",muscle:"Dos",equipment:"Barre fixe",videoUrl:"https://www.youtube.com/embed/LK3E-40LRHE",notes:"Corps rigide, tirer le sternum vers la barre"},
-  {id:104,name:"Broad Jump",muscle:"Jambes",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/WGHBLObUUH0",notes:"Saut en longueur, réception souple"},
-  {id:105,name:"Ski Erg",muscle:"Dos",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/FY-N3pqBBMI",notes:"Traction vers le bas, hanches en arrière"},
-
-  // ── PROGRAMME GROSSESSE ──
-  {id:106,name:"Deadlift Sumo Barre",muscle:"Jambes",equipment:"Barre",videoUrl:"https://www.youtube.com/embed/WH1oJERG8eI",notes:"Stance large, pieds 45°, dos plat, poussée du sol — barre proche du corps"},
-  {id:107,name:"Cable Pull-Through",muscle:"Jambes",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/mNwlpNhQXrk",notes:"Câble bas entre les jambes, charnière hanche pure, fessiers contractés en haut"},
-  {id:108,name:"Pallof Press Câble",muscle:"Abdominaux",equipment:"Poulie",videoUrl:"https://www.youtube.com/embed/AH_QZLm_0-s",notes:"Debout, unilatéral, hauteur poitrine — résister à la rotation"},
-  {id:109,name:"Bird Dog Lestés",muscle:"Abdominaux",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/wiFNA3sqjCA",notes:"2 s de pause en extension complète, dos plat, genoux à 5 cm du sol"},
-  {id:110,name:"Activation Fessiers Élastique",muscle:"Jambes",equipment:"Élastique",videoUrl:"https://www.youtube.com/embed/Y20ABnLDHhQ",notes:"Clamshell, hip abduction, monster walk — 15 reps par mouvement"},
-  {id:111,name:"Band Pull Apart",muscle:"Épaules",equipment:"Élastique",videoUrl:"https://www.youtube.com/embed/HFv0e5JqULM",notes:"Bras tendus devant, écarter l'élastique à hauteur des épaules, omoplate rétractées"},
-  {id:112,name:"RDL Unilatéral Haltère",muscle:"Jambes",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/qH1lLrkXNRE",notes:"Vitesse lente, équilibre, dos plat — jambe d'appui légèrement fléchie"},
-  {id:113,name:"Planche sur Genoux",muscle:"Abdominaux",equipment:"Poids du corps",videoUrl:"https://www.youtube.com/embed/DHBMtGlXnmk",notes:"Gainage actif, stopper si doming abdominal visible"},
-  {id:114,name:"Vélo Stationnaire",muscle:"Jambes",equipment:"Machine",videoUrl:"https://www.youtube.com/embed/JqaCVNKRWF4",notes:"FC < 140 bpm, cadence modérée, dos droit"},
-
-  // ── AVANT-BRAS ──
-  {id:115,name:"Curl Poignet Haltères",muscle:"Avant-bras",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/rUDDhR3DNeY",notes:"Avant-bras posés sur les cuisses, flexion complète du poignet, tempo lent"},
-  {id:116,name:"Curl Poignet Inversé",muscle:"Avant-bras",equipment:"Haltères",videoUrl:"https://www.youtube.com/embed/a4NaRXbzOOE",notes:"Prise pronation, extension du poignet vers le haut, avant-bras fixés sur les cuisses"},
-
-  // ── POWERLIFTING ──
-  {id:117,name:"Squat Pause",muscle:"Jambes",equipment:"Barre",videoUrl:"",notes:"Pause 2-3s en bas, genoux alignés, sortie explosive — garder les abdos braqués"},
-  {id:118,name:"Front Squat",muscle:"Jambes",equipment:"Barre",videoUrl:"",notes:"Coudes hauts, dos vertical, barre sur les deltoïdes antérieurs — descente lente"},
-];
-
-
-const mkEx = (exId,sets,reps,rest,load="")=>({exId,sets,reps,rest,targetLoad:load});
-const SEED_PROGRAMS = [
-  {id:1,name:"Full Body 3j/sem",category:"Force",level:"Intermédiaire",weeks:[
-    {label:"Semaine 1 — Découverte",days:[
-      {label:"Séance A",exercises:[mkEx(1,4,"8","90s","60kg"),mkEx(2,4,"8","90s","50kg"),mkEx(8,3,"45s","45s")]},
-      {label:"Séance B",exercises:[mkEx(4,4,"5","2min","80kg"),mkEx(3,3,"Max","60s"),mkEx(10,3,"10","75s","40kg")]},
-      {label:"Séance C",exercises:[mkEx(9,3,"12","60s"),mkEx(5,4,"8","90s","30kg"),mkEx(6,3,"12","60s")]},
-    ]},
-    {label:"Semaine 2 — Progression",days:[
-      {label:"Séance A",exercises:[mkEx(1,4,"8","90s","65kg"),mkEx(2,4,"8","90s","55kg"),mkEx(8,3,"50s","45s")]},
-      {label:"Séance B",exercises:[mkEx(4,4,"5","2min","85kg"),mkEx(3,3,"Max","60s"),mkEx(10,3,"10","75s","45kg")]},
-      {label:"Séance C",exercises:[mkEx(9,3,"12","60s"),mkEx(5,4,"8","90s","35kg"),mkEx(6,3,"12","60s")]},
-    ]},
-    {label:"Semaine 3 — Intensification",days:[
-      {label:"Séance A",exercises:[mkEx(1,5,"5","2min","70kg"),mkEx(2,5,"5","2min","60kg"),mkEx(8,4,"45s","45s")]},
-      {label:"Séance B",exercises:[mkEx(4,5,"3","2min","90kg"),mkEx(3,4,"Max","60s"),mkEx(10,4,"8","90s","50kg")]},
-      {label:"Séance C",exercises:[mkEx(9,4,"10","60s"),mkEx(5,5,"5","2min","40kg"),mkEx(6,4,"10","60s")]},
-    ]},
-  ]},
-  {id:2,name:"PPL 6j/sem",category:"PPL",level:"Avancé",weeks:[
-    {label:"Semaine 1",days:[
-      {label:"Push",exercises:[mkEx(2,5,"5","2min","80kg"),mkEx(5,4,"8","90s","40kg"),mkEx(7,4,"12","60s")]},
-      {label:"Pull",exercises:[mkEx(4,4,"5","2min","100kg"),mkEx(3,4,"8","75s"),mkEx(10,3,"10","60s","50kg")]},
-      {label:"Legs",exercises:[mkEx(1,5,"5","2min","100kg"),mkEx(9,4,"10","90s"),mkEx(8,3,"60s","45s")]},
-      {label:"Push 2",exercises:[mkEx(2,4,"10","75s","70kg"),mkEx(5,3,"12","60s","35kg"),mkEx(7,3,"15","45s")]},
-      {label:"Pull 2",exercises:[mkEx(3,3,"Max","60s"),mkEx(6,4,"12","60s"),mkEx(10,3,"12","60s","45kg")]},
-      {label:"Legs 2",exercises:[mkEx(1,4,"8","90s","90kg"),mkEx(9,3,"12","60s")]},
-    ]},
-  ]},
-
-  // ── PROGRAMME GROSSESSE (sans hip thrust) ──────────────────────────────────
-  {id:3,name:"Programme Grossesse",category:"Prénatal",level:"Tous niveaux",weeks:[
-
-    // ── T1 — Semaines 1 à 12 ──────────────────────────────────────────────
-    {label:"T1 — S1·S12",days:[
-      {label:"Lundi · Bas du corps",exercises:[
-        mkEx(110,2,"15","45s",""),
-        mkEx(1,4,"8","90s","73% 1RM"),
-        mkEx(106,4,"8","90s","70% 1RM"),
-        mkEx(107,4,"12","60s",""),
-        mkEx(11,3,"12","75s","65% 1RM"),
-        mkEx(108,3,"12/côté","60s",""),
-        mkEx(109,3,"10/côté","45s","2kg"),
-      ]},
-      {label:"Mardi · Cardio & Traction",exercises:[
-        mkEx(81,1,"20 min","","FC < 140 bpm"),
-        mkEx(3,4,"5","90s",""),
-        mkEx(32,4,"10","75s","70% 1RM"),
-        mkEx(34,3,"10","60s","67% 1RM"),
-        mkEx(37,3,"15","45s",""),
-        mkEx(52,3,"10","60s",""),
-        mkEx(90,3,"25 m","90s",""),
-      ]},
-      {label:"Jeudi · Haut du corps",exercises:[
-        mkEx(111,2,"15","45s",""),
-        mkEx(5,4,"8","90s","70% 1RM"),
-        mkEx(26,3,"10","75s","67% 1RM"),
-        mkEx(3,4,"5","90s",""),
-        mkEx(33,4,"8/côté","75s","67% 1RM"),
-        mkEx(34,3,"10","60s","65% 1RM"),
-        mkEx(40,3,"15","45s",""),
-        mkEx(59,3,"12","45s",""),
-        mkEx(48,3,"10","60s",""),
-      ]},
-      {label:"Vendredi · Full Body",exercises:[
-        mkEx(114,1,"15 min","","FC < 140 bpm"),
-        mkEx(1,3,"10","75s","65% 1RM"),
-        mkEx(106,3,"8","75s","62% 1RM"),
-        mkEx(103,3,"10","60s",""),
-        mkEx(45,3,"10","60s","65% 1RM"),
-        mkEx(112,3,"8/côté","60s",""),
-        mkEx(113,3,"40s","45s",""),
-      ]},
-    ]},
-
-    // ── T2 — Semaines 13 à 26 ─────────────────────────────────────────────
-    {label:"T2 — S13·S26",days:[
-      {label:"Lundi · Bas du corps",exercises:[
-        mkEx(110,2,"15","45s",""),
-        mkEx(1,4,"8","90s","70% 1RM"),
-        mkEx(106,4,"8","90s","67% 1RM"),
-        mkEx(107,4,"12","60s",""),
-        mkEx(11,3,"12","75s","62% 1RM"),
-        mkEx(108,3,"12/côté","60s",""),
-        mkEx(109,3,"10/côté","45s","2kg"),
-      ]},
-      {label:"Mardi · Cardio & Traction",exercises:[
-        mkEx(81,1,"20 min","","FC < 140 bpm"),
-        mkEx(3,4,"5","90s",""),
-        mkEx(32,4,"10","75s","65% 1RM"),
-        mkEx(34,3,"10","60s","62% 1RM"),
-        mkEx(37,3,"15","45s",""),
-        mkEx(52,3,"10","60s",""),
-        mkEx(90,3,"25 m","90s",""),
-      ]},
-      {label:"Jeudi · Haut du corps",exercises:[
-        mkEx(111,2,"15","45s",""),
-        mkEx(5,4,"8","90s","65% 1RM"),
-        mkEx(26,3,"10","75s","67% 1RM"),
-        mkEx(3,4,"5","90s",""),
-        mkEx(33,4,"8/côté","75s","62% 1RM"),
-        mkEx(34,3,"10","60s","60% 1RM"),
-        mkEx(40,3,"15","45s",""),
-        mkEx(59,3,"12","45s",""),
-        mkEx(48,3,"10","60s",""),
-      ]},
-      {label:"Vendredi · Full Body",exercises:[
-        mkEx(114,1,"15 min","","FC < 140 bpm"),
-        mkEx(1,3,"10","75s","62% 1RM"),
-        mkEx(106,3,"8","75s","59% 1RM"),
-        mkEx(103,3,"10","60s",""),
-        mkEx(45,3,"10","60s","65% 1RM"),
-        mkEx(112,3,"8/côté","60s",""),
-        mkEx(113,3,"40s","45s",""),
-      ]},
-    ]},
-
-    // ── T3 — Semaines 27 à 40 ─────────────────────────────────────────────
-    {label:"T3 — S27·S40",days:[
-      {label:"Lundi · Bas du corps",exercises:[
-        mkEx(110,2,"15","45s",""),
-        mkEx(1,3,"8","90s","65% 1RM"),
-        mkEx(106,4,"8","90s","62% 1RM"),
-        mkEx(107,4,"12","60s",""),
-        mkEx(11,3,"12","75s","60% 1RM"),
-        mkEx(108,3,"12/côté","60s",""),
-        mkEx(109,3,"10/côté","45s","2kg"),
-      ]},
-      {label:"Mardi · Cardio & Traction",exercises:[
-        mkEx(81,1,"20 min","","FC < 140 bpm"),
-        mkEx(3,4,"5","90s",""),
-        mkEx(32,4,"10","75s","65% 1RM"),
-        mkEx(34,3,"10","60s","62% 1RM"),
-        mkEx(37,3,"15","45s",""),
-        mkEx(52,3,"10","60s",""),
-        mkEx(90,3,"25 m","90s",""),
-      ]},
-      {label:"Jeudi · Haut du corps",exercises:[
-        mkEx(111,2,"15","45s",""),
-        mkEx(5,4,"8","90s","62% 1RM"),
-        mkEx(26,3,"10","75s","67% 1RM"),
-        mkEx(3,4,"5","90s",""),
-        mkEx(33,4,"8/côté","75s","62% 1RM"),
-        mkEx(34,3,"10","60s","60% 1RM"),
-        mkEx(40,3,"15","45s",""),
-        mkEx(59,3,"12","45s",""),
-        mkEx(48,3,"10","60s",""),
-      ]},
-      {label:"Vendredi · Full Body",exercises:[
-        mkEx(114,1,"15 min","","FC < 140 bpm"),
-        mkEx(1,3,"10","75s","58% 1RM"),
-        mkEx(106,3,"8","75s","55% 1RM"),
-        mkEx(103,3,"10","60s",""),
-        mkEx(45,3,"10","60s","65% 1RM"),
-        mkEx(112,3,"8/côté","60s",""),
-        mkEx(113,3,"40s","45s",""),
-      ]},
-    ]},
-
-  ]},
-
-  // ── PROGRAMME MAISON — BARRE DE TRACTION + HALTÈRES ───────────────────────
-  {id:4,name:"Force Maison 3j/sem",category:"Force",level:"Débutant / Intermédiaire",weeks:[
-
-    {label:"Semaine 1 — Découverte",days:[
-      {label:"Séance A — Bas + Poussé",exercises:[
-        mkEx(14,4,"12","90s"),
-        mkEx(9,3,"12","75s"),
-        mkEx(24,3,"12","90s"),
-        mkEx(45,3,"12","75s"),
-        mkEx(54,3,"Max","75s"),
-        mkEx(115,3,"20","45s"),
-        mkEx(8,3,"40s","45s"),
-      ]},
-      {label:"Séance B — Dos + Avant-bras",exercises:[
-        mkEx(3,4,"Max","2min"),
-        mkEx(33,3,"12","75s"),
-        mkEx(15,3,"12","90s"),
-        mkEx(49,3,"15","60s"),
-        mkEx(116,3,"20","45s"),
-        mkEx(90,3,"30s","75s"),
-        mkEx(61,3,"15","60s"),
-      ]},
-      {label:"Séance C — Full Body + Épaules",exercises:[
-        mkEx(23,3,"10","90s"),
-        mkEx(103,4,"12","75s"),
-        mkEx(41,3,"12","75s"),
-        mkEx(42,3,"15","60s"),
-        mkEx(56,3,"15","60s"),
-        mkEx(6,3,"12","60s"),
-        mkEx(66,3,"40s","45s"),
-      ]},
-    ]},
-
-    {label:"Semaine 2 — Construction",days:[
-      {label:"Séance A — Bas + Poussé",exercises:[
-        mkEx(14,4,"12","90s"),
-        mkEx(9,3,"14","75s"),
-        mkEx(24,4,"10","90s"),
-        mkEx(45,3,"12","75s"),
-        mkEx(54,3,"Max","75s"),
-        mkEx(115,3,"20","45s"),
-        mkEx(8,3,"45s","45s"),
-      ]},
-      {label:"Séance B — Dos + Avant-bras",exercises:[
-        mkEx(3,4,"Max","2min"),
-        mkEx(33,4,"12","75s"),
-        mkEx(15,4,"10","90s"),
-        mkEx(49,3,"15","60s"),
-        mkEx(116,3,"20","45s"),
-        mkEx(90,4,"30s","75s"),
-        mkEx(61,3,"15","60s"),
-      ]},
-      {label:"Séance C — Full Body + Épaules",exercises:[
-        mkEx(23,4,"10","90s"),
-        mkEx(103,4,"12","75s"),
-        mkEx(41,3,"12","75s"),
-        mkEx(42,3,"15","60s"),
-        mkEx(56,3,"15","60s"),
-        mkEx(6,3,"12","60s"),
-        mkEx(66,3,"45s","45s"),
-      ]},
-    ]},
-
-    {label:"Semaine 3 — Intensification",days:[
-      {label:"Séance A — Bas + Poussé",exercises:[
-        mkEx(14,4,"10","90s"),
-        mkEx(9,4,"12","75s"),
-        mkEx(24,4,"10","90s"),
-        mkEx(45,4,"10","75s"),
-        mkEx(54,4,"Max","90s"),
-        mkEx(115,4,"20","45s"),
-        mkEx(8,4,"45s","45s"),
-      ]},
-      {label:"Séance B — Dos + Avant-bras",exercises:[
-        mkEx(3,5,"Max","2min"),
-        mkEx(33,4,"12","75s"),
-        mkEx(15,4,"10","90s"),
-        mkEx(49,4,"12","60s"),
-        mkEx(116,4,"20","45s"),
-        mkEx(90,4,"35s","75s"),
-        mkEx(61,4,"15","60s"),
-      ]},
-      {label:"Séance C — Full Body + Épaules",exercises:[
-        mkEx(23,4,"10","90s"),
-        mkEx(103,4,"12","75s"),
-        mkEx(41,4,"10","75s"),
-        mkEx(42,4,"15","60s"),
-        mkEx(56,4,"12","60s"),
-        mkEx(6,4,"10","60s"),
-        mkEx(66,4,"45s","45s"),
-      ]},
-    ]},
-
-    {label:"Semaine 4 — Peak",days:[
-      {label:"Séance A — Bas + Poussé",exercises:[
-        mkEx(14,5,"8","2min"),
-        mkEx(9,4,"12","75s"),
-        mkEx(24,4,"8","2min"),
-        mkEx(45,4,"10","90s"),
-        mkEx(54,4,"Max","90s"),
-        mkEx(115,4,"20","45s"),
-        mkEx(8,4,"50s","45s"),
-      ]},
-      {label:"Séance B — Dos + Avant-bras",exercises:[
-        mkEx(3,5,"Max","2min"),
-        mkEx(33,4,"10","90s"),
-        mkEx(15,4,"8","2min"),
-        mkEx(49,4,"12","60s"),
-        mkEx(116,4,"20","45s"),
-        mkEx(90,4,"40s","75s"),
-        mkEx(61,4,"15","60s"),
-      ]},
-      {label:"Séance C — Full Body + Épaules",exercises:[
-        mkEx(23,4,"8","2min"),
-        mkEx(103,4,"10","90s"),
-        mkEx(41,4,"10","90s"),
-        mkEx(42,4,"15","60s"),
-        mkEx(56,4,"12","60s"),
-        mkEx(6,4,"10","60s"),
-        mkEx(66,4,"50s","45s"),
-      ]},
-    ]},
-
-  ]},
-
-  // ── PROGRAMME FORCE SBD — 6 SEMAINES ─────────────────────────────────────
-  {id:5,name:"Force SBD 6 semaines",category:"Powerlifting",level:"Avancé",weeks:[
-
-    // S1 — Accumulation @75%
-    {label:"S1 — Accumulation @75%",days:[
-      {label:"Lower 1 — Squat",exercises:[
-        mkEx(1,1,"5","3min","75% 1RM"),
-        mkEx(1,4,"5","3min","70% 1RM"),
-        mkEx(117,3,"5","2min","65% 1RM"),
-        mkEx(11,3,"10","90s"),
-        mkEx(13,3,"12","75s"),
-      ]},
-      {label:"Upper 1 — Bench lourd",exercises:[
-        mkEx(2,1,"5","3min","75% 1RM"),
-        mkEx(2,4,"5","3min","70% 1RM"),
-        mkEx(58,3,"6","2min","70% 1RM"),
-        mkEx(10,4,"8","90s"),
-        mkEx(56,3,"12","75s"),
-      ]},
-      {label:"Lower 2 — Deadlift",exercises:[
-        mkEx(4,1,"4","3min","75% 1RM"),
-        mkEx(4,3,"4","3min","70% 1RM"),
-        mkEx(118,3,"6","2min","65% 1RM"),
-        mkEx(16,3,"10","90s"),
-        mkEx(13,3,"12","75s"),
-      ]},
-      {label:"Upper 2 — Bench volume",exercises:[
-        mkEx(2,4,"6","2min","70% 1RM"),
-        mkEx(26,3,"10","90s"),
-        mkEx(32,4,"10","75s"),
-        mkEx(6,3,"12","75s"),
-      ]},
-    ]},
-
-    // S2 — Accumulation @77.5%
-    {label:"S2 — Accumulation @77.5%",days:[
-      {label:"Lower 1 — Squat",exercises:[
-        mkEx(1,1,"5","3min","77.5% 1RM"),
-        mkEx(1,4,"5","3min","72.5% 1RM"),
-        mkEx(117,3,"5","2min","65% 1RM"),
-        mkEx(11,3,"10","90s"),
-        mkEx(13,3,"12","75s"),
-      ]},
-      {label:"Upper 1 — Bench lourd",exercises:[
-        mkEx(2,1,"5","3min","77.5% 1RM"),
-        mkEx(2,4,"5","3min","72.5% 1RM"),
-        mkEx(58,3,"6","2min","72.5% 1RM"),
-        mkEx(10,4,"8","90s"),
-        mkEx(56,3,"12","75s"),
-      ]},
-      {label:"Lower 2 — Deadlift",exercises:[
-        mkEx(4,1,"4","3min","77.5% 1RM"),
-        mkEx(4,3,"4","3min","72.5% 1RM"),
-        mkEx(118,3,"6","2min","65% 1RM"),
-        mkEx(16,3,"10","90s"),
-        mkEx(13,3,"12","75s"),
-      ]},
-      {label:"Upper 2 — Bench volume",exercises:[
-        mkEx(2,4,"6","2min","72.5% 1RM"),
-        mkEx(26,3,"10","90s"),
-        mkEx(32,4,"10","75s"),
-        mkEx(6,3,"12","75s"),
-      ]},
-    ]},
-
-    // S3 — Accumulation max @80%
-    {label:"S3 — Accumulation max @80%",days:[
-      {label:"Lower 1 — Squat",exercises:[
-        mkEx(1,1,"5","3min","80% 1RM"),
-        mkEx(1,4,"5","3min","75% 1RM"),
-        mkEx(117,3,"5","2min","67.5% 1RM"),
-        mkEx(11,3,"10","90s"),
-        mkEx(13,3,"12","75s"),
-      ]},
-      {label:"Upper 1 — Bench lourd",exercises:[
-        mkEx(2,1,"5","3min","80% 1RM"),
-        mkEx(2,4,"5","3min","75% 1RM"),
-        mkEx(58,3,"6","2min","75% 1RM"),
-        mkEx(10,4,"8","90s"),
-        mkEx(56,3,"12","75s"),
-      ]},
-      {label:"Lower 2 — Deadlift",exercises:[
-        mkEx(4,1,"4","3min","80% 1RM"),
-        mkEx(4,3,"4","3min","75% 1RM"),
-        mkEx(118,3,"6","2min","67.5% 1RM"),
-        mkEx(16,3,"10","90s"),
-        mkEx(13,3,"12","75s"),
-      ]},
-      {label:"Upper 2 — Bench volume",exercises:[
-        mkEx(2,4,"6","2min","75% 1RM"),
-        mkEx(26,3,"10","90s"),
-        mkEx(32,4,"10","75s"),
-        mkEx(6,3,"12","75s"),
-      ]},
-    ]},
-
-    // S4 — Intensification @82.5%
-    {label:"S4 — Intensification @82.5%",days:[
-      {label:"Lower 1 — Squat",exercises:[
-        mkEx(1,1,"4","4min","82.5% 1RM"),
-        mkEx(1,4,"4","3min","77.5% 1RM"),
-        mkEx(117,3,"4","2min","70% 1RM"),
-        mkEx(11,3,"8","90s"),
-        mkEx(13,3,"10","75s"),
-      ]},
-      {label:"Upper 1 — Bench lourd",exercises:[
-        mkEx(2,1,"4","4min","82.5% 1RM"),
-        mkEx(2,4,"4","3min","77.5% 1RM"),
-        mkEx(58,3,"4","2min","77.5% 1RM"),
-        mkEx(10,4,"6","90s"),
-        mkEx(56,3,"10","75s"),
-      ]},
-      {label:"Lower 2 — Deadlift",exercises:[
-        mkEx(4,1,"3","4min","82.5% 1RM"),
-        mkEx(4,3,"3","3min","77.5% 1RM"),
-        mkEx(118,3,"5","2min","70% 1RM"),
-        mkEx(16,3,"8","90s"),
-        mkEx(13,3,"10","75s"),
-      ]},
-      {label:"Upper 2 — Bench volume",exercises:[
-        mkEx(2,4,"5","2min","77.5% 1RM"),
-        mkEx(26,3,"8","90s"),
-        mkEx(32,4,"8","75s"),
-        mkEx(6,3,"10","75s"),
-      ]},
-    ]},
-
-    // S5 — Pic de contrainte @85%
-    {label:"S5 — Pic de contrainte @85%",days:[
-      {label:"Lower 1 — Squat",exercises:[
-        mkEx(1,1,"3","4min","85% 1RM"),
-        mkEx(1,3,"4","3min","80% 1RM"),
-        mkEx(117,2,"3","2min","72.5% 1RM"),
-        mkEx(11,3,"8","90s"),
-        mkEx(13,2,"10","75s"),
-      ]},
-      {label:"Upper 1 — Bench lourd",exercises:[
-        mkEx(2,1,"3","4min","85% 1RM"),
-        mkEx(2,3,"4","3min","80% 1RM"),
-        mkEx(58,3,"3","2min","80% 1RM"),
-        mkEx(10,3,"6","90s"),
-        mkEx(56,2,"10","75s"),
-      ]},
-      {label:"Lower 2 — Deadlift",exercises:[
-        mkEx(4,1,"3","4min","85% 1RM"),
-        mkEx(4,2,"3","3min","80% 1RM"),
-        mkEx(118,2,"4","2min","72.5% 1RM"),
-        mkEx(16,3,"8","90s"),
-        mkEx(13,2,"10","75s"),
-      ]},
-      {label:"Upper 2 — Bench volume",exercises:[
-        mkEx(2,3,"5","2min","80% 1RM"),
-        mkEx(26,3,"8","90s"),
-        mkEx(32,3,"8","75s"),
-        mkEx(6,3,"10","75s"),
-      ]},
-    ]},
-
-    // S6 — Deload actif @70% (RPE ~6)
-    {label:"S6 — Deload actif @70%",days:[
-      {label:"Lower 1 — Squat",exercises:[
-        mkEx(1,3,"3","3min","70% 1RM"),
-        mkEx(11,2,"12","90s"),
-        mkEx(13,2,"12","75s"),
-      ]},
-      {label:"Upper 1 — Bench",exercises:[
-        mkEx(2,3,"3","3min","70% 1RM"),
-        mkEx(58,2,"6","90s","70% 1RM"),
-        mkEx(10,2,"10","75s"),
-      ]},
-      {label:"Lower 2 — Deadlift",exercises:[
-        mkEx(4,3,"3","3min","70% 1RM"),
-        mkEx(16,2,"12","90s"),
-        mkEx(13,2,"12","75s"),
-      ]},
-      {label:"Upper 2 — Bench",exercises:[
-        mkEx(2,3,"3","3min","70% 1RM"),
-        mkEx(26,2,"12","90s"),
-        mkEx(32,2,"12","75s"),
-      ]},
-    ]},
-
-  ]},
-];
-
-const SEED_CLIENTS = [
-  {id:1,name:"Sophie Martin",code:"SOPH2025",goal:"Perte de poids",since:"Jan 2025",sessions:4,color:G.goldLight,programs:[1],
-   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",items:[]},{id:"snack1",label:"Collation matin",items:[]},{id:"lunch",label:"Déjeuner",items:[]},{id:"snack2",label:"Collation après-midi",items:[]},{id:"dinner",label:"Dîner",items:[]},{id:"other",label:"Autre / Suppléments",items:[]}]},
-   nutrition:{calories:1800,proteins:130,carbs:180,fats:60,notes:"Éviter le gluten."},
-   sessionLogs:[
-     {id:"log1",date:"2025-03-10",programId:1,weekIdx:0,dayIdx:0,dayLabel:"Séance A",completed:true,notes:"Bonne séance",
-      exercises:[
-        {exId:1,name:"Squat Barre",sets:[{reps:"8",load:"55kg"},{reps:"8",load:"55kg"},{reps:"8",load:"60kg"},{reps:"7",load:"60kg"}]},
-        {exId:2,name:"Développé Couché",sets:[{reps:"8",load:"45kg"},{reps:"8",load:"50kg"},{reps:"7",load:"50kg"},{reps:"6",load:"50kg"}]},
-        {exId:8,name:"Gainage Planche",sets:[{reps:"45s",load:""},{reps:"45s",load:""},{reps:"40s",load:""}]},
-      ]},
-   ]},
-  {id:2,name:"Thomas Dubois",code:"THOM2025",goal:"Prise de masse",since:"Fév 2025",sessions:2,color:G.gold,programs:[2],
-   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",items:[]},{id:"snack1",label:"Collation matin",items:[]},{id:"lunch",label:"Déjeuner",items:[]},{id:"snack2",label:"Collation après-midi",items:[]},{id:"dinner",label:"Dîner",items:[]},{id:"other",label:"Autre / Suppléments",items:[]}]},
-   nutrition:{calories:3200,proteins:200,carbs:380,fats:90,notes:"Shake post-workout."},sessionLogs:[]},
-  {id:3,name:"Camille Roy",code:"CAMI2025",goal:"Tonification",since:"Mar 2025",sessions:0,color:"#8a7040",programs:[],
-   mealPlan:{meals:[{id:"breakfast",label:"Petit déjeuner",items:[]},{id:"snack1",label:"Collation matin",items:[]},{id:"lunch",label:"Déjeuner",items:[]},{id:"snack2",label:"Collation après-midi",items:[]},{id:"dinner",label:"Dîner",items:[]},{id:"other",label:"Autre / Suppléments",items:[]}]},
-   nutrition:{calories:2000,proteins:150,carbs:220,fats:65,notes:""},sessionLogs:[]},
-];
 
 const MUSCLES=["Tous","Jambes","Pectoraux","Dos","Épaules","Biceps","Triceps","Abdominaux","Avant-bras"];
 const EQUIPS=["Aucun","Barre","Haltères","Poulie","Barre fixe","Machine","Élastique","Kettlebell","Poids du corps"];
@@ -675,7 +54,15 @@ const MEAL_SLOTS=[
   {id:"other",icon:"💊",label:"Autre / Suppléments"},
 ];
 const emptyMealPlan=()=>({meals:MEAL_SLOTS.map(s=>({id:s.id,label:s.label,items:[]}))});
-const genCode=n=>n.split(" ")[0].toUpperCase().slice(0,4)+new Date().getFullYear();
+// Code d’accès client : 4 premières lettres du prénom (sans accents) + année.
+// Si le code existe déjà (deux « Thomas »…), on ajoute un suffixe pour qu’il reste unique.
+const genCode=(n,existing=[])=>{
+  const base=(n||"").trim().split(/\s+/)[0].normalize("NFD").replace(/[̀-ͯ]/g,"").toUpperCase().replace(/[^A-Z]/g,"").slice(0,4)||"CLIE";
+  const used=new Set(existing.map(c=>(c.code||"").toUpperCase()));
+  let code=base+new Date().getFullYear(),i=2;
+  while(used.has(code)) code=base+new Date().getFullYear()+"-"+i++;
+  return code;
+};
 
 // ─── BASE DE DONNÉES ALIMENTAIRE ──────────────────────────────────────────────
 // unit:"g" → valeurs pour 100g | unit:"portion" → valeurs pour 1 portion
@@ -767,7 +154,7 @@ const PageH=({title,subtitle,action})=>(
   </div>
 );
 const Empty=({text})=>(
-  <div style={{textAlign:"center",padding:"32px 20px",color:G.greyDim,fontSize:14}}><div style={{fontSize:28,marginBottom:8}}>○</div>{text}</div>
+  <div style={{textAlign:"center",padding:"32px 20px",color:G.grey,fontSize:14}}><div style={{fontSize:28,marginBottom:8}}>○</div>{text}</div>
 );
 const Modal=({onClose,title,children})=>(
   <div style={{position:"fixed",inset:0,background:"#000000dd",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
@@ -1081,48 +468,33 @@ function FoodsManager({foods,setFoods,go}){
   );
 }
 
-// ─── MAIN ─────────────────────────────────────────────────────────────────────
+// ─── STOCKAGE LOCAL ───────────────────────────────────────────────────────────
+// Tolérant aux erreurs (navigation privée, stockage bloqué…) : l'app fonctionne quand même.
+const store={
+  get:k=>{try{return localStorage.getItem(k);}catch{return null;}},
+  set:(k,v)=>{try{localStorage.setItem(k,v);}catch{/* stockage indisponible */}},
+  del:k=>{try{localStorage.removeItem(k);}catch{/* stockage indisponible */}},
+};
+const CLIENT_KEY="wandy_client";
+
 // ─── PERSISTANCE FIRESTORE ────────────────────────────────────────────────────
-function useFirestoreCollection(collectionName, seed){
+function useFirestoreCollection(collectionName){
   const [data, setDataLocal] = useState([]);
   const [ready, setReady] = useState(false);
 
   useEffect(()=>{
-    const colRef = collection(db, collectionName);
-
-    // Listener temps réel — uniquement pour les mises à jour
-    const unsub = onSnapshot(colRef,
+    // Listener temps réel : le cache local répond tout de suite, le serveur met à jour ensuite
+    return onSnapshot(collection(db, collectionName),
       snap => {
         setDataLocal(snap.docs.map(d => d.data()));
         setReady(true);
       },
       err => {
         console.error(`[Firebase] Erreur listener ${collectionName}:`, err);
-        setDataLocal(seed);
         setReady(true);
       }
     );
-
-    // Seeding : ajoute uniquement les éléments manquants (par id) sans écraser l'existant
-    getDocs(colRef).then(snap => {
-      const existingIds = new Set(snap.docs.map(d => d.id));
-      const missing = seed.filter(item => !existingIds.has(String(item.id)));
-      if(missing.length > 0){
-        const BATCH_SIZE = 499;
-        const batches = [];
-        for(let i = 0; i < missing.length; i += BATCH_SIZE){
-          const b = writeBatch(db);
-          missing.slice(i, i + BATCH_SIZE).forEach(item =>
-            b.set(doc(db, collectionName, String(item.id)), item)
-          );
-          batches.push(b.commit());
-        }
-        return Promise.all(batches);
-      }
-    }).catch(err => console.error(`[Firebase] Erreur seed ${collectionName}:`, err));
-
-    return unsub;
-  }, [collectionName]); // eslint-disable-line
+  }, [collectionName]);
 
   const setData = (updater) => {
     setDataLocal(prev => {
@@ -1152,53 +524,153 @@ function useFirestoreCollection(collectionName, seed){
   return [data, setData, ready];
 }
 
+// Un seul document en temps réel : le client ne télécharge que sa propre fiche
+function useFirestoreDoc(collectionName, id){
+  const [state,setState]=useState({data:null,ready:false,missing:false});
+  useEffect(()=>{
+    if(!id) return;
+    return onSnapshot(doc(db,collectionName,String(id)),
+      snap=>{
+        if(snap.exists()) setState({data:snap.data(),ready:true,missing:false});
+        // Absent du cache local ≠ supprimé : on attend la réponse du serveur avant de conclure
+        else if(!snap.metadata.fromCache) setState({data:null,ready:true,missing:true});
+      },
+      err=>{
+        console.error(`[Firebase] Erreur document ${collectionName}/${id}:`,err);
+        // Refus des règles : fiche supprimée, code changé ou session invalide → accès retiré
+        if(err.code==="permission-denied") setState({data:null,ready:true,missing:true});
+        else setState(s=>({...s,ready:true}));
+      }
+    );
+  },[collectionName,id]);
+  return state;
+}
+
+// ─── MAIN ─────────────────────────────────────────────────────────────────────
+const readStoredClient=()=>{
+  try{
+    const c=JSON.parse(store.get(CLIENT_KEY)||"null");
+    if(c?.id&&c?.code) return {id:String(c.id),code:c.code};
+  }catch{/* valeur corrompue : retour à l'écran de connexion */}
+  return null;
+};
+
 export default function App(){
-  const [auth,setAuth]=useState("login");
-  const [exercises,setExercises,exReady]=useFirestoreCollection("exercises", SEED_EX);
-  const [programs,setPrograms,pgReady]=useFirestoreCollection("programs", SEED_PROGRAMS);
-  const [clients,setClients,clReady]=useFirestoreCollection("clients", SEED_CLIENTS);
-  const [foods,setFoods,foodsReady]=useFirestoreCollection("foods", FOODS_DB);
+  // Session Firebase Auth : undefined tant qu'elle est en cours de restauration
+  const [user,setUser]=useState(undefined);
+  const [role,setRole]=useState(null); // "client" | "coach" | null
+  const [client,setClient]=useState(readStoredClient);
+  const [migrationDone,setMigrationDone]=useState(false);
+
+  useEffect(()=>onAuthStateChanged(auth,async u=>{
+    if(!u){setRole(null);setUser(null);return;}
+    const r=u.uid.startsWith("client_")?"client":(await isCoachUser(u))?"coach":null;
+    if(!r){signOut(auth).catch(()=>{});return;}
+    setRole(r);
+    setUser(u);
+  }),[]);
+
+  // Anciennes installations : code mémorisé mais pas encore de session Auth → reconnexion silencieuse
+  const migrationTried=useRef(false);
+  useEffect(()=>{
+    if(user!==null||!client||migrationTried.current) return;
+    migrationTried.current=true;
+    loginClientWithCode(client.code).then(r=>{
+      if(r.status==="invalid"){store.del(CLIENT_KEY);setClient(null);}
+      setMigrationDone(true);
+    });
+  },[user,client]);
+
+  // Retourne "ok" | "invalid" | "locked" | "network"
+  const login=async raw=>{
+    const code=raw.trim().toUpperCase();
+    if(!code) return "invalid";
+    const r=await loginClientWithCode(code);
+    if(r.status!=="ok") return r.status;
+    const c={id:String(r.clientId),code};
+    store.set(CLIENT_KEY,JSON.stringify(c));
+    setClient(c);
+    return "ok";
+  };
+  // Retourne "ok" | "invalid" | "notcoach" | "network"
+  // (sur ordinateur, la redirection vers /coach se fait au rendu une fois la session ouverte)
+  const coachLogin=(email,password)=>loginCoach(email,password);
+  const logout=()=>{
+    store.del(CLIENT_KEY);
+    setClient(null);
+    signOut(auth).catch(e=>console.error("[Auth] Déconnexion:",e));
+  };
+
+  const migrating=user===null&&!!client&&!migrationDone;
+  if(user===undefined||migrating) return <Shell css={css}><Loading label="Connexion…"/></Shell>;
+  if(user&&role==="client"){
+    // L'identité vient du token ; le code mémorisé sert à détecter un changement de code par le coach
+    const id=user.uid.slice("client_".length);
+    const code=client?.id===id?client.code:null;
+    return (
+      <Shell css={css}>
+        <ClientRoot key={id} clientId={id} code={code} onLogout={logout}/>
+      </Shell>
+    );
+  }
+  if(user&&role==="coach"){
+    // Ordinateur : espace coach complet (même session Auth)
+    if(!IS_PHONE){window.location.replace("/coach");return <Shell css={css}><Loading label="Ouverture de l'espace coach…"/></Shell>;}
+    return (
+      <Shell css={css}>
+        <CoachMobile onLogout={logout}/>
+      </Shell>
+    );
+  }
+  return <LoginScreen onLogin={login} onCoachLogin={coachLogin}/>;
+}
+
+// ─── CLIENT : chargement des données ──────────────────────────────────────────
+function ClientRoot({clientId,code,onLogout}){
+  const [exercises,,exReady]=useFirestoreCollection("exercises");
+  const [programs,,pgReady]=useFirestoreCollection("programs");
+  const [foods,,foodsReady]=useFirestoreCollection("foods");
+  const {data:client,ready:clReady,missing}=useFirestoreDoc("clients",clientId);
+
+  // Accès retiré par le coach (fiche supprimée ou code modifié) → retour à la connexion
+  const revoked=missing||(!!client&&!!code&&String(client.code||"").toUpperCase()!==code);
+  useEffect(()=>{if(revoked)onLogout();},[revoked]); // eslint-disable-line
+
+  const clientRef=useRef(client);
+  useEffect(()=>{clientRef.current=client;},[client]);
+  const updateClient=useCallback(fn=>{
+    const cur=clientRef.current;
+    if(!cur) return;
+    const next=fn(cur);
+    clientRef.current=next;
+    // Hors ligne : Firestore garde l'écriture en file d'attente et la synchronise au retour du réseau
+    setDoc(doc(db,"clients",String(clientId)),next).catch(e=>console.error("[Firebase] Sauvegarde client:",e));
+  },[clientId]);
+
+  if(!exReady||!pgReady||!foodsReady||!clReady||!client||revoked) return <Loading label="Chargement de ton espace…"/>;
+  return <ClientPortal client={client} clientId={clientId} updateClient={updateClient} programs={programs} exercises={exercises} foods={foods} onLogout={onLogout}/>;
+}
+
+// ─── COACH (version téléphone) ────────────────────────────────────────────────
+function CoachMobile({onLogout}){
+  const [exercises,setExercises,exReady]=useFirestoreCollection("exercises");
+  const [programs,setPrograms,pgReady]=useFirestoreCollection("programs");
+  const [clients,setClients,clReady]=useFirestoreCollection("clients");
+  const [foods,setFoods,foodsReady]=useFirestoreCollection("foods");
   const dbReady = exReady && pgReady && clReady && foodsReady;
 
-  const [currentClient,setCurrentClient]=useState(null);
   const [coachView,setCoachView]=useState("dashboard");
   const [selClient,setSelClient]=useState(null);
   const [selProgram,setSelProgram]=useState(null);
   const [selClientForProgram,setSelClientForProgram]=useState(null);
-  const [defaultMealTemplate,setDefaultMealTemplate]=useState(()=>{try{const t=localStorage.getItem('defaultMealTemplate');return t?JSON.parse(t):null;}catch{return null;}});
-  const saveDefaultTemplate=(mp)=>{setDefaultMealTemplate(mp);localStorage.setItem('defaultMealTemplate',JSON.stringify(mp));};
+  const [defaultMealTemplate,setDefaultMealTemplate]=useState(()=>{try{const t=store.get('defaultMealTemplate');return t?JSON.parse(t):null;}catch{return null;}});
+  const saveDefaultTemplate=(mp)=>{setDefaultMealTemplate(mp);store.set('defaultMealTemplate',JSON.stringify(mp));};
 
-  const login=code=>{
-    if(code.toUpperCase()==="COACH2025"){
-      if(!IS_MOBILE){sessionStorage.setItem("wandy_coach_auth","coach");window.location.href="/coach";return true;}
-      setAuth("coach");return true;
-    }
-    const c=clients.find(c=>c.code===code.toUpperCase());
-    if(c){setCurrentClient(c);setAuth("client");return true;}
-    return false;
-  };
-  const logout=()=>{setAuth("login");setCurrentClient(null);setCoachView("dashboard");};
-
-  if(!dbReady) return (
-    <Shell css={css}>
-      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
-        <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,color:G.goldLight,letterSpacing:-1}}>MON COACHING</div>
-        <div style={{fontSize:13,color:G.grey}}>Connexion à la base de données…</div>
-        <div style={{width:40,height:40,border:`3px solid ${G.border}`,borderTop:`3px solid ${G.goldLight}`,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      </div>
-    </Shell>
-  );
-  if(auth==="login") return <LoginScreen onLogin={login}/>;
-  if(auth==="client") return (
-    <Shell css={css}>
-      <ClientPortal client={currentClient} clients={clients} setClients={setClients} programs={programs} exercises={exercises} foods={foods} onLogout={logout}/>
-    </Shell>
-  );
+  if(!dbReady) return <Loading label="Connexion à la base de données…"/>;
   return (
-    <Shell css={css}>
+    <>
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
-        {coachView==="dashboard"&&<Dashboard clients={clients} programs={programs} exercises={exercises} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}} selP={p=>{setSelProgram(p);setCoachView("program-detail");}} onLogout={logout}/>}
+        {coachView==="dashboard"&&<Dashboard clients={clients} programs={programs} exercises={exercises} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}} selP={p=>{setSelProgram(p);setCoachView("program-detail");}} onLogout={onLogout}/>}
         {coachView==="clients"&&<ClientsList clients={clients} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}}/>}
         {coachView==="client-detail"&&selClient&&<ClientDetail client={clients.find(c=>c.id===selClient.id)||selClient} clients={clients} setClients={setClients} setPrograms={setPrograms} setSel={setSelClient} programs={programs} exercises={exercises} foods={foods} go={setCoachView} onSetAsTemplate={saveDefaultTemplate} selP={p=>{setSelProgram(p);setSelClientForProgram(clients.find(c=>c.id===selClient.id)||selClient);setCoachView("program-detail");}}/>}
         {coachView==="new-client"&&<NewClient setClients={setClients} go={setCoachView} defaultMealTemplate={defaultMealTemplate}/>}
@@ -1212,38 +684,85 @@ export default function App(){
         {coachView==="foods"&&<FoodsManager foods={foods} setFoods={setFoods} go={setCoachView}/>}
       </div>
       <CoachNav view={coachView} setView={setCoachView}/>
-    </Shell>
+    </>
   );
 }
 
-const IS_MOBILE = window.innerWidth <= 480;
-const APP_H = IS_MOBILE ? `${window.innerHeight}px` : "100vh";
-const Shell=({children,css:c})=>(
-  <div style={{background:IS_MOBILE?"#080808":"#111",height:IS_MOBILE?APP_H:"100vh",minHeight:IS_MOBILE?undefined:"100vh",display:"flex",justifyContent:"center",alignItems:IS_MOBILE?"flex-start":"center",overflow:"hidden"}}>
+// ─── ÉCRAN DE CHARGEMENT ──────────────────────────────────────────────────────
+function Loading({label="Chargement…"}){
+  const [slow,setSlow]=useState(false);
+  useEffect(()=>{const t=setTimeout(()=>setSlow(true),10000);return()=>clearTimeout(t);},[]);
+  return(
+    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,padding:24,textAlign:"center"}}>
+      <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,color:G.white,letterSpacing:-1}}>WANDY<span style={{color:G.goldLight}}> COACH</span></div>
+      <div style={{fontSize:13,color:G.grey}}>{label}</div>
+      <div style={{width:40,height:40,border:`3px solid ${G.border}`,borderTop:`3px solid ${G.goldLight}`,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+      {slow&&(
+        <div style={{marginTop:8,maxWidth:280}} className="fu">
+          <div style={{fontSize:12,color:G.grey,marginBottom:12,lineHeight:1.5}}>La connexion semble lente. Vérifie ton réseau (Wi-Fi ou données mobiles).</div>
+          <Btn variant="outline" onClick={()=>window.location.reload()}>Réessayer</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DÉTECTION APPAREIL ───────────────────────────────────────────────────────
+// Ordinateur avec souris → aperçu dans un cadre de téléphone.
+// Téléphones et tablettes (portrait comme paysage) → plein écran.
+const IS_DESKTOP = !!window.matchMedia?.("(hover:hover) and (pointer:fine)").matches && window.innerWidth>700;
+const IS_MOBILE = !IS_DESKTOP;
+// Téléphone : le coach reste sur la version mobile ; sinon il est redirigé vers l'espace coach complet
+const IS_PHONE = Math.min(window.screen.width, window.screen.height) < 600;
+const PHONE_FRAME={width:390,height:"min(844px, calc(100vh - 48px))",borderRadius:44,background:"#1a1a1a",boxShadow:"0 40px 120px #000a, inset 0 0 0 1px #333",padding:"12px",flexShrink:0,position:"relative"};
+const PHONE_NOTCH={position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",width:120,height:30,background:"#1a1a1a",borderRadius:"0 0 18px 18px",zIndex:10};
+
+const Shell=({children,css:c})=>IS_DESKTOP?(
+  <div style={{background:"#111",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:"center"}}>
     <style>{c}</style>
-    {!IS_MOBILE&&<div style={{width:390,height:844,borderRadius:44,background:"#1a1a1a",boxShadow:"0 40px 120px #000a, inset 0 0 0 1px #333",padding:"12px",flexShrink:0,position:"relative"}}>
-      <div style={{position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",width:120,height:30,background:"#1a1a1a",borderRadius:"0 0 18px 18px",zIndex:10}}/>
-      <div style={{width:"100%",height:"100%",borderRadius:34,overflow:"hidden",display:"flex",flexDirection:"column",background:G.bg}}>
+    <div style={PHONE_FRAME}>
+      <div style={PHONE_NOTCH}/>
+      <div style={{width:"100%",height:"100%",borderRadius:34,overflow:"hidden",display:"flex",flexDirection:"column",background:G.bg,fontFamily:G.font,color:G.white}}>
         <div style={{height:44,flexShrink:0,display:"flex",alignItems:"flex-end",justifyContent:"center",paddingBottom:6}}>
           <div style={{fontSize:11,color:"#888",fontFamily:G.font,letterSpacing:.5}}>{new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}</div>
         </div>
-        <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column"}}>
+        <div style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",position:"relative"}}>
           {children}
         </div>
       </div>
-    </div>}
-    {IS_MOBILE&&<div style={{background:G.bg,width:"100vw",height:APP_H,display:"flex",flexDirection:"column",fontFamily:G.font,color:G.white,overflow:"hidden"}}>
-      {children}
-    </div>}
+    </div>
+  </div>
+):(
+  <div className="app-h st sx" style={{background:G.bg,width:"100%",display:"flex",flexDirection:"column",fontFamily:G.font,color:G.white,overflow:"hidden",position:"relative"}}>
+    <style>{c}</style>
+    {children}
   </div>
 );
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
-function LoginScreen({onLogin}){
+function LoginScreen({onLogin,onCoachLogin}){
+  const [mode,setMode]=useState("client"); // "client" (code) | "coach" (e-mail + mot de passe)
   const [code,setCode]=useState("");
-  const [err,setErr]=useState(false);
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [err,setErr]=useState(null); // null | "invalid" | "locked" | "network" | "notcoach"
+  const [busy,setBusy]=useState(false);
   const [focused,setFocused]=useState(false);
-  const attempt=()=>{if(!onLogin(code)){setErr(true);setTimeout(()=>setErr(false),2500);}};
+  const active=(mode==="client"?!!code.trim():!!email.trim()&&!!password)&&!busy;
+  const attempt=async e=>{
+    e?.preventDefault();
+    if(!active) return;
+    setBusy(true);
+    const r=mode==="client"?await onLogin(code):await onCoachLogin(email,password);
+    setBusy(false);
+    if(r!=="ok") setErr(r);
+  };
+  const switchMode=m=>{setMode(m);setErr(null);};
+  const coachInput={
+    width:"100%",background:G.bg3,border:`1.5px solid ${err?G.red:G.border}`,
+    borderRadius:12,padding:"14px 16px",color:G.white,fontSize:16,outline:"none",
+    fontFamily:G.font,boxSizing:"border-box",marginBottom:10
+  };
 
   const loginContent=(
     <div style={{width:"100%",display:"flex",flexDirection:"column",alignItems:"center",gap:0}}>
@@ -1257,32 +776,40 @@ function LoginScreen({onLogin}){
           margin:"0 auto 20px",fontSize:34,
           boxShadow:`0 8px 32px ${G.gold}22`
         }}>⚡</div>
-        <div style={{fontFamily:G.fontD,fontSize:38,fontWeight:900,color:G.white,letterSpacing:-1.5,lineHeight:1}}>
+        <div style={{fontFamily:G.fontD,fontSize:38,fontWeight:800,color:G.white,letterSpacing:-1.5,lineHeight:1}}>
           WANDY<span style={{color:G.goldLight}}> COACH</span>
         </div>
-        <div style={{fontSize:11,color:G.greyDim,marginTop:8,letterSpacing:4,textTransform:"uppercase"}}>
+        <div style={{fontSize:11,color:G.grey,marginTop:8,letterSpacing:4,textTransform:"uppercase"}}>
           Espace personnel
         </div>
       </div>
 
       {/* Card */}
-      <div style={{
+      <form onSubmit={attempt} style={{
         width:"100%",background:G.bg2,
         borderRadius:20,padding:"28px 24px",
         border:`1px solid ${G.border}`,
         boxShadow:"0 20px 60px #0008"
       }}>
-        <div style={{fontSize:12,color:G.grey,letterSpacing:.5,marginBottom:10,fontWeight:600,textTransform:"uppercase"}}>
+        {mode==="client"?(<>
+        <label htmlFor="access-code" style={{display:"block",fontSize:12,color:G.grey,letterSpacing:.5,marginBottom:10,fontWeight:600,textTransform:"uppercase"}}>
           Code d'accès
-        </div>
+        </label>
         <input
+          id="access-code"
+          name="code"
+          className="big"
           value={code}
-          onChange={e=>{setCode(e.target.value.toUpperCase());setErr(false);}}
-          onKeyDown={e=>e.key==="Enter"&&attempt()}
+          onChange={e=>{setCode(e.target.value.toUpperCase());setErr(null);}}
           onFocus={()=>setFocused(true)}
           onBlur={()=>setFocused(false)}
           placeholder="XXXX0000"
           autoCapitalize="characters"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="go"
+          aria-invalid={!!err}
           style={{
             width:"100%",background:G.bg3,
             border:`1.5px solid ${err?G.red:focused?G.gold:G.border}`,
@@ -1292,31 +819,52 @@ function LoginScreen({onLogin}){
             fontWeight:700,fontFamily:G.font,
             transition:"border .15s",boxSizing:"border-box"
           }}/>
-        <div style={{height:10,display:"flex",alignItems:"center",justifyContent:"center",marginTop:6,marginBottom:4}}>
-          {err&&<div style={{color:G.red,fontSize:12}}>Code invalide — contacte ton coach.</div>}
+        </>):(<>
+        <label htmlFor="coach-email" style={{display:"block",fontSize:12,color:G.grey,letterSpacing:.5,marginBottom:10,fontWeight:600,textTransform:"uppercase"}}>
+          Espace coach
+        </label>
+        <input id="coach-email" name="email" type="email" value={email} placeholder="E-mail"
+          autoComplete="username" autoCapitalize="none" spellCheck={false}
+          onChange={e=>{setEmail(e.target.value);setErr(null);}} style={coachInput}/>
+        <input id="coach-password" name="password" type="password" value={password} placeholder="Mot de passe"
+          autoComplete="current-password" enterKeyHint="go"
+          onChange={e=>{setPassword(e.target.value);setErr(null);}} style={coachInput}/>
+        </>)}
+        <div role="alert" style={{minHeight:26,display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center",margin:"6px 0 4px"}}>
+          {err==="invalid"&&mode==="client"&&<div style={{color:G.red,fontSize:12}}>Code invalide — vérifie-le ou contacte ton coach.</div>}
+          {err==="invalid"&&mode==="coach"&&<div style={{color:G.red,fontSize:12}}>E-mail ou mot de passe incorrect.</div>}
+          {err==="notcoach"&&<div style={{color:G.red,fontSize:12}}>Ce compte n'a pas accès à l'espace coach.</div>}
+          {err==="locked"&&<div style={{color:G.red,fontSize:12}}>Trop d'essais — réessaie dans 15 minutes.</div>}
+          {err==="network"&&<div style={{color:G.red,fontSize:12}}>Connexion impossible — vérifie ton réseau et réessaie.</div>}
         </div>
         <button
-          onClick={attempt}
-          disabled={!code}
+          type="submit"
+          disabled={!active}
           style={{
             width:"100%",padding:"15px 0",
-            background:code?`linear-gradient(135deg,${G.gold},${G.goldLight})`:"#2a2a2a",
+            background:active?`linear-gradient(135deg,${G.gold},${G.goldLight})`:"#2a2a2a",
             border:"none",borderRadius:12,
-            color:code?G.bg:"#555",
+            color:active?G.bg:"#666",
             fontSize:15,fontWeight:800,
             fontFamily:G.font,letterSpacing:.5,
-            cursor:code?"pointer":"default",
+            cursor:active?"pointer":"default",
             transition:"background .2s, color .2s",
-            boxShadow:code?`0 4px 20px ${G.gold}44`:"none"
+            boxShadow:active?`0 4px 20px ${G.gold}44`:"none"
           }}>
-          Accéder →
+          {busy?"Connexion…":"Accéder →"}
         </button>
-      </div>
+      </form>
 
-      <div style={{marginTop:28,fontSize:11,color:G.greyDim,textAlign:"center",lineHeight:1.6}}>
-        Tu n'as pas de code ?<br/>
-        <span style={{color:G.grey}}>Contacte ton coach pour en obtenir un.</span>
-      </div>
+      {mode==="client"&&(
+        <div style={{marginTop:28,fontSize:12,color:G.grey,textAlign:"center",lineHeight:1.6}}>
+          Tu n'as pas de code ?<br/>
+          <span style={{color:G.white+"bb"}}>Contacte ton coach pour en obtenir un.</span>
+        </div>
+      )}
+      <button type="button" onClick={()=>switchMode(mode==="client"?"coach":"client")}
+        style={{marginTop:mode==="client"?16:28,background:"none",border:"none",color:G.greyDim,fontSize:12,cursor:"pointer",fontFamily:G.font,textDecoration:"underline",padding:8}}>
+        {mode==="client"?"Accès coach":"← Connexion client"}
+      </button>
     </div>
   );
 
@@ -1330,27 +878,27 @@ function LoginScreen({onLogin}){
       </div>
 
       {/* Simulation téléphone (desktop) */}
-      {!IS_MOBILE&&(
-        <div style={{width:390,height:844,borderRadius:44,background:"#1a1a1a",boxShadow:"0 40px 120px #000a, inset 0 0 0 1px #333",padding:"12px",flexShrink:0,position:"relative",zIndex:1}}>
-          <div style={{position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",width:120,height:30,background:"#1a1a1a",borderRadius:"0 0 18px 18px",zIndex:10}}/>
-          <div style={{width:"100%",height:"100%",borderRadius:34,overflow:"hidden",background:G.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:28}}>
+      {IS_DESKTOP&&(
+        <div style={{...PHONE_FRAME,zIndex:1}}>
+          <div style={PHONE_NOTCH}/>
+          <div style={{width:"100%",height:"100%",borderRadius:34,overflow:"auto",background:G.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:28}}>
             {loginContent}
           </div>
         </div>
       )}
 
-      {/* Mobile réel */}
+      {/* Mobile / tablette */}
       {IS_MOBILE&&(
         <div style={{
           position:"fixed",inset:0,
           background:G.bg,
           display:"flex",flexDirection:"column",
-          alignItems:"center",justifyContent:"center",
-          padding:"32px 24px",
+          alignItems:"center",
+          padding:"calc(32px + env(safe-area-inset-top)) 24px calc(32px + env(safe-area-inset-bottom))",
           overflowY:"auto",
           zIndex:1
         }}>
-          <div style={{width:"100%",maxWidth:400}}>
+          <div style={{width:"100%",maxWidth:400,margin:"auto 0"}}>
             {loginContent}
           </div>
         </div>
@@ -1358,6 +906,7 @@ function LoginScreen({onLogin}){
     </div>
   );
 }
+
 
 // ─── COACH NAV ────────────────────────────────────────────────────────────────
 function CoachNav({view,setView}){
@@ -1631,7 +1180,7 @@ function NewClient({setClients,go,defaultMealTemplate}){
   const [form,setForm]=useState({name:"",goal:"",color:G.goldLight});
   const colors=[G.goldLight,G.gold,"#C9A84C","#8a7040","#a08030"];
   const create=()=>{
-    setClients(p=>[...p,{...form,id:Date.now(),code:genCode(form.name),since:new Date().toLocaleDateString("fr-FR",{month:"short",year:"numeric"}),sessions:0,programs:[],mealPlan:defaultMealTemplate||emptyMealPlan(),nutrition:{calories:2000,proteins:150,carbs:200,fats:65,notes:""},sessionLogs:[]}]);
+    setClients(p=>[...p,{...form,id:Date.now(),code:genCode(form.name,p),since:new Date().toLocaleDateString("fr-FR",{month:"short",year:"numeric"}),sessions:0,programs:[],mealPlan:defaultMealTemplate||emptyMealPlan(),nutrition:{calories:2000,proteins:150,carbs:200,fats:65,notes:""},sessionLogs:[]}]);
     go("clients");
   };
   return(
@@ -2175,81 +1724,250 @@ function NewEx({setExercises,go}){
   );
 }
 
-// ─── CLIENT PORTAL ────────────────────────────────────────────────────────────
-function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foods=FOODS_DB}){
-  const live=clients.find(c=>c.id===client.id)||client;
-  const [tab,setTab]=useState("home");
-  const [view,setView]=useState("list"); // list | week-detail | session-active | session-done
-  const [selProg,setSelProg]=useState(null);
-  const [selWeek,setSelWeek]=useState(null);
-  const [selDay,setSelDay]=useState(null);
-  // activeSession: { progId, weekIdx, dayIdx, dayLabel, exercises:[{exId,name,sets:[{reps,load,done}]}] }
-  const [session,setSession]=useState(null);
+// ─── CLIENT : OUTILS ──────────────────────────────────────────────────────────
+const pad2=n=>String(n).padStart(2,"0");
+// Date locale (et non UTC) : une séance terminée à 0h30 reste datée du bon jour
+const todayISO=()=>{const d=new Date();return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;};
+const fmtDate=iso=>{
+  if(!iso||!/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso||"";
+  const [y,m,d]=iso.slice(0,10).split("-").map(Number);
+  const opts={weekday:"short",day:"numeric",month:"short"};
+  if(y!==new Date().getFullYear()) opts.year="numeric";
+  return new Date(y,m-1,d).toLocaleDateString("fr-FR",opts);
+};
+const fmtClock=s=>`${Math.floor(s/60)}:${pad2(s%60)}`;
+const fmtDuration=min=>min<60?`${min} min`:`${Math.floor(min/60)}h${pad2(min%60)}`;
 
-  const assigned=programs.filter(p=>live.programs.includes(p.id));
+// Accepte aussi les liens YouTube classiques (watch?v=, youtu.be, shorts) et force la lecture intégrée sur iPhone
+const toEmbed=url=>{
+  if(!url) return "";
+  const m=String(url).match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/);
+  return m?`https://www.youtube.com/embed/${m[1]}?playsinline=1&rel=0`:url;
+};
+
+// Charges en % (1RM, FCmax, VMA) calculées à partir des tests du client — même logique que l'espace coach
+const LOAD_REFS=[
+  {id:"1rm_squat",label:"1RM Squat",testKey:"rm_squat",unit:"kg"},
+  {id:"1rm_bench",label:"1RM Bench",testKey:"rm_bench",unit:"kg"},
+  {id:"1rm_sdt",label:"1RM SDT",testKey:"rm_sdt",unit:"kg"},
+  {id:"fcmax",label:"FCmax",testKey:"fcmax",unit:"bpm"},
+  {id:"vma",label:"VMA",testKey:"vma",unit:"km/h"},
+];
+// Retourne {text, load, unit} : texte de l'objectif + valeur à pré-remplir dans le champ charge
+const slotTarget=(pe,tests)=>{
+  const raw=String(pe.targetLoad??"").trim();
+  const ref=LOAD_REFS.find(r=>r.id===pe.loadRef);
+  if(ref){
+    const pct=parseFloat(raw), base=parseFloat(tests?.[ref.testKey]);
+    if(pct&&base){
+      const v=Math.round(pct/100*base);
+      return {text:`${v} ${ref.unit} (${pct}% ${ref.label})`,load:ref.unit==="kg"?String(v):"",unit:ref.unit==="kg"?"kg":null};
+    }
+    return {text:raw?`${raw}% ${ref.label}`:"",load:"",unit:null};
+  }
+  if(!raw) return {text:"",load:"",unit:null};
+  const m=raw.match(/^(\d+(?:[.,]\d+)?)\s*(kg)?$/i);
+  return m?{text:`${m[1]} kg`,load:m[1],unit:"kg"}:{text:raw,load:"",unit:null};
+};
+
+const LOAD_UNITS=["kg","élastique","cal","m","km","reps"];
+// "60" + kg → "60kg" (format historique) ; une valeur libre reste telle quelle
+const withUnit=(load,unit)=>{
+  const v=String(load??"").trim();
+  if(!v) return "";
+  if(/^\d+([.,]\d+)?$/.test(v)) return unit==="kg"||!unit?`${v}kg`:`${v} ${unit}`;
+  return v;
+};
+
+// Les saisies manuelles du coach peuvent avoir weekIdx/dayIdx vides : on les ignore
+const sameIdx=(a,b)=>a!==""&&a!=null&&Number(a)===b;
+const findDoneLog=(logs,progId,wi,di)=>logs.find(l=>l.completed&&String(l.programId)===String(progId)&&sameIdx(l.weekIdx,wi)&&sameIdx(l.dayIdx,di));
+const progProgress=(prog,logs)=>{
+  let total=0,done=0;
+  (prog.weeks||[]).forEach((w,wi)=>(w.days||[]).forEach((_,di)=>{total++;if(findDoneLog(logs,prog.id,wi,di))done++;}));
+  return {total,done};
+};
+const nextSessionOf=(prog,logs)=>{
+  for(let wi=0;wi<(prog.weeks||[]).length;wi++){
+    const w=prog.weeks[wi];
+    for(let di=0;di<(w.days||[]).length;di++){
+      if(!findDoneLog(logs,prog.id,wi,di)) return {prog,wi,di,week:w,day:w.days[di]};
+    }
+  }
+  return null;
+};
+const isSameSession=(s,progId,wi,di)=>!!s&&String(s.progId)===String(progId)&&s.weekIdx===wi&&s.dayIdx===di;
+
+const ProgressBar=({value,max,color=G.goldLight,height=5})=>(
+  <div style={{background:G.bg4,borderRadius:99,height,overflow:"hidden"}}>
+    <div style={{width:`${max?Math.min(100,value/max*100):0}%`,height:"100%",background:`linear-gradient(90deg,${G.gold},${color})`,borderRadius:99,transition:"width .4s"}}/>
+  </div>
+);
+
+// ─── CLIENT PORTAL ────────────────────────────────────────────────────────────
+function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLogout,foods=FOODS_DB}){
+  const logs=live.sessionLogs||[];
+  const nutrition=live.nutrition||{};
+  const SESSION_KEY=`wandy_session_${clientId}`;
+
+  // Séance en cours : sauvegardée sur le téléphone pour survivre à un rafraîchissement,
+  // à la fermeture de l'onglet ou à un passage sur un autre onglet de l'app.
+  // activeSession: { progId, weekIdx, dayIdx, dayLabel, weekLabel, startedAt, notes, exercises:[{exId,name,unit,sets:[{reps,load,done,actualReps}]}] }
+  const [session,setSession]=useState(()=>{try{const s=JSON.parse(store.get(SESSION_KEY)||"null");return s?.exercises?s:null;}catch{return null;}});
+  const [tab,setTab]=useState("home");
+  const [view,setView]=useState(()=>session?"session-active":"list"); // list | week-detail | session-active | session-done
+  const [selProg,setSelProg]=useState(()=>session?.progId??null);
+  const [selWeek,setSelWeek]=useState(()=>session?.weekIdx??null);
+  const [doneInfo,setDoneInfo]=useState(null);
+  useEffect(()=>{if(session)store.set(SESSION_KEY,JSON.stringify(session));else store.del(SESSION_KEY);},[session,SESSION_KEY]);
+
+  // Chrono de récupération global : reste visible en bas de l'écran pendant qu'on fait défiler
+  const rest=useCountdown();
+  const [restOwner,setRestOwner]=useState(null); // {ei, name}
+  const startRest=useCallback((ei,secs,name)=>{unlockAudio();setRestOwner({ei,name});rest.start(secs);},[rest.start]); // eslint-disable-line
+
+  // Écran toujours allumé pendant une séance (Wake Lock, si le navigateur le permet)
+  const sessionActive=!!session;
+  useEffect(()=>{
+    if(!sessionActive||!("wakeLock" in navigator)) return;
+    let lock=null,cancelled=false;
+    const request=()=>{
+      if(document.visibilityState!=="visible") return;
+      navigator.wakeLock.request("screen").then(l=>{if(cancelled)l.release();else lock=l;}).catch(()=>{});
+    };
+    request();
+    document.addEventListener("visibilitychange",request);
+    return()=>{cancelled=true;document.removeEventListener("visibilitychange",request);lock?.release().catch(()=>{});};
+  },[sessionActive]);
+
+  const assigned=programs.filter(p=>(live.programs||[]).some(id=>String(id)===String(p.id)));
 
   const startSession=(prog,weekIdx,day,dayIdx)=>{
-    const exEntries=day.exercises.map(pe=>{
+    // Même séance déjà en cours → on la reprend
+    if(isSameSession(session,prog.id,weekIdx,dayIdx)){setView("session-active");return;}
+    if(session&&!window.confirm(`La séance « ${session.dayLabel} » est en cours. L'abandonner pour commencer celle-ci ?`)) return;
+    rest.stop();
+    const exEntries=(day.exercises||[]).map(pe=>{
       const ex=exercises.find(e=>e.id===pe.exId);
-      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",muscle:ex?.muscle||"",rest:pe.rest||"",sensation:"",note:"",sets:Array.from({length:pe.sets},()=>({reps:pe.reps,load:pe.targetLoad||"",done:false,actualReps:""}))};
+      const target=slotTarget(pe,live.tests);
+      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",coachNote:pe.note||"",target:target.text,muscle:ex?.muscle||"",rest:String(pe.rest||""),unit:target.unit||"kg",sensation:"",
+        sets:Array.from({length:Math.max(1,Number(pe.sets)||1)},()=>({reps:String(pe.reps??""),load:target.load,done:false,actualReps:""}))};
     });
-    setSession({progId:prog.id,weekIdx,dayIdx,dayLabel:day.label,weekLabel:prog.weeks[weekIdx]?.label||"",exercises:exEntries,notes:""});
+    setSession({progId:prog.id,weekIdx,dayIdx,dayLabel:day.label,weekLabel:prog.weeks[weekIdx]?.label||"",exercises:exEntries,notes:"",startedAt:Date.now()});
+    setSelProg(prog.id);setSelWeek(weekIdx);
     setView("session-active");
   };
 
-  const updateLoad=useCallback((exIdx,setIdx,val)=>{
-    setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,load:val})})}));
+  const updateSet=useCallback((exIdx,setIdx,patch)=>{
+    setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,...(typeof patch==="function"?patch(st):patch)})})}));
   },[]);
-  const updateActualReps=useCallback((exIdx,setIdx,val)=>{
-    setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,actualReps:val})})}));
-  },[]);
-  const toggleDone=useCallback((exIdx,setIdx)=>{
-    setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,done:!st.done})})}));
-  },[]);
-  const updateSensation=useCallback((exIdx,val)=>{
-    setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sensation:val})}));
+  const updateEx=useCallback((exIdx,patch)=>{
+    setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,...patch})}));
   },[]);
 
   const completeSession=()=>{
-    const log={id:uid(),date:new Date().toISOString().split("T")[0],programId:session.progId,weekIdx:session.weekIdx,dayIdx:session.dayIdx,dayLabel:session.dayLabel,weekLabel:session.weekLabel,completed:true,notes:session.notes,exercises:session.exercises.map(ex=>({exId:ex.exId,name:ex.name,sensation:ex.sensation||"",sets:ex.sets.map(s=>({reps:s.actualReps||s.reps,load:s.load}))}))};
-    setClients(p=>p.map(c=>c.id===live.id?{...c,sessions:c.sessions+1,sessionLogs:[log,...c.sessionLogs]}:c));
+    const all=session.exercises.flatMap(ex=>ex.sets);
+    const pending=all.filter(s=>!s.done).length;
+    if(pending>0&&!window.confirm(`${pending} série${pending>1?"s":""} non validée${pending>1?"s":""}. Terminer quand même la séance ?`)) return;
+    const duration=session.startedAt?Math.max(1,Math.round((Date.now()-session.startedAt)/60000)):null;
+    const log={id:uid(),date:todayISO(),programId:session.progId,weekIdx:session.weekIdx,dayIdx:session.dayIdx,dayLabel:session.dayLabel,weekLabel:session.weekLabel,completed:true,notes:session.notes||"",
+      ...(duration?{duration}:{}),
+      exercises:session.exercises.map(ex=>({exId:ex.exId,name:ex.name,sensation:ex.sensation||"",sets:ex.sets.map(s=>({reps:s.actualReps||s.reps,load:withUnit(s.load,ex.unit)}))}))};
+    updateClient(c=>({...c,sessions:(Number(c.sessions)||0)+1,sessionLogs:[log,...(c.sessionLogs||[])]}));
+    // Volume = charge × reps des séries validées en kg
+    const volume=session.exercises.reduce((a,ex)=>ex.unit!=="kg"?a:a+ex.sets.filter(s=>s.done).reduce((b,s)=>{
+      const l=parseFloat(String(s.load).replace(",",".")),r=parseInt(s.actualReps||s.reps);
+      return b+(l>0&&r>0?l*r:0);
+    },0),0);
+    setDoneInfo({duration,setsDone:all.length-pending,totalSets:all.length,volume:Math.round(volume)});
+    rest.stop();
+    setSession(null);
     setView("session-done");
   };
+  const abandonSession=()=>{
+    if(!window.confirm("Abandonner cette séance ? Les données saisies ne seront pas enregistrées.")) return;
+    rest.stop();
+    setSession(null);
+    setView(selProg!=null&&selWeek!=null?"week-detail":"list");
+  };
 
-  const navItems=[{key:"home",icon:"◈",label:"Accueil"},{key:"programme",icon:"▦",label:"Programme"},{key:"nutrition",icon:"◎",label:"Nutrition"},{key:"historique",icon:"◷",label:"Historique"}];
+  const goTab=t=>{setTab(t);setView("list");};
+  const openWeek=(progId,wi)=>{setSelProg(progId);setSelWeek(wi);setView("week-detail");};
 
-  const goTab=(t)=>{setTab(t);setView("list");setSelProg(null);setSelWeek(null);setSelDay(null);setSession(null);};
+  const restBar=rest.running?(
+    <RestBar timeLeft={rest.timeLeft} total={rest.total} label={restOwner?.name} onStop={rest.stop} onAdd={()=>rest.add(15)}
+      onOpen={session&&view!=="session-active"?()=>setView("session-active"):null}/>
+  ):null;
+  const shell={active:tab,onNav:goTab,onLogout,restBar,scrollKey:`${tab}|${view}|${selProg}|${selWeek}`};
+
+  // Bandeau « séance en cours » affiché quand on navigue ailleurs pendant une séance
+  const sessionDone=session?session.exercises.reduce((a,ex)=>a+ex.sets.filter(s=>s.done).length,0):0;
+  const sessionTotal=session?session.exercises.reduce((a,ex)=>a+ex.sets.length,0):0;
+  const resumeBanner=session&&(
+    <button onClick={()=>setView("session-active")} style={{width:"100%",textAlign:"left",background:`linear-gradient(135deg,${G.gold}26,${G.bg2} 70%)`,border:`1px solid ${G.gold}66`,borderRadius:12,padding:"12px 14px",marginBottom:18,cursor:"pointer",color:G.white,display:"flex",alignItems:"center",gap:12,animation:"pulseGold 2.4s ease infinite"}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:10,color:G.goldLight,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:3}}>● Séance en cours</div>
+        <div style={{fontWeight:700,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{session.dayLabel}</div>
+        <div style={{fontSize:11,color:G.grey,marginTop:2}}>{sessionDone}/{sessionTotal} séries validées</div>
+      </div>
+      <span style={{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,borderRadius:8,padding:"9px 14px",fontWeight:700,fontSize:13,flexShrink:0}}>Reprendre ›</span>
+    </button>
+  );
 
   // ── SESSION ACTIVE VIEW ──
   if(view==="session-active"&&session){
-    const allDone=session.exercises.every(ex=>ex.sets.every(s=>s.done));
     return(
-      <ClientShell active={tab} onNav={goTab} onLogout={onLogout}>
-        <BackBtn onClick={()=>{setView("week-detail");setSession(null);}} label="Retour"/>
-        <div style={{marginBottom:20}}>
+      <ClientShell {...shell}>
+        <BackBtn onClick={()=>setView(selProg!=null&&selWeek!=null?"week-detail":"list")} label="Retour"/>
+        <div style={{marginBottom:6}}>
           <div style={{fontSize:11,color:G.gold,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>En cours</div>
           <div style={{fontFamily:G.fontD,fontSize:24,fontWeight:800,letterSpacing:-1}}>{session.dayLabel}</div>
-          <div style={{fontSize:12,color:G.grey,marginTop:2}}>{session.weekLabel}</div>
+          {session.weekLabel&&<div style={{fontSize:12,color:G.grey,marginTop:2}}>{session.weekLabel}</div>}
+        </div>
+        {/* Progression (reste collée en haut pendant le défilement) */}
+        <div style={{position:"sticky",top:0,zIndex:5,background:G.bg,padding:"10px 0 12px",marginBottom:4}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>
+            <span>Progression</span>
+            <span style={{color:sessionDone===sessionTotal?G.green:G.goldLight}}>{sessionDone}/{sessionTotal} séries</span>
+          </div>
+          <ProgressBar value={sessionDone} max={sessionTotal} color={sessionDone===sessionTotal?G.green:G.goldLight}/>
         </div>
 
         {session.exercises.map((ex,ei)=>(
-          <ExerciseSessionCard key={ei} ex={ex} ei={ei} onLoadChange={updateLoad} onActualRepsChange={updateActualReps} onToggleDone={toggleDone} onSensationChange={updateSensation} sessionLogs={live.sessionLogs}/>
+          <ExerciseSessionCard key={ei} ex={ex} ei={ei} onSetChange={updateSet} onExChange={updateEx} sessionLogs={logs}
+            restActive={rest.running&&restOwner?.ei===ei} restLeft={rest.timeLeft} onStartRest={startRest} onStopRest={rest.stop}/>
         ))}
 
-        <Txa label="Notes de séance (optionnel)" placeholder="Ressenti, observations..." value={session.notes} onChange={e=>setSession(s=>({...s,notes:e.target.value}))}/>
+        <Txa label="Notes de séance (optionnel)" placeholder="Ressenti, observations..." value={session.notes} onChange={e=>{const v=e.target.value;setSession(s=>({...s,notes:v}));}}/>
         <Btn onClick={completeSession}>✓ Terminer la séance</Btn>
+        <button onClick={abandonSession} style={{display:"block",margin:"14px auto 0",background:"none",border:"none",color:G.grey,fontSize:12,textDecoration:"underline",cursor:"pointer",padding:8}}>Abandonner la séance</button>
       </ClientShell>
     );
   }
 
   // ── SESSION DONE ──
   if(view==="session-done"){
+    const stats=doneInfo?[
+      doneInfo.duration&&[fmtDuration(doneInfo.duration),"Durée"],
+      [`${doneInfo.setsDone}/${doneInfo.totalSets}`,"Séries"],
+      doneInfo.volume>0&&[`${doneInfo.volume.toLocaleString("fr-FR")} kg`,"Volume"],
+    ].filter(Boolean):[];
     return(
-      <ClientShell active={tab} onNav={goTab} onLogout={onLogout}>
-        <div style={{textAlign:"center",padding:"60px 20px"}} className="fu">
+      <ClientShell {...shell}>
+        <div style={{textAlign:"center",padding:"48px 4px"}} className="fu">
           <div style={{fontSize:56,marginBottom:16}}>🏆</div>
           <div style={{fontFamily:G.fontD,fontSize:32,fontWeight:800,color:G.goldLight,letterSpacing:-1,marginBottom:8}}>SÉANCE TERMINÉE</div>
-          <div style={{fontSize:14,color:G.grey,marginBottom:36}}>Bravo, ta séance a bien été enregistrée !</div>
+          <div style={{fontSize:14,color:G.grey,marginBottom:28}}>Bravo, ta séance a bien été enregistrée !</div>
+          {stats.length>0&&(
+            <div style={{display:"grid",gridTemplateColumns:`repeat(${stats.length},1fr)`,gap:8,marginBottom:32}}>
+              {stats.map(([v,l])=>(
+                <div key={l} style={{background:G.bg2,borderRadius:12,padding:"14px 6px",border:`1px solid ${G.border}`}}>
+                  <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800,color:G.goldLight,lineHeight:1.1}}>{v}</div>
+                  <div style={{fontSize:10,color:G.grey,letterSpacing:1,textTransform:"uppercase",marginTop:4}}>{l}</div>
+                </div>
+              ))}
+            </div>
+          )}
           <Btn onClick={()=>{setView("list");setTab("historique");}}>Voir mon historique</Btn>
           <div style={{height:12}}/>
           <Btn variant="ghost" onClick={()=>{setView("list");setTab("home");}}>Retour à l'accueil</Btn>
@@ -2259,83 +1977,135 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
   }
 
   // ── WEEK DETAIL (list of days) ──
-  if(view==="week-detail"&&selProg&&selWeek!==null){
-    const prog=programs.find(p=>p.id===selProg);
-    const week=prog?.weeks[selWeek];
-    if(!prog||!week) return null;
-    return(
-      <ClientShell active={tab} onNav={goTab} onLogout={onLogout}>
+  if(view==="week-detail"&&selProg!=null&&selWeek!==null){
+    const prog=programs.find(p=>String(p.id)===String(selProg));
+    const week=prog?.weeks?.[selWeek];
+    if(!prog||!week) return(
+      <ClientShell {...shell}>
         <BackBtn onClick={()=>setView("list")} label="Mes programmes"/>
-        <div style={{marginBottom:20}}>
-          <div style={{fontSize:12,color:G.gold,fontWeight:600,marginBottom:4}}>{prog.name}</div>
-          <div style={{fontFamily:G.fontD,fontSize:24,fontWeight:800,letterSpacing:-1}} className="gl">{week.label}</div>
-        </div>
-        {week.days.map((d,di)=>(
-          <div key={di} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${G.border}`}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-              <div>
-                <div style={{fontWeight:700,fontSize:16}}>{d.label}</div>
-                <div style={{fontSize:12,color:G.grey,marginTop:3}}>{d.exercises.length} exercices</div>
-              </div>
-              <button onClick={()=>startSession(prog,selWeek,d,di)} style={{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none",borderRadius:8,padding:"8px 16px",fontWeight:700,fontSize:13,cursor:"pointer",flexShrink:0}}>
-                ▶ Commencer
-              </button>
-            </div>
-            {/* Exercise preview */}
-            {d.exercises.map((pe,i)=>{
-              const ex=exercises.find(e=>e.id===pe.exId);
-              return(
-                <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderTop:`1px solid ${G.border}`,fontSize:13}}>
-                  <span style={{color:G.white}}>{ex?.name||"?"}</span>
-                  <span style={{color:G.grey}}>{pe.sets}×{pe.reps}{pe.targetLoad?` · ${pe.targetLoad}`:""}</span>
-                </div>
-              );
-            })}
+        <Empty text="Ce programme n'est plus disponible."/>
+      </ClientShell>
+    );
+    const hasPrev=selWeek>0, hasNext=selWeek<prog.weeks.length-1;
+    const navBtn=on=>({background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,width:40,height:40,color:on?G.goldLight:G.greyDim,fontSize:18,cursor:on?"pointer":"default",opacity:on?1:.4,flexShrink:0});
+    return(
+      <ClientShell {...shell}>
+        <BackBtn onClick={()=>setView("list")} label="Mes programmes"/>
+        {resumeBanner}
+        <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:10,marginBottom:20}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:12,color:G.gold,fontWeight:600,marginBottom:4}}>{prog.name}</div>
+            <div style={{fontFamily:G.fontD,fontSize:24,fontWeight:800,letterSpacing:-1}} className="gl">{week.label}</div>
           </div>
-        ))}
+          {prog.weeks.length>1&&(
+            <div style={{display:"flex",gap:6}}>
+              <button aria-label="Semaine précédente" disabled={!hasPrev} onClick={()=>setSelWeek(selWeek-1)} style={navBtn(hasPrev)}>‹</button>
+              <button aria-label="Semaine suivante" disabled={!hasNext} onClick={()=>setSelWeek(selWeek+1)} style={navBtn(hasNext)}>›</button>
+            </div>
+          )}
+        </div>
+        {(week.days||[]).map((d,di)=>{
+          const doneLog=findDoneLog(logs,prog.id,selWeek,di);
+          const inProgress=isSameSession(session,prog.id,selWeek,di);
+          return(
+            <div key={di} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${inProgress?G.gold+"88":G.border}`,borderLeft:`3px solid ${inProgress?G.goldLight:doneLog?G.green:G.border}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:10}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:16}}>{d.label}</div>
+                  <div style={{fontSize:12,color:doneLog?G.green:G.grey,marginTop:3}}>
+                    {inProgress?<span style={{color:G.goldLight}}>● En cours</span>:doneLog?`✓ Faite · ${fmtDate(doneLog.date)}`:`${(d.exercises||[]).length} exercices`}
+                  </div>
+                </div>
+                <button onClick={()=>startSession(prog,selWeek,d,di)} style={doneLog&&!inProgress
+                  ?{background:"transparent",color:G.grey,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 14px",fontWeight:700,fontSize:13,cursor:"pointer",flexShrink:0}
+                  :{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none",borderRadius:8,padding:"10px 16px",fontWeight:700,fontSize:13,cursor:"pointer",flexShrink:0}}>
+                  {inProgress?"▶ Reprendre":doneLog?"↻ Refaire":"▶ Commencer"}
+                </button>
+              </div>
+              {/* Exercise preview */}
+              {(d.exercises||[]).map((pe,i)=>{
+                const ex=exercises.find(e=>e.id===pe.exId);
+                const t=slotTarget(pe,live.tests).text;
+                return(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"8px 0",borderTop:`1px solid ${G.border}`,fontSize:13}}>
+                    <span style={{color:G.white,minWidth:0}}>{ex?.name||"?"}</span>
+                    <span style={{color:G.grey,flexShrink:0,textAlign:"right"}}>{pe.sets}×{pe.reps}{t?` · ${t}`:""}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </ClientShell>
     );
   }
 
   // ── MAIN TABS ──
+  const completed=logs.filter(l=>l.completed);
+  const weekAgo=(()=>{const d=new Date();d.setDate(d.getDate()-6);return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;})();
+  const thisWeek=completed.filter(l=>(l.date||"")>=weekAgo).length;
+  const next=assigned.map(p=>nextSessionOf(p,logs)).find(Boolean);
+
   return(
-    <ClientShell active={tab} onNav={goTab} onLogout={onLogout}>
+    <ClientShell {...shell}>
 
       {tab==="home"&&(
         <div className="fu">
-          <div style={{marginBottom:28}}>
+          <div style={{marginBottom:22}}>
             <div style={{fontSize:11,color:G.gold,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Mon espace</div>
-            <div style={{fontFamily:G.fontD,fontSize:30,fontWeight:800,letterSpacing:-1}} className="gl">{live.name.split(" ")[0].toUpperCase()}</div>
+            <div style={{fontFamily:G.fontD,fontSize:30,fontWeight:800,letterSpacing:-1}} className="gl">{(live.name||"").split(" ")[0].toUpperCase()}</div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:28}}>
-            {[[live.sessionLogs.filter(l=>l.completed).length,"Séances complétées"],[assigned.length,"Programmes actifs"]].map(([v,l])=>(
-              <div key={l} style={{background:G.bg2,borderRadius:12,padding:"16px 14px",border:`1px solid ${G.border}`}}>
-                <div style={{fontFamily:G.fontD,fontSize:38,fontWeight:800,color:G.goldLight,lineHeight:1}}>{v}</div>
-                <div style={{fontSize:10,color:G.grey,letterSpacing:1,textTransform:"uppercase",marginTop:4}}>{l}</div>
+
+          {resumeBanner}
+          {/* Prochaine séance : accès direct en un clic */}
+          {!session&&next&&(
+            <div style={{background:`linear-gradient(145deg,${G.gold}22,${G.bg2} 65%)`,border:`1px solid ${G.gold}55`,borderRadius:14,padding:18,marginBottom:22}}>
+              <div style={{fontSize:10,color:G.goldLight,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Prochaine séance</div>
+              <div style={{fontFamily:G.fontD,fontSize:24,fontWeight:800,letterSpacing:-.5,lineHeight:1.1}}>{next.day.label}</div>
+              <div style={{fontSize:12,color:G.grey,marginTop:4}}>{next.prog.name} · {next.week.label} · {(next.day.exercises||[]).length} exercices</div>
+              <Btn style={{marginTop:14}} onClick={()=>startSession(next.prog,next.wi,next.day,next.di)}>▶ Commencer la séance</Btn>
+              <button onClick={()=>{setTab("programme");openWeek(next.prog.id,next.wi);}} style={{display:"block",margin:"10px auto 0",background:"none",border:"none",color:G.grey,fontSize:12,cursor:"pointer",padding:6}}>Voir le détail de la semaine</button>
+            </div>
+          )}
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:28}}>
+            {[[completed.length,"Séances"],[thisWeek,"7 derniers j."],[assigned.length,"Programmes"]].map(([v,l])=>(
+              <div key={l} style={{background:G.bg2,borderRadius:12,padding:"14px 10px",border:`1px solid ${G.border}`}}>
+                <div style={{fontFamily:G.fontD,fontSize:32,fontWeight:800,color:G.goldLight,lineHeight:1}}>{v}</div>
+                <div style={{fontSize:9,color:G.grey,letterSpacing:1,textTransform:"uppercase",marginTop:5}}>{l}</div>
               </div>
             ))}
           </div>
           <SH title="Mes programmes"/>
           {assigned.length===0&&<Empty text="Aucun programme assigné pour l'instant"/>}
           {assigned.map(p=>{
-            const totalEx=p.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.exercises.length,0),0);
+            const {total,done}=progProgress(p,logs);
+            const n=nextSessionOf(p,logs);
             return(
-              <div key={p.id} onClick={()=>{setSelProg(p.id);setSelWeek(0);setView("week-detail");setTab("programme");}} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,borderLeft:`3px solid ${G.gold}`,cursor:"pointer"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                  <div>
+              <button key={p.id} onClick={()=>{setTab("programme");openWeek(p.id,n?n.wi:0);}} style={{display:"block",width:"100%",textAlign:"left",color:G.white,background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,borderLeft:`3px solid ${G.gold}`,cursor:"pointer"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+                  <div style={{minWidth:0}}>
                     <div style={{fontWeight:700,fontSize:16,marginBottom:8}}>{p.name}</div>
                     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                      <Tag text={p.level}/><Tag text={`${p.weeks.length} sem.`} color={G.grey}/><Tag text={`${p.weeks[0]?.days.length} j/sem`} color={G.grey}/>
+                      {p.level&&<Tag text={p.level}/>}<Tag text={`${(p.weeks||[]).length} sem.`} color={G.grey}/><Tag text={`${p.weeks?.[0]?.days?.length||0} j/sem`} color={G.grey}/>
                     </div>
                   </div>
                   <div style={{color:G.gold,fontSize:22}}>›</div>
                 </div>
-              </div>
+                {total>0&&(
+                  <div style={{marginTop:12}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:G.grey,marginBottom:5}}>
+                      <span>{n?"Progression":"Programme terminé 🎉"}</span><span>{done}/{total} séances</span>
+                    </div>
+                    <ProgressBar value={done} max={total} color={n?G.goldLight:G.green}/>
+                  </div>
+                )}
+              </button>
             );
           })}
-          {live.sessionLogs.length>0&&<>
-            <div style={{margin:"24px 0 12px"}}><SH title="Dernières séances"/></div>
-            {live.sessionLogs.slice(0,3).map((log,i)=>(
+          {logs.length>0&&<>
+            <div style={{margin:"24px 0 12px"}}><SH title="Dernières séances" onMore={()=>setTab("historique")}/></div>
+            {logs.slice(0,3).map((log,i)=>(
               <MiniLogCard key={log.id||i} log={log} programs={programs}/>
             ))}
           </>}
@@ -2345,39 +2115,56 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
       {tab==="programme"&&(
         <div className="fu">
           <PageH title="MES PROGRAMMES"/>
+          {resumeBanner}
           {assigned.length===0&&<Empty text="Aucun programme assigné"/>}
-          {assigned.map(p=>(
-            <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${G.border}`}}>
-              <div style={{fontWeight:700,fontSize:16,marginBottom:10}}>{p.name}</div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
-                <Tag text={p.level}/><Tag text={`${p.weeks.length} semaine${p.weeks.length>1?"s":""}`} color={G.grey}/>
-              </div>
-              {/* Week list */}
-              {p.weeks.map((w,wi)=>(
-                <div key={wi} onClick={()=>{setSelProg(p.id);setSelWeek(wi);setView("week-detail");}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:G.bg3,borderRadius:9,marginBottom:7,cursor:"pointer",border:`1px solid ${G.border}`}}>
-                  <div>
-                    <div style={{fontWeight:600,fontSize:14}}>{w.label}</div>
-                    <div style={{fontSize:11,color:G.grey,marginTop:2}}>{w.days.length} séance{w.days.length>1?"s":""} · {w.days.reduce((a,d)=>a+d.exercises.length,0)} exercices</div>
-                  </div>
-                  <div style={{color:G.gold,fontSize:18}}>›</div>
+          {assigned.map(p=>{
+            const n=nextSessionOf(p,logs);
+            return(
+              <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${G.border}`}}>
+                <div style={{fontWeight:700,fontSize:16,marginBottom:10}}>{p.name}</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+                  {p.level&&<Tag text={p.level}/>}<Tag text={`${(p.weeks||[]).length} semaine${(p.weeks||[]).length>1?"s":""}`} color={G.grey}/>
                 </div>
-              ))}
-            </div>
-          ))}
+                {/* Week list */}
+                {(p.weeks||[]).map((w,wi)=>{
+                  const days=w.days||[];
+                  const done=days.filter((_,di)=>findDoneLog(logs,p.id,wi,di)).length;
+                  const complete=days.length>0&&done===days.length;
+                  const current=n&&n.wi===wi;
+                  return(
+                    <button key={wi} onClick={()=>openWeek(p.id,wi)} style={{width:"100%",textAlign:"left",color:G.white,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"12px",background:current?G.gold+"12":G.bg3,borderRadius:9,marginBottom:7,cursor:"pointer",border:`1px solid ${current?G.gold+"66":G.border}`}}>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontWeight:600,fontSize:14}}>{w.label}</div>
+                        <div style={{fontSize:11,color:G.grey,marginTop:2}}>
+                          {days.length} séance{days.length>1?"s":""} · {days.reduce((a,d)=>a+(d.exercises||[]).length,0)} exercices
+                          {current&&<span style={{color:G.goldLight}}> · En cours</span>}
+                        </div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                        {done>0&&<span style={{fontSize:11,fontWeight:700,color:complete?G.green:G.goldLight}}>{complete?"✓":`${done}/${days.length}`}</span>}
+                        <span style={{color:G.gold,fontSize:18}}>›</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
       )}
 
       {tab==="nutrition"&&(
         <div className="fu">
           <PageH title="NUTRITION"/>
+          {resumeBanner}
           {/* Macros */}
           {(()=>{
             const storedItems=(live.mealPlan?.meals||[]).flatMap(m=>m.items||[]);
             const src=storedItems.length>0?calcMacros(storedItems,foods):null;
-            const cal=src?rnd(src.kcal):live.nutrition.calories;
-            const prot=src?rnd1(src.protein):live.nutrition.proteins;
-            const gluc=src?rnd1(src.carbs):live.nutrition.carbs;
-            const lip=src?rnd1(src.fat):live.nutrition.fats;
+            const cal=src?rnd(src.kcal):(nutrition.calories||0);
+            const prot=src?rnd1(src.protein):(nutrition.proteins||0);
+            const gluc=src?rnd1(src.carbs):(nutrition.carbs||0);
+            const lip=src?rnd1(src.fat):(nutrition.fats||0);
             return(
               <div style={{background:G.bg2,borderRadius:12,padding:18,border:`1px solid ${G.border}`,marginBottom:20}}>
                 <div style={{textAlign:"center",padding:"12px 0 24px"}}>
@@ -2387,7 +2174,7 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
                 <MacroBar label="Protéines" value={prot} max={300} color={G.goldLight}/>
                 <MacroBar label="Glucides" value={gluc} max={500} color={G.gold}/>
                 <MacroBar label="Lipides" value={lip} max={150} color="#C9A84C66"/>
-                {live.nutrition.notes&&<div style={{marginTop:16,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {live.nutrition.notes}</div>}
+                {nutrition.notes&&<div style={{marginTop:16,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {nutrition.notes}</div>}
               </div>
             );
           })()}
@@ -2395,7 +2182,7 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
           {(()=>{
             const meals=(live.mealPlan?.meals||[]).filter(m=>(m.items||[]).length>0);
             if(meals.length===0)return(
-              <div style={{textAlign:"center",padding:"24px 20px",color:G.greyDim,fontSize:13,background:G.bg2,borderRadius:12,border:`1px solid ${G.border}`}}>
+              <div style={{textAlign:"center",padding:"24px 20px",color:G.grey,fontSize:13,background:G.bg2,borderRadius:12,border:`1px solid ${G.border}`}}>
                 <div style={{fontSize:24,marginBottom:8}}>🍽</div>
                 Ton coach n'a pas encore assigné de plan alimentaire.
               </div>
@@ -2421,9 +2208,9 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
                         const im=calcMacros([item],foods);
                         return(
                           <div key={idx} style={{paddingBottom:8,marginBottom:8,borderBottom:idx<meal.items.length-1?`1px solid ${G.border}`:"none"}}>
-                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                            <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:3}}>
                               <div style={{fontSize:13,color:G.white,fontWeight:600}}>{food.name}</div>
-                              <div style={{fontSize:12,color:G.gold,fontWeight:700,flexShrink:0,marginLeft:8}}>{item.qty} {food.unit==="g"?"g":"port."}</div>
+                              <div style={{fontSize:12,color:G.gold,fontWeight:700,flexShrink:0}}>{item.qty} {food.unit==="g"?"g":"port."}</div>
                             </div>
                             <div style={{fontSize:11,color:G.grey}}>{rnd(im.kcal)} kcal · P {rnd1(im.protein)}g · G {rnd1(im.carbs)}g · L {rnd1(im.fat)}g</div>
                           </div>
@@ -2440,31 +2227,52 @@ function ClientPortal({client,clients,setClients,programs,exercises,onLogout,foo
 
       {tab==="historique"&&(
         <div className="fu">
-          <PageH title="HISTORIQUE"/>
-          {live.sessionLogs.length===0&&<Empty text="Aucune séance enregistrée"/>}
-          {live.sessionLogs.map((log,i)=><LogCard key={log.id||i} log={log} programs={programs}/>)}
+          <PageH title="HISTORIQUE" subtitle={completed.length?`${completed.length} séance${completed.length>1?"s":""} enregistrée${completed.length>1?"s":""}`:undefined}/>
+          {resumeBanner}
+          {logs.length===0&&<Empty text="Aucune séance enregistrée"/>}
+          {logs.map((log,i)=><LogCard key={log.id||i} log={log} programs={programs}/>)}
         </div>
       )}
     </ClientShell>
   );
 }
 
-// ─── REST TIMER HOOK ──────────────────────────────────────────────────────────
-function useRestTimer(){
+// ─── COMPTE À REBOURS ─────────────────────────────────────────────────────────
+// Basé sur l'heure de fin (et non sur un compteur) : reste juste même si le téléphone
+// met l'onglet en veille ou ralentit les minuteries en arrière-plan.
+function useCountdown(onEnd){
+  const [endAt,setEndAt]=useState(null);
   const [timeLeft,setTimeLeft]=useState(0);
-  const [running,setRunning]=useState(false);
-  const ref=useRef(null);
-  useEffect(()=>()=>clearInterval(ref.current),[]);
-  const start=(secs)=>{
-    clearInterval(ref.current);
-    setTimeLeft(secs);
-    setRunning(true);
-    ref.current=setInterval(()=>{
-      setTimeLeft(t=>{if(t<=1){clearInterval(ref.current);setRunning(false);return 0;}return t-1;});
-    },1000);
-  };
-  const stop=()=>{clearInterval(ref.current);setRunning(false);setTimeLeft(0);};
-  return{timeLeft,running,start,stop};
+  const [total,setTotal]=useState(0);
+  const onEndRef=useRef(onEnd);
+  useEffect(()=>{onEndRef.current=onEnd;});
+  useEffect(()=>{
+    if(!endAt) return;
+    let last=null,fired=false;
+    const tick=()=>{
+      if(fired) return;
+      const left=Math.max(0,Math.ceil((endAt-Date.now())/1000));
+      setTimeLeft(left);
+      if(left!==last&&left>0&&left<=3) playTick();
+      last=left;
+      if(left<=0){
+        fired=true;
+        clearInterval(id);
+        setEndAt(null);
+        playBeep();
+        try{navigator.vibrate?.([200,100,200]);}catch{/* non supporté */}
+        onEndRef.current?.();
+      }
+    };
+    const id=setInterval(tick,250);
+    tick();
+    document.addEventListener("visibilitychange",tick);
+    return()=>{clearInterval(id);document.removeEventListener("visibilitychange",tick);};
+  },[endAt]);
+  const start=useCallback(secs=>{setTotal(secs);setTimeLeft(secs);setEndAt(Date.now()+secs*1000);},[]);
+  const stop=useCallback(()=>{setEndAt(null);setTimeLeft(0);},[]);
+  const add=useCallback(secs=>{setEndAt(e=>e?e+secs*1000:e);setTotal(t=>t+secs);},[]);
+  return{timeLeft,running:!!endAt,total,start,stop,add};
 }
 
 // ─── AUDIO HELPERS ────────────────────────────────────────────────────────────
@@ -2475,7 +2283,7 @@ function unlockAudio(){
   try{
     if(!_audioCtx) _audioCtx=new(window.AudioContext||window.webkitAudioContext)();
     if(_audioCtx.state==="suspended") _audioCtx.resume();
-  }catch(e){}
+  }catch{/* audio indisponible */}
 }
 function playTone(freq,dur,vol=0.4){
   try{
@@ -2489,97 +2297,111 @@ function playTone(freq,dur,vol=0.4){
     gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur);
     osc.start(ctx.currentTime);osc.stop(ctx.currentTime+dur);
     // Disconnect nodes after playback to prevent memory accumulation (critical in Safari)
-    const cleanup=()=>{try{osc.disconnect();gain.disconnect();}catch(_){}};
+    const cleanup=()=>{try{osc.disconnect();gain.disconnect();}catch{/* déjà déconnecté */}};
     osc.onended=cleanup;
     setTimeout(cleanup,(dur+0.5)*1000); // fallback si onended ne se déclenche pas
-  }catch(e){}
+  }catch{/* audio indisponible */}
 }
 const playTick=()=>playTone(660,0.12,0.3);
 const playBeep=()=>{playTone(880,0.15,0.5);setTimeout(()=>playTone(1100,0.25,0.6),160);};
 
-// Parse "90s", "2min", "45s" → secondes
+// Parse "90s", "2min", "1:30", "1min30" → secondes
 function parseRest(rest){
-  if(!rest)return 0;
-  const s=rest.toLowerCase().trim();
-  if(s.includes("min")){const p=s.replace("min","").trim().split(":").map(Number);return p.length===2?p[0]*60+p[1]:p[0]*60;}
-  if(s.includes("s"))return parseInt(s)||0;
+  const s=String(rest??"").toLowerCase().replace(/\s/g,"");
+  if(!s) return 0;
+  let m=s.match(/^(\d+)(?:min|m|')(\d+)?/);
+  if(m) return Number(m[1])*60+(Number(m[2])||0);
+  m=s.match(/^(\d+):(\d{1,2})$/);
+  if(m) return Number(m[1])*60+Number(m[2]);
   return parseInt(s)||0;
 }
 // Détecte si la valeur de reps est un temps (ex: "30s", "45s", "2min")
-const isTimed=r=>/^\d+(\.\d+)?(s|min)$/.test((r||"").toLowerCase().trim());
+const isTimed=r=>/^\d+(\.\d+)?(s|sec|min)$/.test(String(r??"").toLowerCase().replace(/\s/g,""));
+
+// ─── BARRE DE RÉCUPÉRATION (au-dessus du menu) ────────────────────────────────
+function RestBar({timeLeft,total,label,onStop,onAdd,onOpen}){
+  const urgent=timeLeft<=3;
+  const c=urgent?G.red:G.goldLight;
+  return(
+    <div role="timer" aria-live="off" style={{flexShrink:0,background:G.bg2,borderTop:`1px solid ${c}66`,position:"relative"}}>
+      <div style={{position:"absolute",top:0,left:0,height:2,width:`${total?timeLeft/total*100:0}%`,background:c,transition:"width .25s linear"}}/>
+      <div style={{maxWidth:640,margin:"0 auto",display:"flex",alignItems:"center",gap:10,padding:"10px 16px"}}>
+        <div onClick={onOpen||undefined} style={{flex:1,minWidth:0,cursor:onOpen?"pointer":"default"}}>
+          <div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            Récup{label?` · ${label}`:""}{onOpen?" · revenir ›":""}
+          </div>
+          <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,color:c,lineHeight:1.05,fontVariantNumeric:"tabular-nums"}}>{fmtClock(timeLeft)}</div>
+        </div>
+        <button onClick={onAdd} style={{background:G.bg3,color:G.goldLight,border:`1px solid ${G.gold}44`,borderRadius:8,padding:"10px 12px",fontWeight:700,fontSize:13,cursor:"pointer"}}>+15s</button>
+        <button onClick={onStop} aria-label="Arrêter la récupération" style={{background:G.red+"22",color:G.red,border:`1px solid ${G.red}44`,borderRadius:8,padding:"10px 12px",fontWeight:700,fontSize:13,cursor:"pointer"}}>✕ Stop</button>
+      </div>
+    </div>
+  );
+}
 
 // ─── EXERCISE SESSION CARD ────────────────────────────────────────────────────
-function ExerciseSessionCard({ex,ei,onLoadChange,onActualRepsChange,onToggleDone,onSensationChange,sessionLogs}){
+const iconBtn=active=>({background:active?G.goldLight+"22":G.bg3,color:active?G.goldLight:G.grey,border:`1px solid ${active?G.gold+"66":G.border}`,borderRadius:8,minWidth:38,height:38,padding:"0 10px",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"});
+const setBtn={width:"100%",borderRadius:7,padding:"10px 0",fontSize:13,fontWeight:700,cursor:"pointer"};
+
+function ExerciseSessionCard({ex,ei,onSetChange,onExChange,sessionLogs,restActive,restLeft,onStartRest,onStopRest}){
   const [vidOpen,setVidOpen]=useState(false);
   const [histOpen,setHistOpen]=useState(false);
-  const [units,setUnits]=useState(ex.sets.map(()=>"kg"));
-  // Chrono de récupération
-  const {timeLeft,running,start,stop}=useRestTimer();
-  // Chrono de travail (exercices en temps)
-  const {timeLeft:workLeft,running:workRunning,start:startWork,stop:stopWork}=useRestTimer();
+  const unit=ex.unit||"kg";
+  const restSecs=parseRest(ex.rest);
+  const startRest=()=>{if(restSecs>0)onStartRest(ei,restSecs,ex.name);};
+
+  // Chrono de travail (exercices en temps) : à la fin, la série est validée et la récup démarre
   const [activeWorkSet,setActiveWorkSet]=useState(null);
   const activeWorkSetRef=useRef(null);
   useEffect(()=>{activeWorkSetRef.current=activeWorkSet;},[activeWorkSet]);
+  const work=useCountdown(()=>{
+    const aws=activeWorkSetRef.current;
+    if(aws===null) return;
+    onSetChange(ei,aws,{done:true});
+    setActiveWorkSet(null);
+    startRest();
+  });
 
   const allSetsDone=ex.sets.every(s=>s.done);
-  const restSecs=parseRest(ex.rest||"");
-  const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
-
-  // Chrono récup : bips de fin
-  const prevTL=useRef(0);
-  useEffect(()=>{
-    if(timeLeft>0&&timeLeft<=3&&running) playTick();
-    if(timeLeft===0&&prevTL.current>0) playBeep();
-    prevTL.current=timeLeft;
-  },[timeLeft]);
-
-  // Chrono travail : bips + validation auto + lancement récup
-  const prevWorkTL=useRef(0);
-  useEffect(()=>{
-    if(workLeft>0&&workLeft<=3&&workRunning) playTick();
-    if(workLeft===0&&prevWorkTL.current>0){
-      playBeep();
-      const aws=activeWorkSetRef.current;
-      if(aws!==null){
-        onToggleDone(ei,aws);
-        setActiveWorkSet(null);
-        if(restSecs>0){unlockAudio();start(restSecs);}
-      }
-    }
-    prevWorkTL.current=workLeft;
-  },[workLeft]);// eslint-disable-line
-
-  const UNITS=["kg","élastique","cal","m","km","reps"];
-  const setUnit=(si,u)=>setUnits(prev=>prev.map((x,i)=>i===si?u:x));
 
   const history=[];
   for(const log of (sessionLogs||[])){
     if(history.length>=4) break;
     const found=(log.exercises||[]).find(e=>e.exId===ex.exId);
-    if(found) history.push({date:log.date,dayLabel:log.dayLabel,sets:found.sets});
+    if(found) history.push({date:log.date,dayLabel:log.dayLabel,sets:found.sets||[]});
   }
+  const last=history[0];
 
   return(
     <div style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:14,border:`1.5px solid ${allSetsDone?G.green+"55":G.border}`,transition:"border .3s"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-        <div style={{flex:1}}>
+        <div style={{flex:1,minWidth:0}}>
           <div style={{fontWeight:700,fontSize:15}}><span style={{color:G.gold,fontFamily:G.fontD,marginRight:6}}>{ei+1}.</span>{ex.name}</div>
-          {ex.notes&&<div style={{fontSize:11,color:G.gold+"88",marginTop:4}}>💡 {ex.notes}</div>}
+          {ex.target&&<div style={{fontSize:12,color:G.goldLight,marginTop:4,fontWeight:600}}>🎯 {ex.target}</div>}
+          {ex.coachNote&&<div style={{fontSize:12,color:G.white+"cc",marginTop:4,lineHeight:1.4}}>📝 {ex.coachNote}</div>}
+          {ex.notes&&<div style={{fontSize:11,color:G.gold+"aa",marginTop:4,lineHeight:1.4}}>💡 {ex.notes}</div>}
           {ex.muscle&&<div style={{marginTop:6}}><Tag text={ex.muscle} color={G.grey}/></div>}
         </div>
         <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:8}}>
-          {history.length>0&&<BtnSm onClick={()=>setHistOpen(!histOpen)} variant="ghost">{histOpen?"▼":"📊"}</BtnSm>}
-          {ex.videoUrl&&<BtnSm onClick={()=>setVidOpen(!vidOpen)}>{vidOpen?"▼":"▶"}</BtnSm>}
-          {allSetsDone&&<Tag text="✓" color={G.green}/>}
+          {allSetsDone&&<div style={{...iconBtn(false),color:G.green,borderColor:G.green+"55",background:G.green+"18",cursor:"default"}}>✓</div>}
+          {history.length>0&&<button aria-label="Historique de l'exercice" onClick={()=>setHistOpen(!histOpen)} style={iconBtn(histOpen)}>📊</button>}
+          {ex.videoUrl&&<button aria-label="Vidéo de démonstration" onClick={()=>setVidOpen(!vidOpen)} style={iconBtn(vidOpen)}>▶</button>}
         </div>
       </div>
+
+      {/* Dernière performance, visible d'un coup d'œil */}
+      {last&&!histOpen&&(
+        <div style={{fontSize:11,color:G.grey,marginBottom:10,lineHeight:1.5}}>
+          <span style={{color:G.gold}}>Dernière fois</span> ({fmtDate(last.date)}) : {last.sets.map(s=>`${s.load||"—"}×${s.reps}`).join(" · ")}
+        </div>
+      )}
 
       {histOpen&&history.length>0&&(
         <div style={{background:G.bg3,borderRadius:10,padding:12,marginBottom:12,border:`1px solid ${G.border}`}}>
           <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Historique récent</div>
           {history.map((h,hi)=>(
             <div key={hi} style={{marginBottom:hi<history.length-1?10:0}}>
-              <div style={{fontSize:11,color:G.gold,marginBottom:5}}>{h.date}{h.dayLabel?` — ${h.dayLabel}`:""}</div>
+              <div style={{fontSize:11,color:G.gold,marginBottom:5}}>{fmtDate(h.date)}{h.dayLabel?` — ${h.dayLabel}`:""}</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                 {h.sets.map((s,si)=>(
                   <div key={si} style={{background:G.bg4,borderRadius:6,padding:"5px 10px",border:`1px solid ${G.border}`,textAlign:"center",minWidth:60}}>
@@ -2596,36 +2418,41 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onActualRepsChange,onToggleDone
 
       {vidOpen&&ex.videoUrl&&(
         <div style={{position:"relative",paddingBottom:"56.25%",borderRadius:8,overflow:"hidden",background:"#000",marginBottom:12}}>
-          <iframe style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={ex.videoUrl} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
+          <iframe title={`Vidéo — ${ex.name}`} loading="lazy" style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={toEmbed(ex.videoUrl)} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
         </div>
       )}
 
-      {/* Chrono récupération */}
-      {restSecs>0&&(
-        <div style={{background:running&&timeLeft<=3?G.red+"22":running?G.gold+"15":G.bg3,border:`1px solid ${running&&timeLeft<=3?G.red+"88":running?G.gold+"55":G.border}`,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",transition:"all .3s"}}>
-          <div style={{flex:1,textAlign:running&&timeLeft<=3?"center":"left"}}>
-            {!(running&&timeLeft<=3)&&<div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:2}}>Récupération</div>}
-            {running&&timeLeft<=3
-              ?<div style={{fontFamily:G.fontD,fontSize:72,fontWeight:900,color:G.red,lineHeight:1}}>{timeLeft}</div>
-              :<div style={{fontFamily:G.fontD,fontSize:running?28:16,fontWeight:800,color:running?G.goldLight:G.grey,transition:"all .3s",letterSpacing:-.5}}>{running?fmt(timeLeft):`${restSecs}s`}</div>
+      {/* Chrono récupération + unité de charge */}
+      <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"stretch"}}>
+        {restSecs>0&&(
+          <div style={{flex:1,background:restActive&&restLeft<=3?G.red+"22":restActive?G.gold+"15":G.bg3,border:`1px solid ${restActive&&restLeft<=3?G.red+"88":restActive?G.gold+"55":G.border}`,borderRadius:10,padding:"8px 8px 8px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,transition:"all .3s"}}>
+            <div>
+              <div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:1}}>Récup</div>
+              <div style={{fontFamily:G.fontD,fontSize:restActive?24:16,fontWeight:800,color:restActive?(restLeft<=3?G.red:G.goldLight):G.grey,transition:"all .3s",letterSpacing:-.5,lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{restActive?fmtClock(restLeft):fmtClock(restSecs)}</div>
+            </div>
+            {restActive
+              ?<button onClick={onStopRest} style={{background:G.red+"22",color:G.red,border:`1px solid ${G.red}44`,borderRadius:8,padding:"10px 12px",fontWeight:700,fontSize:13,cursor:"pointer"}}>✕ Stop</button>
+              :<button onClick={startRest} style={{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none",borderRadius:8,padding:"10px 14px",fontWeight:700,fontSize:13,cursor:"pointer"}}>▶ Go</button>
             }
           </div>
-          <div style={{display:"flex",gap:8}}>
-            {running
-              ?<button onClick={stop} style={{background:G.red+"22",color:G.red,border:`1px solid ${G.red}44`,borderRadius:8,padding:"8px 14px",fontWeight:700,fontSize:13,cursor:"pointer"}}>✕ Stop</button>
-              :<button onClick={()=>{unlockAudio();start(restSecs);}} style={{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none",borderRadius:8,padding:"8px 16px",fontWeight:700,fontSize:13,cursor:"pointer"}}>▶ Go</button>
-            }
-          </div>
-        </div>
-      )}
+        )}
+        <label style={{flex:restSecs>0?"0 0 auto":1,background:G.bg3,border:`1px solid ${G.border}`,borderRadius:10,padding:"8px 10px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+          <span style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:2}}>Unité</span>
+          <select value={unit} onChange={e=>onExChange(ei,{unit:e.target.value})}
+            style={{background:"transparent",border:"none",color:G.goldLight,fontSize:14,fontWeight:700,outline:"none",cursor:"pointer",padding:0}}>
+            {LOAD_UNITS.map(u=><option key={u} value={u} style={{background:G.bg2}}>{u}</option>)}
+          </select>
+        </label>
+      </div>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
         {ex.sets.map((st,si)=>{
           const timed=isTimed(st.reps);
           const workSecs=timed?parseRest(st.reps):0;
-          const isActiveWork=workRunning&&activeWorkSet===si;
+          const isActiveWork=work.running&&activeWorkSet===si;
+          const prevLoad=last?.sets?.[si]?.load;
           return(
-            <div key={si} style={{background:st.done?G.green+"18":G.bg3,borderRadius:9,padding:"10px 10px 8px",border:`1.5px solid ${st.done?G.green+"55":G.border}`,transition:"all .2s"}}>
+            <div key={si} style={{background:st.done?G.green+"18":G.bg3,borderRadius:9,padding:"10px 8px 8px",border:`1.5px solid ${st.done?G.green+"55":G.border}`,transition:"all .2s"}}>
               {/* Titre série */}
               <div style={{fontSize:10,color:st.done?G.green:G.grey,fontWeight:700,letterSpacing:.8,marginBottom:6}}>
                 SÉRIE {si+1}
@@ -2638,57 +2465,53 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onActualRepsChange,onToggleDone
               {/* Chrono de travail (exercices en temps) */}
               {timed&&!st.done&&(
                 <div style={{textAlign:"center",padding:"6px 0 8px",borderBottom:`1px solid ${G.border}`,marginBottom:8}}>
-                  <div style={{fontFamily:G.fontD,fontWeight:900,lineHeight:1,transition:"all .3s",
-                    fontSize:isActiveWork?(workLeft<=3?44:28):20,
-                    color:isActiveWork?(workLeft<=3?G.red:G.goldLight):G.grey}}>
-                    {isActiveWork?(workLeft<=3?workLeft:fmt(workLeft)):st.reps}
+                  <div style={{fontFamily:G.fontD,fontWeight:800,lineHeight:1,transition:"all .3s",fontVariantNumeric:"tabular-nums",
+                    fontSize:isActiveWork?(work.timeLeft<=3?44:28):20,
+                    color:isActiveWork?(work.timeLeft<=3?G.red:G.goldLight):G.grey}}>
+                    {isActiveWork?(work.timeLeft<=3?work.timeLeft:fmtClock(work.timeLeft)):st.reps}
                   </div>
                 </div>
               )}
 
               {/* Charge (visible sauf si timed et chrono en cours) */}
               {!(timed&&isActiveWork)&&(
-                <>
-                  <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:6}}>
-                    <input value={st.load} onChange={e=>onLoadChange(ei,si,e.target.value)} placeholder="—"
-                      style={{flex:1,background:"transparent",border:"none",borderBottom:`1px solid ${G.border}`,color:st.done?G.green:G.white,fontSize:14,fontWeight:700,outline:"none",padding:"2px 0",textAlign:"center",minWidth:0}}/>
-                  </div>
-                  <select value={units[si]} onChange={e=>setUnit(si,e.target.value)}
-                    style={{width:"100%",background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"4px 6px",color:st.done?G.green:G.grey,fontSize:11,outline:"none",marginBottom:6,cursor:"pointer"}}>
-                    {UNITS.map(u=><option key={u} value={u}>{u}</option>)}
-                  </select>
-                </>
+                <div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:8,borderBottom:`1px solid ${G.border}`}}>
+                  <input value={st.load} onChange={e=>onSetChange(ei,si,{load:e.target.value})} placeholder={prevLoad?String(prevLoad).replace(/\s*kg$/i,""):"—"}
+                    inputMode={unit==="élastique"?"text":"decimal"} aria-label={`Charge série ${si+1}`}
+                    style={{flex:1,background:"transparent",border:"none",color:st.done?G.green:G.white,fontSize:16,fontWeight:700,outline:"none",padding:"4px 0",textAlign:"center",minWidth:0}}/>
+                  <span style={{fontSize:11,color:G.grey,flexShrink:0}}>{unit}</span>
+                </div>
               )}
 
               {/* Reps réalisées (exercices non-chronométrés uniquement) */}
               {!timed&&!st.done&&(
                 <input
-                  type="number" inputMode="numeric"
+                  type="number" inputMode="numeric" min="0"
                   value={st.actualReps||""}
-                  onChange={e=>onActualRepsChange(ei,si,e.target.value)}
-                  placeholder={`reps: ${st.reps}`}
-                  style={{width:"100%",background:"transparent",border:"none",borderBottom:`1px solid ${G.border}`,color:st.actualReps?G.goldLight:G.greyDim,fontSize:12,fontWeight:600,outline:"none",padding:"2px 0",textAlign:"center",marginBottom:6}}/>
+                  onChange={e=>onSetChange(ei,si,{actualReps:e.target.value})}
+                  placeholder={`reps : ${st.reps}`} aria-label={`Répétitions réalisées série ${si+1}`}
+                  style={{width:"100%",background:"transparent",border:"none",borderBottom:`1px solid ${G.border}`,color:st.actualReps?G.goldLight:G.grey,fontSize:12,fontWeight:600,outline:"none",padding:"4px 0",textAlign:"center",marginBottom:8}}/>
               )}
 
               {/* Bouton action */}
               {st.done?(
-                <button onClick={()=>onToggleDone(ei,si)}
-                  style={{width:"100%",background:"transparent",color:G.green,border:`1px solid ${G.green+"55"}`,borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                <button onClick={()=>onSetChange(ei,si,{done:false})}
+                  style={{...setBtn,background:"transparent",color:G.green,border:`1px solid ${G.green+"55"}`}}>
                   ✓ Fait
                 </button>
               ):timed?(
                 isActiveWork
-                  ?<button onClick={()=>{stopWork();setActiveWorkSet(null);}}
-                    style={{width:"100%",background:G.red+"22",color:G.red,border:`1px solid ${G.red}44`,borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  ?<button onClick={()=>{work.stop();setActiveWorkSet(null);}}
+                    style={{...setBtn,background:G.red+"22",color:G.red,border:`1px solid ${G.red}44`}}>
                     ✕ Stop
                   </button>
-                  :<button onClick={()=>{unlockAudio();startWork(workSecs);setActiveWorkSet(si);}}
-                    style={{width:"100%",background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none",borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  :<button onClick={()=>{unlockAudio();setActiveWorkSet(si);work.start(workSecs);}}
+                    style={{...setBtn,background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none"}}>
                     ▶ Lancer
                   </button>
               ):(
-                <button onClick={()=>{onToggleDone(ei,si);if(restSecs>0){unlockAudio();start(restSecs);}}}
-                  style={{width:"100%",background:G.goldLight+"18",color:G.goldLight,border:`1px solid ${G.gold+"44"}`,borderRadius:6,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                <button onClick={()=>{onSetChange(ei,si,{done:true});startRest();}}
+                  style={{...setBtn,background:G.goldLight+"18",color:G.goldLight,border:`1px solid ${G.gold+"44"}`}}>
                   Valider
                 </button>
               )}
@@ -2700,9 +2523,10 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onActualRepsChange,onToggleDone
         <div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Ressenti</div>
         <div style={{display:"flex",gap:6}}>
           {[["😊","Facile"],["😐","Correct"],["😤","Difficile"],["💀","Épuisant"]].map(([emoji,label])=>(
-            <button key={emoji} onClick={()=>onSensationChange(ei,emoji)} title={label}
-              style={{flex:1,padding:"6px 0",background:ex.sensation===emoji?G.gold+"33":"transparent",border:`1px solid ${ex.sensation===emoji?G.gold:G.border}`,borderRadius:8,fontSize:18,cursor:"pointer",transition:"all .2s"}}>
-              {emoji}
+            <button key={emoji} onClick={()=>onExChange(ei,{sensation:ex.sensation===emoji?"":emoji})} aria-label={label} aria-pressed={ex.sensation===emoji}
+              style={{flex:1,padding:"6px 0 4px",background:ex.sensation===emoji?G.gold+"33":"transparent",border:`1px solid ${ex.sensation===emoji?G.gold:G.border}`,borderRadius:8,cursor:"pointer",transition:"all .2s",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+              <span style={{fontSize:18}}>{emoji}</span>
+              <span style={{fontSize:9,color:ex.sensation===emoji?G.goldLight:G.grey,fontWeight:600}}>{label}</span>
             </button>
           ))}
         </div>
@@ -2712,27 +2536,37 @@ function ExerciseSessionCard({ex,ei,onLoadChange,onActualRepsChange,onToggleDone
 }
 
 // ─── CLIENT SHELL ─────────────────────────────────────────────────────────────
-function ClientShell({children,active,onNav,onLogout}){
+function ClientShell({children,active,onNav,onLogout,scrollKey,restBar}){
   const items=[{key:"home",icon:"◈",label:"Accueil"},{key:"programme",icon:"▦",label:"Programme"},{key:"nutrition",icon:"◎",label:"Nutrition"},{key:"historique",icon:"◷",label:"Historique"}];
+  const scrollRef=useRef(null);
+  // Chaque nouvel écran s'ouvre en haut de page
+  useEffect(()=>{scrollRef.current?.scrollTo(0,0);},[scrollKey]);
   return(
     <>
-      <div style={{flex:1,overflowY:"auto",overscrollBehavior:"contain",padding:"20px 20px 24px"}}>
-        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:4}}>
-          <button onClick={onLogout} style={{background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"6px 12px",color:G.grey,fontSize:11,cursor:"pointer"}}>Déconnexion</button>
+      <div ref={scrollRef} style={{flex:1,minHeight:0,overflowY:"auto",overscrollBehavior:"contain",WebkitOverflowScrolling:"touch"}}>
+        <div style={{maxWidth:640,margin:"0 auto",padding:"16px 20px 32px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div style={{fontFamily:G.fontD,fontSize:13,fontWeight:800,letterSpacing:.5,color:G.grey}}>WANDY<span style={{color:G.gold}}> COACH</span></div>
+            <button onClick={()=>{if(window.confirm("Se déconnecter de ton espace ?"))onLogout();}} style={{background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 12px",color:G.grey,fontSize:11,cursor:"pointer"}}>Déconnexion</button>
+          </div>
+          {children}
         </div>
-        {children}
       </div>
-      <nav style={{flexShrink:0,width:"100%",background:G.bg2,borderTop:`1px solid ${G.border}`,display:"flex",zIndex:100}}>
-        {items.map(({key,icon,label})=>{
-          const a=active===key;
-          return<button key={key} onClick={()=>onNav(key)} style={{flex:1,padding:"12px 0 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:3,background:"none",border:"none",cursor:"pointer",color:a?G.goldLight:G.greyDim,fontSize:10,fontWeight:600,letterSpacing:.5,transition:"color .2s",borderTop:a?`2px solid ${G.goldLight}`:"2px solid transparent"}}>
-            <span style={{fontSize:18}}>{icon}</span><span>{label}</span>
-          </button>;
-        })}
+      {restBar}
+      <nav className="sb" style={{flexShrink:0,width:"100%",background:G.bg2,borderTop:`1px solid ${G.border}`,zIndex:100}}>
+        <div style={{display:"flex",maxWidth:640,margin:"0 auto"}}>
+          {items.map(({key,icon,label})=>{
+            const a=active===key;
+            return<button key={key} onClick={()=>onNav(key)} aria-current={a?"page":undefined} style={{flex:1,minHeight:56,padding:"10px 0 8px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"none",border:"none",cursor:"pointer",color:a?G.goldLight:G.grey,fontSize:10,fontWeight:600,letterSpacing:.5,transition:"color .2s",borderTop:a?`2px solid ${G.goldLight}`:"2px solid transparent"}}>
+              <span style={{fontSize:18,lineHeight:1}}>{icon}</span><span>{label}</span>
+            </button>;
+          })}
+        </div>
       </nav>
     </>
   );
 }
+
 
 // ─── AI COACH ─────────────────────────────────────────────────────────────────
 function AICoach({exercises,setPrograms,go}){
@@ -2792,19 +2626,22 @@ Règles importantes :
     scrollBottom();
 
     try{
-      const res=await fetch("/api/chat",{
+      // Modèle et longueur de réponse sont fixés côté serveur ; l'accès est réservé au coach connecté
+      const idToken=await auth.currentUser?.getIdToken();
+      if(!idToken) throw new Error("Session expirée, reconnecte-toi");
+      // La conversation envoyée commence au premier message du coach (le message d'accueil reste local)
+      const history=newMsgs.slice(newMsgs.findIndex(m=>m.role==="user"));
+      const res=await fetch(`${API_BASE}/api/chat`,{
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers:{"Content-Type":"application/json",Authorization:`Bearer ${idToken}`},
         body:JSON.stringify({
-          model:"claude-sonnet-4-20250514",
-          max_tokens:4000,
           system:SYSTEM,
-          messages:newMsgs.map(m=>({role:m.role,content:m.content}))
+          messages:history.map(m=>({role:m.role,content:m.content||"(programme créé)"}))
         })
       });
-      const data=await res.json();
+      const data=await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(data.error||"Erreur serveur");
-      const text=data.content?.[0]?.text||"Désolé, une erreur s'est produite.";
+      const text=data.text||"Désolé, une erreur s'est produite.";
 
       // Cherche un bloc JSON dans la réponse
       const jsonMatch=text.match(/```json\s*([\s\S]*?)```/);
@@ -2897,7 +2734,7 @@ const MiniLogCard=({log,programs})=>{
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontWeight:700,fontSize:13}}>{prog?.name||"Séance"}{log.dayLabel?` — ${log.dayLabel}`:""}</div>
-          <div style={{fontSize:11,color:G.grey,marginTop:2}}>{log.date}</div>
+          <div style={{fontSize:11,color:G.grey,marginTop:2}}>{fmtDate(log.date)}</div>
         </div>
         <Tag text={log.completed?"✓":"✗"} color={log.completed?G.green:G.red}/>
       </div>
@@ -2913,7 +2750,7 @@ const LogCard=({log,programs})=>{
       <div onClick={()=>setOpen(!open)} style={{padding:14,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div style={{flex:1}}>
           <div style={{fontWeight:700,fontSize:14}}>{prog?.name||"Séance"}{log.dayLabel?` — ${log.dayLabel}`:""}</div>
-          <div style={{fontSize:12,color:G.grey,marginTop:2}}>{log.date}{log.weekLabel?` · ${log.weekLabel}`:""}</div>
+          <div style={{fontSize:12,color:G.grey,marginTop:2}}>{fmtDate(log.date)}{log.weekLabel?` · ${log.weekLabel}`:""}{log.duration?` · ${fmtDuration(log.duration)}`:""}</div>
           {log.notes&&<div style={{fontSize:12,color:"#aaa",marginTop:4,fontStyle:"italic"}}>"{log.notes}"</div>}
         </div>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0,marginLeft:10}}>
@@ -2935,7 +2772,7 @@ const LogCard=({log,programs})=>{
                   <div key={j} style={{background:G.bg3,borderRadius:7,padding:"8px 10px",border:`1px solid ${G.border}`,textAlign:"center"}}>
                     <div style={{fontSize:10,color:G.grey,marginBottom:4,letterSpacing:.5}}>Série {j+1}</div>
                     <div style={{fontSize:15,fontWeight:800,color:s.load?G.goldLight:G.greyDim}}>{s.load||"—"}</div>
-                    <div style={{fontSize:11,color:G.grey,marginTop:2}}>{s.reps} reps</div>
+                    <div style={{fontSize:11,color:G.grey,marginTop:2}}>{s.reps}{isTimed(s.reps)?"":" reps"}</div>
                   </div>
                 ))}
               </div>
