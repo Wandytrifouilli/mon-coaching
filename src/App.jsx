@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { db, doc, collection, onSnapshot, setDoc, deleteDoc, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginClientWithCode, loginCoach, API_BASE } from "./firebase.js";
+import { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
+import { db, doc, collection, onSnapshot, setDoc, deleteDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginClientWithCode, loginCoach, API_BASE } from "./firebase.js";
 
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -29,6 +29,13 @@ const css=`
   @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important;}}
   .sx{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
   .fu{animation:fadeUp .3s ease both;}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes sheetUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes pop{0%{transform:scale(.6)}60%{transform:scale(1.08)}100%{transform:scale(1)}}
+  @keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.35}}
+  .noscroll{scrollbar-width:none;}
+  .noscroll::-webkit-scrollbar{display:none;}
+  input::placeholder,textarea::placeholder{color:#5c5c5c;}
   .gl::after{content:'';display:block;width:36px;height:3px;background:linear-gradient(90deg,${G.goldLight},${G.gold});border-radius:2px;margin-top:7px;}
 `;
 
@@ -43,8 +50,6 @@ const css=`
 // Program: { id, name, category, level, weeks:[] }
 // SessionLog: { id, date, programId, weekIdx, dayIdx, dayLabel, exercises:[{exId, name, sets:[{reps,load}]}], notes, completed }
 
-const MUSCLES=["Tous","Jambes","Pectoraux","Dos","Épaules","Biceps","Triceps","Abdominaux","Avant-bras"];
-const EQUIPS=["Aucun","Barre","Haltères","Poulie","Barre fixe","Machine","Élastique","Kettlebell","Poids du corps"];
 const MEAL_SLOTS=[
   {id:"breakfast",icon:"🌅",label:"Petit déjeuner"},
   {id:"snack1",icon:"🍎",label:"Collation matin"},
@@ -53,16 +58,6 @@ const MEAL_SLOTS=[
   {id:"dinner",icon:"🌙",label:"Dîner"},
   {id:"other",icon:"💊",label:"Autre / Suppléments"},
 ];
-const emptyMealPlan=()=>({meals:MEAL_SLOTS.map(s=>({id:s.id,label:s.label,items:[]}))});
-// Code d’accès client : 4 premières lettres du prénom (sans accents) + année.
-// Si le code existe déjà (deux « Thomas »…), on ajoute un suffixe pour qu’il reste unique.
-const genCode=(n,existing=[])=>{
-  const base=(n||"").trim().split(/\s+/)[0].normalize("NFD").replace(/[̀-ͯ]/g,"").toUpperCase().replace(/[^A-Z]/g,"").slice(0,4)||"CLIE";
-  const used=new Set(existing.map(c=>(c.code||"").toUpperCase()));
-  let code=base+new Date().getFullYear(),i=2;
-  while(used.has(code)) code=base+new Date().getFullYear()+"-"+i++;
-  return code;
-};
 
 // ─── BASE DE DONNÉES ALIMENTAIRE ──────────────────────────────────────────────
 // unit:"g" → valeurs pour 100g | unit:"portion" → valeurs pour 1 portion
@@ -100,373 +95,10 @@ const rnd1=v=>Math.round(v*10)/10;
 const uid=()=>Math.random().toString(36).slice(2,9);
 
 // ─── SHARED UI ────────────────────────────────────────────────────────────────
-const Tag=({text,color=G.gold})=>(
-  <span style={{background:color+"18",color,border:`1px solid ${color}33`,borderRadius:4,padding:"2px 9px",fontSize:11,fontWeight:600,letterSpacing:.8,textTransform:"uppercase"}}>{text}</span>
-);
-const Label=({children})=>(
-  <div style={{fontSize:11,color:G.grey,fontWeight:600,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>{children}</div>
-);
-const Inp=({label,...p})=>(
-  <div style={{marginBottom:14}}>
-    {label&&<Label>{label}</Label>}
-    <input style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"11px 14px",color:G.white,fontSize:14,outline:"none",transition:"border .2s"}}
-      onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border} {...p}/>
-  </div>
-);
-const Txa=({label,...p})=>(
-  <div style={{marginBottom:14}}>
-    {label&&<Label>{label}</Label>}
-    <textarea style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"11px 14px",color:G.white,fontSize:14,outline:"none",resize:"vertical",minHeight:66}}
-      onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border} {...p}/>
-  </div>
-);
 const Btn=({children,variant="gold",style:s={},...p})=>{
   const v={gold:{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg},outline:{background:"transparent",color:G.gold,border:`1px solid ${G.gold}55`},ghost:{background:G.bg3,color:G.grey,border:`1px solid ${G.border}`},danger:{background:"#E0525215",color:G.red,border:`1px solid ${G.red}33`}};
   return <button style={{border:"none",borderRadius:8,padding:"12px 20px",fontWeight:700,fontSize:14,cursor:"pointer",width:"100%",display:"block",...v[variant],...s}} {...p}>{children}</button>;
 };
-const BtnSm=({children,variant="gold",...p})=>{
-  const v={gold:{background:G.goldLight+"18",color:G.goldLight,border:`1px solid ${G.gold}44`},ghost:{background:G.bg3,color:G.grey,border:`1px solid ${G.border}`},danger:{background:"#E0525210",color:G.red,border:`1px solid ${G.red}22`}};
-  return <button style={{...v[variant],borderRadius:6,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}} {...p}>{children}</button>;
-};
-const MacroBar=({label,value,max,color})=>(
-  <div style={{marginBottom:12}}>
-    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:5}}>
-      <span style={{color:G.grey}}>{label}</span><span style={{color:G.white,fontWeight:700}}>{value}g</span>
-    </div>
-    <div style={{background:G.bg4,borderRadius:99,height:5}}><div style={{width:`${Math.min(100,(value/max)*100)}%`,height:"100%",background:color,borderRadius:99,transition:"width .8s"}}/></div>
-  </div>
-);
-const Av=({name,color=G.gold,size=48})=>(
-  <div style={{width:size,height:size,borderRadius:size*.3,background:color+"18",border:`1.5px solid ${color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:size*.35,color,flexShrink:0}}>
-    {name.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2)}
-  </div>
-);
-const BackBtn=({label="Retour",onClick})=>(
-  <button onClick={onClick} style={{background:"none",border:"none",color:G.gold,cursor:"pointer",fontSize:13,fontWeight:600,padding:"0 0 18px",display:"flex",alignItems:"center",gap:6}}>← {label}</button>
-);
-const PageH=({title,subtitle,action})=>(
-  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:24}}>
-    <div>
-      <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,letterSpacing:-1}} className="gl">{title}</div>
-      {subtitle&&<div style={{fontSize:12,color:G.grey,marginTop:4}}>{subtitle}</div>}
-    </div>
-    {action}
-  </div>
-);
-const Empty=({text})=>(
-  <div style={{textAlign:"center",padding:"32px 20px",color:G.grey,fontSize:14}}><div style={{fontSize:28,marginBottom:8}}>○</div>{text}</div>
-);
-const Modal=({onClose,title,children})=>(
-  <div style={{position:"fixed",inset:0,background:"#000000dd",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-    <div style={{background:G.bg2,borderRadius:"20px 20px 0 0",padding:"20px 20px 32px",width:"100%",maxWidth:430,border:`1px solid ${G.border}`,maxHeight:"85vh",overflowY:"auto",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexShrink:0}}>
-        <div style={{fontFamily:G.fontD,fontSize:20,fontWeight:800,letterSpacing:-.5}}>{title}</div>
-        <button onClick={onClose} style={{background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,width:34,height:34,cursor:"pointer",color:G.grey,fontSize:16,flexShrink:0}}>✕</button>
-      </div>
-      <div style={{overflowY:"auto",flex:1}}>
-        {children}
-      </div>
-    </div>
-  </div>
-);
-
-// ─── MEAL PLAN EDITOR (coach) ─────────────────────────────────────────────────
-function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB,onSetAsTemplate}){
-  const initForm=()=>MEAL_SLOTS.map(s=>{
-    const ex=(mealPlan?.meals||[]).find(m=>m.id===s.id);
-    return{id:s.id,label:s.label,icon:s.icon,items:ex?.items||[]};
-  });
-  const [editing,setEditing]=useState(false);
-  const [form,setForm]=useState(initForm);
-  const [pickerMeal,setPickerMeal]=useState(null);
-  const [search,setSearch]=useState("");
-  const [templateSaved,setTemplateSaved]=useState(false);
-  const [firestoreTemplate,setFirestoreTemplate]=useState(null);
-
-  useEffect(()=>{
-    getDoc(doc(db,"settings","mealTemplate"))
-      .then(snap=>{if(snap.exists())setFirestoreTemplate(snap.data().meals||null);})
-      .catch(()=>{});
-  },[]);
-
-  // Remonte les totaux en temps réel vers le parent pendant l'édition
-  useEffect(()=>{
-    if(editing&&onLiveChange) onLiveChange(calcMacros(form.flatMap(m=>m.items),foods));
-  },[form,editing]); // eslint-disable-line
-
-  const save=()=>{
-    const meals=form.map(({icon,...rest})=>rest);
-    const allItems=form.flatMap(m=>m.items);
-    const totals=calcMacros(allItems,foods);
-    onSave({meals},totals);
-    if(onLiveChange) onLiveChange(null);
-    setEditing(false);
-  };
-  const cancel=()=>{setForm(initForm());if(onLiveChange)onLiveChange(null);setEditing(false);};
-
-  const applyTemplate=()=>{
-    if(!firestoreTemplate)return;
-    setForm(MEAL_SLOTS.map(s=>{
-      const tm=firestoreTemplate.find(m=>m.id===s.id);
-      return{id:s.id,label:s.label,icon:s.icon,items:tm?.items||[]};
-    }));
-  };
-
-  const addItem=(mealId,foodId)=>{
-    const food=foods.find(f=>f.id===foodId);
-    const defQty=food.unit==="g"?100:1;
-    setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:[...m.items,{foodId,qty:defQty}]}));
-    setPickerMeal(null);setSearch("");
-  };
-  const removeItem=(mealId,idx)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:m.items.filter((_,i)=>i!==idx)}));
-  const updateQty=(mealId,idx,val)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:m.items.map((it,i)=>i!==idx?it:{...it,qty:parseFloat(val)||0})}));
-
-  const filteredFoods=foods.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
-  const totalMacros=calcMacros(form.flatMap(m=>m.items),foods);
-  const hasPlan=form.some(m=>m.items.length>0);
-
-  return(
-    <div style={{marginTop:14}}>
-      {/* Header */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:0,padding:"14px 16px",background:G.bg2,borderRadius:"12px 12px 0 0",border:`1px solid ${G.border}`,borderBottom:"none"}}>
-        <div style={{fontWeight:700,fontSize:14}}>Plan alimentaire</div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          {!editing&&hasPlan&&onSetAsTemplate&&(
-            <BtnSm variant="ghost" onClick={()=>{const meals=form.map(({icon,...r})=>r);onSetAsTemplate({meals});setTemplateSaved(true);setTimeout(()=>setTemplateSaved(false),2500);}}>
-              {templateSaved?"✓ Modèle enregistré":"⭐ Modèle par défaut"}
-            </BtnSm>
-          )}
-          {editing&&(
-            <BtnSm variant="ghost" onClick={applyTemplate}
-              style={!firestoreTemplate?{opacity:0.35,cursor:"default",pointerEvents:"none"}:{}}>
-              📋 Coller le template
-            </BtnSm>
-          )}
-          <BtnSm variant={editing?"ghost":"gold"} onClick={()=>editing?cancel():setEditing(true)}>{editing?"Annuler":"✏️ Modifier"}</BtnSm>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div style={{background:G.bg2,borderRadius:"0 0 12px 12px",padding:16,border:`1px solid ${G.border}`,borderTop:"none"}}>
-
-        {editing?(
-          <>
-            {/* Totaux en temps réel */}
-            {totalMacros.kcal>0&&(
-              <div style={{display:"flex",justifyContent:"space-around",background:G.bg3,borderRadius:10,padding:"10px 0",marginBottom:14,border:`1px solid ${G.border}`}}>
-                {[[rnd(totalMacros.kcal),"kcal",G.goldLight],[rnd1(totalMacros.protein)+"g","Prot.",G.goldLight],[rnd1(totalMacros.carbs)+"g","Gluc.",G.gold],[rnd1(totalMacros.fat)+"g","Lip.","#C9A84C"]].map(([v,l,c])=>(
-                  <div key={l} style={{textAlign:"center"}}>
-                    <div style={{fontFamily:G.fontD,fontSize:18,fontWeight:800,color:c,lineHeight:1}}>{v}</div>
-                    <div style={{fontSize:9,color:G.grey,letterSpacing:.5,marginTop:3}}>{l}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Repas */}
-            {form.map(meal=>{
-              const mMacros=calcMacros(meal.items,foods);
-              return(
-                <div key={meal.id} style={{marginBottom:18}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <div style={{fontSize:12,color:G.gold,fontWeight:700,letterSpacing:.5}}>{meal.icon} {meal.label}</div>
-                    {meal.items.length>0&&<div style={{fontSize:10,color:G.grey}}>{rnd(mMacros.kcal)} kcal</div>}
-                  </div>
-
-                  {/* Aliments du repas */}
-                  {meal.items.map((item,idx)=>{
-                    const food=foods.find(f=>f.id===item.foodId);
-                    if(!food)return null;
-                    const im=calcMacros([item],foods);
-                    return(
-                      <div key={idx} style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,background:G.bg3,borderRadius:8,padding:"8px 10px"}}>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12,fontWeight:600,color:G.white,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{food.name}</div>
-                          <div style={{fontSize:10,color:G.grey,marginTop:2}}>{rnd(im.kcal)} kcal · P {rnd1(im.protein)}g · G {rnd1(im.carbs)}g · L {rnd1(im.fat)}g</div>
-                        </div>
-                        <input type="number" value={item.qty} min="0" onChange={e=>updateQty(meal.id,idx,e.target.value)}
-                          style={{width:52,background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"5px 4px",color:G.goldLight,fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
-                        <div style={{fontSize:10,color:G.grey,flexShrink:0}}>{food.unit==="g"?"g":"port."}</div>
-                        <button onClick={()=>removeItem(meal.id,idx)}
-                          style={{background:"none",border:"none",color:G.red,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 2px",flexShrink:0}}>×</button>
-                      </div>
-                    );
-                  })}
-
-                  {/* Bouton ajouter */}
-                  <button onClick={()=>{setPickerMeal(meal.id);setSearch("");}}
-                    style={{width:"100%",background:"transparent",border:`1px dashed ${G.border}`,borderRadius:8,padding:"8px 0",color:G.grey,fontSize:12,cursor:"pointer",marginTop:meal.items.length?4:0,transition:"border .2s"}}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold;e.currentTarget.style.color=G.gold;}}
-                    onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.grey;}}>
-                    + Ajouter un aliment
-                  </button>
-                </div>
-              );
-            })}
-
-            <Btn onClick={save}>✓ Enregistrer le plan alimentaire</Btn>
-          </>
-        ):(
-          /* Vue lecture */
-          !hasPlan?(
-            <div style={{textAlign:"center",padding:"20px 0",color:G.greyDim,fontSize:13}}>Aucun plan alimentaire renseigné</div>
-          ):(
-            form.filter(m=>m.items.length>0).map(meal=>{
-              const mMacros=calcMacros(meal.items,foods);
-              return(
-                <div key={meal.id} style={{marginBottom:12,paddingBottom:12,borderBottom:`1px solid ${G.border}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                    <div style={{fontSize:10,color:G.gold,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{meal.icon} {meal.label}</div>
-                    <div style={{fontSize:10,color:G.grey}}>{rnd(mMacros.kcal)} kcal</div>
-                  </div>
-                  {meal.items.map((item,idx)=>{
-                    const food=foods.find(f=>f.id===item.foodId);
-                    if(!food)return null;
-                    return(
-                      <div key={idx} style={{fontSize:13,color:G.white,marginBottom:3}}>
-                        {food.name} <span style={{color:G.grey}}>— {item.qty} {food.unit==="g"?"g":"port."}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })
-          )
-        )}
-      </div>
-
-      {/* Sélecteur d'aliment (modal) */}
-      {pickerMeal&&(
-        <Modal onClose={()=>{setPickerMeal(null);setSearch("");}} title="Ajouter un aliment">
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un aliment..."
-            style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 12px",color:G.white,fontSize:14,outline:"none",marginBottom:12}}
-            onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border}/>
-          {filteredFoods.map(food=>(
-            <div key={food.id} onClick={()=>addItem(pickerMeal,food.id)}
-              style={{padding:"12px 12px",marginBottom:6,background:G.bg3,borderRadius:8,cursor:"pointer",border:`1px solid ${G.border}`,transition:"border .15s"}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=G.gold}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=G.border}>
-              <div style={{fontWeight:600,fontSize:13,color:G.white,marginBottom:3}}>{food.name}</div>
-              <div style={{fontSize:11,color:G.grey}}>
-                {food.kcal} kcal · {food.protein}g prot · {food.carbs}g gluc · {food.fat}g lip
-                <span style={{color:G.gold,marginLeft:6}}>/ {food.unit==="g"?"100g":"1 portion"}</span>
-              </div>
-            </div>
-          ))}
-          {filteredFoods.length===0&&<div style={{textAlign:"center",color:G.greyDim,padding:20}}>Aucun aliment trouvé</div>}
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-// ─── FOODS MANAGER (coach) ────────────────────────────────────────────────────
-const EMPTY_FOOD=()=>({id:"",name:"",unit:"g",kcal:0,protein:0,carbs:0,fat:0});
-function FoodsManager({foods,setFoods,go}){
-  const [editing,setEditing]=useState(null); // null | "new" | food object
-  const [form,setForm]=useState(EMPTY_FOOD());
-  const [search,setSearch]=useState("");
-  const [confirmDel,setConfirmDel]=useState(null);
-
-  const openNew=()=>{setForm(EMPTY_FOOD());setEditing("new");};
-  const openEdit=f=>{setForm({...f});setEditing(f);};
-  const f=k=>v=>setForm(p=>({...p,[k]:v}));
-
-  const save=()=>{
-    const entry={
-      ...form,
-      id:editing==="new"?(form.name.toLowerCase().replace(/[^a-z0-9]/g,"_").slice(0,30)+"_"+Date.now()):form.id,
-      kcal:parseFloat(form.kcal)||0,
-      protein:parseFloat(form.protein)||0,
-      carbs:parseFloat(form.carbs)||0,
-      fat:parseFloat(form.fat)||0,
-    };
-    if(!entry.name.trim())return;
-    if(editing==="new"){
-      setFoods(p=>[...p,entry]);
-    }else{
-      setFoods(p=>p.map(x=>x.id===entry.id?entry:x));
-    }
-    setEditing(null);
-  };
-  const del=id=>{setFoods(p=>p.filter(x=>x.id!==id));setConfirmDel(null);};
-
-  const filtered=foods.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
-
-  if(editing){
-    const isNew=editing==="new";
-    return(
-      <div style={{padding:"28px 20px 0"}} className="fu">
-        <BackBtn onClick={()=>setEditing(null)} label="Aliments"/>
-        <PageH title={isNew?"NOUVEL ALIMENT":"MODIFIER L'ALIMENT"}/>
-        <Inp label="Nom de l'aliment" value={form.name} onChange={e=>f("name")(e.target.value)} placeholder="Ex: Riz basmati cuit"/>
-        <div style={{marginBottom:14}}>
-          <Label>Type de mesure</Label>
-          <div style={{display:"flex",gap:8}}>
-            {[["g","Par 100g"],["portion","Par portion"]].map(([val,label])=>(
-              <button key={val} onClick={()=>f("unit")(val)}
-                style={{flex:1,padding:"10px 0",borderRadius:8,border:`1px solid ${form.unit===val?G.gold:G.border}`,background:form.unit===val?G.gold+"22":"transparent",color:form.unit===val?G.goldLight:G.grey,fontWeight:700,fontSize:13,cursor:"pointer"}}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:4}}>
-          <Inp label={`Calories (kcal/${form.unit==="g"?"100g":"portion"})`} type="number" value={form.kcal} onChange={e=>f("kcal")(e.target.value)}/>
-          <Inp label={`Protéines (g/${form.unit==="g"?"100g":"portion"})`} type="number" value={form.protein} onChange={e=>f("protein")(e.target.value)}/>
-          <Inp label={`Glucides (g/${form.unit==="g"?"100g":"portion"})`} type="number" value={form.carbs} onChange={e=>f("carbs")(e.target.value)}/>
-          <Inp label={`Lipides (g/${form.unit==="g"?"100g":"portion"})`} type="number" value={form.fat} onChange={e=>f("fat")(e.target.value)}/>
-        </div>
-        {form.name.trim()&&(
-          <div style={{marginBottom:14,padding:12,background:G.bg3,borderRadius:8,border:`1px solid ${G.border}`,fontSize:12,color:G.grey}}>
-            Aperçu : <span style={{color:G.goldLight,fontWeight:700}}>{form.kcal} kcal</span> · P {form.protein}g · G {form.carbs}g · L {form.fat}g / {form.unit==="g"?"100g":"portion"}
-          </div>
-        )}
-        <Btn onClick={save}>{isNew?"Ajouter l'aliment":"Enregistrer les modifications"}</Btn>
-      </div>
-    );
-  }
-
-  return(
-    <div style={{padding:"28px 20px 0"}} className="fu">
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
-        <PageH title="ALIMENTS" style={{marginBottom:0}}/>
-        <Btn onClick={openNew} style={{marginTop:0,padding:"10px 18px",fontSize:13}}>+ Ajouter</Btn>
-      </div>
-      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher..."
-        style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 12px",color:G.white,fontSize:14,outline:"none",marginBottom:14,boxSizing:"border-box"}}
-        onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border}/>
-      {filtered.map(food=>(
-        <div key={food.id} style={{background:G.bg2,borderRadius:12,padding:"14px 16px",marginBottom:8,border:`1px solid ${G.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:600,fontSize:13,color:G.white,marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{food.name}</div>
-            <div style={{fontSize:11,color:G.grey}}>
-              {food.kcal} kcal · P {food.protein}g · G {food.carbs}g · L {food.fat}g
-              <span style={{color:G.gold,marginLeft:6}}>/ {food.unit==="g"?"100g":"portion"}</span>
-            </div>
-          </div>
-          <div style={{display:"flex",gap:6,flexShrink:0}}>
-            <BtnSm onClick={()=>openEdit(food)}>✏️</BtnSm>
-            <BtnSm variant="ghost" onClick={()=>setConfirmDel(food.id)} style={{color:G.red,borderColor:G.red+"44"}}>🗑</BtnSm>
-          </div>
-        </div>
-      ))}
-      {filtered.length===0&&<div style={{textAlign:"center",color:G.greyDim,padding:"32px 0",fontSize:13}}>Aucun aliment trouvé</div>}
-      {confirmDel&&(
-        <Modal onClose={()=>setConfirmDel(null)} title="Supprimer l'aliment">
-          <div style={{color:G.grey,fontSize:14,marginBottom:20}}>
-            Supprimer <strong style={{color:G.white}}>{foods.find(f=>f.id===confirmDel)?.name}</strong> ?<br/>
-            <span style={{fontSize:12}}>Les plans alimentaires existants qui utilisent cet aliment ne seront plus affichés correctement.</span>
-          </div>
-          <div style={{display:"flex",gap:10}}>
-            <Btn onClick={()=>del(confirmDel)} style={{background:G.red+"22",borderColor:G.red,color:G.red}}>Supprimer</Btn>
-            <BtnSm onClick={()=>setConfirmDel(null)}>Annuler</BtnSm>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
 
 // ─── STOCKAGE LOCAL ───────────────────────────────────────────────────────────
 // Tolérant aux erreurs (navigation privée, stockage bloqué…) : l'app fonctionne quand même.
@@ -593,7 +225,7 @@ export default function App(){
     return "ok";
   };
   // Retourne "ok" | "invalid" | "notcoach" | "network"
-  // (sur ordinateur, la redirection vers /coach se fait au rendu une fois la session ouverte)
+  // (la redirection vers /coach se fait au rendu une fois la session ouverte)
   const coachLogin=(email,password)=>loginCoach(email,password);
   const logout=()=>{
     store.del(CLIENT_KEY);
@@ -614,13 +246,9 @@ export default function App(){
     );
   }
   if(user&&role==="coach"){
-    // Ordinateur : espace coach complet (même session Auth)
-    if(!IS_PHONE){window.location.replace("/coach");return <Shell css={css}><Loading label="Ouverture de l'espace coach…"/></Shell>;}
-    return (
-      <Shell css={css}>
-        <CoachMobile onLogout={logout}/>
-      </Shell>
-    );
+    // Espace coach unique (ordinateur et téléphone), même session Auth
+    window.location.replace("/coach");
+    return <Shell css={css}><Loading label="Ouverture de l'espace coach…"/></Shell>;
   }
   return <LoginScreen onLogin={login} onCoachLogin={coachLogin}/>;
 }
@@ -651,43 +279,6 @@ function ClientRoot({clientId,code,onLogout}){
   return <ClientPortal client={client} clientId={clientId} updateClient={updateClient} programs={programs} exercises={exercises} foods={foods} onLogout={onLogout}/>;
 }
 
-// ─── COACH (version téléphone) ────────────────────────────────────────────────
-function CoachMobile({onLogout}){
-  const [exercises,setExercises,exReady]=useFirestoreCollection("exercises");
-  const [programs,setPrograms,pgReady]=useFirestoreCollection("programs");
-  const [clients,setClients,clReady]=useFirestoreCollection("clients");
-  const [foods,setFoods,foodsReady]=useFirestoreCollection("foods");
-  const dbReady = exReady && pgReady && clReady && foodsReady;
-
-  const [coachView,setCoachView]=useState("dashboard");
-  const [selClient,setSelClient]=useState(null);
-  const [selProgram,setSelProgram]=useState(null);
-  const [selClientForProgram,setSelClientForProgram]=useState(null);
-  const [defaultMealTemplate,setDefaultMealTemplate]=useState(()=>{try{const t=store.get('defaultMealTemplate');return t?JSON.parse(t):null;}catch{return null;}});
-  const saveDefaultTemplate=(mp)=>{setDefaultMealTemplate(mp);store.set('defaultMealTemplate',JSON.stringify(mp));};
-
-  if(!dbReady) return <Loading label="Connexion à la base de données…"/>;
-  return (
-    <>
-      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
-        {coachView==="dashboard"&&<Dashboard clients={clients} programs={programs} exercises={exercises} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}} selP={p=>{setSelProgram(p);setCoachView("program-detail");}} onLogout={onLogout}/>}
-        {coachView==="clients"&&<ClientsList clients={clients} go={setCoachView} sel={c=>{setSelClient(c);setCoachView("client-detail");}}/>}
-        {coachView==="client-detail"&&selClient&&<ClientDetail client={clients.find(c=>c.id===selClient.id)||selClient} clients={clients} setClients={setClients} setPrograms={setPrograms} setSel={setSelClient} programs={programs} exercises={exercises} foods={foods} go={setCoachView} onSetAsTemplate={saveDefaultTemplate} selP={p=>{setSelProgram(p);setSelClientForProgram(clients.find(c=>c.id===selClient.id)||selClient);setCoachView("program-detail");}}/>}
-        {coachView==="new-client"&&<NewClient setClients={setClients} go={setCoachView} defaultMealTemplate={defaultMealTemplate}/>}
-        {coachView==="programs"&&<ProgramsList programs={programs} setPrograms={setPrograms} setClients={setClients} exercises={exercises} go={setCoachView} sel={p=>{setSelProgram(p);setSelClientForProgram(null);setCoachView("program-detail");}} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
-        {coachView==="program-detail"&&selProgram&&<ProgramDetail program={programs.find(x=>x.id===selProgram.id)||selProgram} exercises={exercises} go={setCoachView} client={selClientForProgram} onEdit={p=>{setSelProgram(p);setCoachView("edit-program");}}/>}
-        {coachView==="edit-program"&&selProgram&&<EditProgram program={programs.find(x=>x.id===selProgram.id)||selProgram} exercises={exercises} setPrograms={setPrograms} go={setCoachView} setSel={setSelProgram}/>}
-        {coachView==="new-program"&&<NewProgram exercises={exercises} setPrograms={setPrograms} go={setCoachView}/>}
-        {coachView==="exercises"&&<ExLib exercises={exercises} setExercises={setExercises} go={setCoachView}/>}
-        {coachView==="new-exercise"&&<NewEx setExercises={setExercises} go={setCoachView}/>}
-        {coachView==="ai-coach"&&<AICoach exercises={exercises} setPrograms={setPrograms} go={setCoachView}/>}
-        {coachView==="foods"&&<FoodsManager foods={foods} setFoods={setFoods} go={setCoachView}/>}
-      </div>
-      <CoachNav view={coachView} setView={setCoachView}/>
-    </>
-  );
-}
-
 // ─── ÉCRAN DE CHARGEMENT ──────────────────────────────────────────────────────
 function Loading({label="Chargement…"}){
   const [slow,setSlow]=useState(false);
@@ -712,8 +303,6 @@ function Loading({label="Chargement…"}){
 // Téléphones et tablettes (portrait comme paysage) → plein écran.
 const IS_DESKTOP = !!window.matchMedia?.("(hover:hover) and (pointer:fine)").matches && window.innerWidth>700;
 const IS_MOBILE = !IS_DESKTOP;
-// Téléphone : le coach reste sur la version mobile ; sinon il est redirigé vers l'espace coach complet
-const IS_PHONE = Math.min(window.screen.width, window.screen.height) < 600;
 const PHONE_FRAME={width:390,height:"min(844px, calc(100vh - 48px))",borderRadius:44,background:"#1a1a1a",boxShadow:"0 40px 120px #000a, inset 0 0 0 1px #333",padding:"12px",flexShrink:0,position:"relative"};
 const PHONE_NOTCH={position:"absolute",top:12,left:"50%",transform:"translateX(-50%)",width:120,height:30,background:"#1a1a1a",borderRadius:"0 0 18px 18px",zIndex:10};
 
@@ -769,13 +358,18 @@ function LoginScreen({onLogin,onCoachLogin}){
       {/* Logo */}
       <div style={{marginBottom:40,textAlign:"center"}}>
         <div style={{
-          width:80,height:80,borderRadius:24,
-          background:`linear-gradient(145deg,${G.gold}33,${G.goldLight}18)`,
-          border:`1.5px solid ${G.gold}44`,
+          width:84,height:84,borderRadius:28,
+          background:`radial-gradient(circle at 50% 35%,${G.gold}38,#121212 70%)`,
+          border:`1px solid ${G.gold}55`,
           display:"flex",alignItems:"center",justifyContent:"center",
-          margin:"0 auto 20px",fontSize:34,
-          boxShadow:`0 8px 32px ${G.gold}22`
-        }}>⚡</div>
+          margin:"0 auto 22px",
+          boxShadow:`0 14px 44px ${G.gold}2e, inset 0 1px 0 #ffffff14`
+        }}>
+          <svg width="42" height="42" viewBox="0 0 24 24" aria-hidden="true">
+            <defs><linearGradient id="boltG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={G.goldLight}/><stop offset="1" stopColor={G.gold}/></linearGradient></defs>
+            <path d="M13.5 2 4 14h7l-1.5 8L20 9.5h-7z" fill="url(#boltG)"/>
+          </svg>
+        </div>
         <div style={{fontFamily:G.fontD,fontSize:38,fontWeight:800,color:G.white,letterSpacing:-1.5,lineHeight:1}}>
           WANDY<span style={{color:G.goldLight}}> COACH</span>
         </div>
@@ -786,8 +380,8 @@ function LoginScreen({onLogin,onCoachLogin}){
 
       {/* Card */}
       <form onSubmit={attempt} style={{
-        width:"100%",background:G.bg2,
-        borderRadius:20,padding:"28px 24px",
+        width:"100%",background:"linear-gradient(180deg,#151515,#0e0e0e)",
+        borderRadius:26,padding:"26px 22px",
         border:`1px solid ${G.border}`,
         boxShadow:"0 20px 60px #0008"
       }}>
@@ -813,7 +407,7 @@ function LoginScreen({onLogin,onCoachLogin}){
           style={{
             width:"100%",background:G.bg3,
             border:`1.5px solid ${err?G.red:focused?G.gold:G.border}`,
-            borderRadius:12,padding:"16px 18px",
+            borderRadius:16,padding:"16px 18px",
             color:G.white,fontSize:22,outline:"none",
             letterSpacing:5,textAlign:"center",
             fontWeight:700,fontFamily:G.font,
@@ -841,9 +435,9 @@ function LoginScreen({onLogin,onCoachLogin}){
           type="submit"
           disabled={!active}
           style={{
-            width:"100%",padding:"15px 0",
-            background:active?`linear-gradient(135deg,${G.gold},${G.goldLight})`:"#2a2a2a",
-            border:"none",borderRadius:12,
+            width:"100%",height:54,padding:0,
+            background:active?`linear-gradient(135deg,${G.goldLight},${G.gold})`:"#222",
+            border:"none",borderRadius:16,
             color:active?G.bg:"#666",
             fontSize:15,fontWeight:800,
             fontFamily:G.font,letterSpacing:.5,
@@ -908,835 +502,26 @@ function LoginScreen({onLogin,onCoachLogin}){
 }
 
 
-// ─── COACH NAV ────────────────────────────────────────────────────────────────
-function CoachNav({view,setView}){
-  const items=[{key:"dashboard",icon:"◈",label:"Accueil"},{key:"clients",icon:"◉",label:"Clients"},{key:"programs",icon:"▦",label:"Prog."},{key:"exercises",icon:"⊕",label:"Exercices"},{key:"foods",icon:"◎",label:"Aliments"},{key:"ai-coach",icon:"✦",label:"IA Coach"}];
-  const ak=v=>{if(["client-detail","new-client"].includes(v))return"clients";if(["program-detail","new-program","edit-program"].includes(v))return"programs";if(v==="new-exercise")return"exercises";return v;};
-  return(
-    <nav style={{flexShrink:0,width:"100%",background:G.bg2,borderTop:`1px solid ${G.border}`,display:"flex",zIndex:100}}>
-      {items.map(({key,icon,label})=>{
-        const a=ak(view)===key;
-        const isAI=key==="ai-coach";
-        return<button key={key} onClick={()=>setView(key)} style={{flex:1,padding:"12px 0 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:3,background:"none",border:"none",cursor:"pointer",color:a?(isAI?G.goldLight:G.goldLight):isAI?G.gold+"88":G.greyDim,fontSize:10,fontWeight:600,letterSpacing:.5,transition:"color .2s",borderTop:a?`2px solid ${G.goldLight}`:"2px solid transparent"}}>
-          <span style={{fontSize:isAI?20:18}}>{icon}</span><span>{label}</span>
-        </button>;
-      })}
-    </nav>
-  );
-}
-
-// ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({clients,programs,exercises,go,sel,selP,onLogout}){
-  return(
-    <div style={{padding:"28px 20px 0"}} className="fu">
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:28}}>
-        <div>
-          <div style={{fontSize:11,color:G.gold,fontWeight:600,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Bienvenue</div>
-          <div style={{fontFamily:G.fontD,fontSize:30,fontWeight:800,letterSpacing:-1,lineHeight:1}} className="gl">TABLEAU DE BORD</div>
-        </div>
-        <button onClick={onLogout} style={{background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"7px 12px",color:G.grey,fontSize:12,cursor:"pointer"}}>Déconnexion</button>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:28}}>
-        {[[clients.length,"Clients"],[exercises.length,"Exercices"]].map(([v,l])=>(
-          <div key={l} style={{background:G.bg2,borderRadius:12,padding:"16px 10px",textAlign:"center",border:`1px solid ${G.border}`}}>
-            <div style={{fontFamily:G.fontD,fontSize:34,fontWeight:800,color:G.goldLight,lineHeight:1}}>{v}</div>
-            <div style={{fontSize:10,color:G.grey,letterSpacing:1,textTransform:"uppercase",marginTop:4}}>{l}</div>
-          </div>
-        ))}
-      </div>
-      <SH title="Clients actifs" onMore={()=>go("clients")}/>
-      {clients.map((c,i)=><CRow key={c.id} c={c} delay={i*50} onClick={()=>sel(c)}/>)}
-      <div style={{height:16}}/>
-      <SH title="Programmes récents" onMore={()=>go("programs")}/>
-      {programs.slice(0,2).map(p=>(
-        <div key={p.id} onClick={()=>selP(p)} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,cursor:"pointer"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>{p.name}</div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {[p.level,`${p.weeks.length} sem.`,`${p.weeks[0]?.days.length||0} j/sem`].filter(Boolean).map(t=><Tag key={t} text={t} color={G.grey}/>)}
-              </div>
-            </div>
-            <div style={{color:G.greyDim,fontSize:20}}>›</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-const SH=({title,onMore})=>(
-  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-    <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase"}}>{title}</div>
-    {onMore&&<button onClick={onMore} style={{background:"none",border:"none",color:G.goldLight,cursor:"pointer",fontSize:12,fontWeight:600}}>Voir tout</button>}
-  </div>
-);
-const CRow=({c,delay=0,onClick,showCode})=>(
-  <div onClick={onClick} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,borderLeft:`3px solid ${c.color}`,cursor:"pointer",animationDelay:`${delay}ms`}} className="fu">
-    <div style={{display:"flex",alignItems:"center",gap:14}}>
-      <Av name={c.name} color={c.color} size={44}/>
-      <div style={{flex:1}}>
-        <div style={{fontWeight:700,fontSize:15}}>{c.name}</div>
-        <div style={{fontSize:12,color:G.grey,marginTop:2}}>{c.goal} · {c.sessions} séances</div>
-        {showCode&&<div style={{fontSize:11,color:G.gold,marginTop:4,fontFamily:"monospace",letterSpacing:1.5}}>{c.code}</div>}
-      </div>
-      <div style={{color:G.greyDim,fontSize:20}}>›</div>
-    </div>
-  </div>
-);
-
-// ─── CLIENTS LIST ─────────────────────────────────────────────────────────────
-function ClientsList({clients,go,sel}){
-  return(
-    <div style={{padding:"28px 20px 0"}} className="fu">
-      <PageH title="CLIENTS" subtitle={`${clients.length} actifs`} action={<BtnSm onClick={()=>go("new-client")}>+ Nouveau</BtnSm>}/>
-      {clients.map((c,i)=><CRow key={c.id} c={c} delay={i*50} onClick={()=>sel(c)} showCode/>)}
-    </div>
-  );
-}
-
-// ─── CLIENT DETAIL (coach side) ───────────────────────────────────────────────
-function ClientDetail({client,clients,setClients,setPrograms,setSel,programs,exercises,go,selP,foods=FOODS_DB,onSetAsTemplate}){
-  const [tab,setTab]=useState("program");
-  const [showLog,setShowLog]=useState(false);
-  const [logForm,setLogForm]=useState({date:new Date().toISOString().split("T")[0],programId:"",weekIdx:"",dayIdx:"",completed:true,notes:""});
-  const [nutForm,setNutForm]=useState({...client.nutrition});
-  const [editNut,setEditNut]=useState(false);
-  const [liveNut,setLiveNut]=useState(null); // totaux en temps réel depuis MealPlanEditor
-
-  const upd=fn=>{setClients(p=>p.map(c=>c.id===client.id?fn(c):c));setSel(fn(client));};
-  const removeProgram=pid=>upd(c=>({...c,programs:c.programs.filter(x=>x!==pid)}));
-  const toggle=pid=>upd(c=>({...c,programs:c.programs.includes(pid)?c.programs.filter(x=>x!==pid):[...c.programs,pid]}));
-  const copyAndEdit=(p)=>{
-    const copy={...JSON.parse(JSON.stringify(p)),id:Date.now(),name:`${p.name} (${client.name.split(" ")[0]})`,_copy:true};
-    setPrograms(prev=>[...prev,copy]);
-    upd(c=>({...c,programs:[...c.programs.filter(x=>x!==p.id),copy.id]}));
-    selP(copy);
-  };
-  const saveNut=()=>{upd(c=>({...c,nutrition:nutForm}));setEditNut(false);};
-  const saveLog=()=>{
-    const prog=programs.find(p=>p.id===Number(logForm.programId));
-    const week=prog?.weeks[Number(logForm.weekIdx)];
-    const day=week?.days[Number(logForm.dayIdx)];
-    const exEntries=(day?.exercises||[]).map(pe=>({exId:pe.exId,name:exercises.find(e=>e.id===pe.exId)?.name||"",sets:Array.from({length:pe.sets},(_,i)=>({reps:pe.reps,load:pe.targetLoad||""}))}));
-    upd(c=>({...c,sessions:c.sessions+(logForm.completed?1:0),sessionLogs:[{id:uid(),date:logForm.date,programId:Number(logForm.programId),weekIdx:Number(logForm.weekIdx),dayIdx:Number(logForm.dayIdx),dayLabel:day?.label||"",completed:logForm.completed,notes:logForm.notes,exercises:exEntries},...c.sessionLogs]}));
-    setShowLog(false);
-  };
-
-  const assigned=programs.filter(p=>client.programs.includes(p.id));
-  const unassigned=programs.filter(p=>!client.programs.includes(p.id));
-  const selProg=programs.find(p=>p.id===Number(logForm.programId));
-  const selWeek=selProg?.weeks[Number(logForm.weekIdx)];
-
-  return(
-    <div style={{padding:"28px 20px 0"}} className="fu">
-      <BackBtn onClick={()=>go("clients")} label="Clients"/>
-      <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24}}>
-        <Av name={client.name} color={client.color} size={54}/>
-        <div style={{flex:1}}>
-          <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800,letterSpacing:-.5}}>{client.name}</div>
-          <div style={{fontSize:12,color:G.grey,marginTop:2}}>{client.goal} · {client.sessions} séances</div>
-          <div style={{display:"inline-block",marginTop:6,background:G.bg3,border:`1px solid ${G.border}`,borderRadius:5,padding:"2px 10px",fontSize:11,color:G.gold,fontFamily:"monospace",letterSpacing:2}}>{client.code}</div>
-        </div>
-      </div>
-
-      <div style={{display:"flex",background:G.bg2,borderRadius:10,padding:3,marginBottom:20,gap:3}}>
-        {[["program","Programme"],["nutrition","Nutrition"],["suivi","Suivi"]].map(([k,l])=>(
-          <button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"8px 0",background:tab===k?G.bg4:"transparent",color:tab===k?G.goldLight:G.grey,border:tab===k?`1px solid ${G.border}`:"1px solid transparent",borderRadius:8,fontWeight:700,fontSize:12,cursor:"pointer",transition:"all .2s"}}>{l}</button>
-        ))}
-      </div>
-
-      {tab==="program"&&(
-        <>
-          {assigned.length===0&&<Empty text="Aucun programme assigné"/>}
-          {assigned.map(p=>(
-            <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${G.border}`}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <div style={{fontWeight:700,flex:1}}>{p.name}{p._copy&&<span style={{fontSize:10,color:G.gold,marginLeft:8,fontWeight:400}}>copie perso</span>}</div>
-                <div style={{display:"flex",gap:6,flexShrink:0}}>
-                  <BtnSm onClick={()=>copyAndEdit(p)}>✏️</BtnSm>
-                  <BtnSm variant="danger" onClick={()=>toggle(p.id)}>Retirer</BtnSm>
-                </div>
-              </div>
-              <div style={{fontSize:12,color:G.grey,marginBottom:10}}>{p.weeks.length} semaine{p.weeks.length>1?"s":""} · {p.weeks[0]?.days.length||0} jours/sem</div>
-              <BtnSm onClick={()=>selP(p)}>Voir le programme →</BtnSm>
-            </div>
-          ))}
-          {unassigned.length>0&&<>
-            <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",margin:"16px 0 10px"}}>Assigner un programme</div>
-            {unassigned.map(p=>(
-              <div key={p.id} style={{background:G.bg2,borderRadius:10,padding:14,marginBottom:10,border:`1px solid ${G.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><div style={{fontWeight:600}}>{p.name}</div><div style={{fontSize:12,color:G.grey}}>{p.category} · {p.level}</div></div>
-                <BtnSm onClick={()=>toggle(p.id)}>+ Assigner</BtnSm>
-              </div>
-            ))}
-          </>}
-        </>
-      )}
-
-      {tab==="nutrition"&&(
-        <>
-          {(()=>{
-            // Calcul des macros : liveNut (édition en cours) > plan stocké > valeurs manuelles
-            const liveMp=clients.find(c=>c.id===client.id)?.mealPlan||client.mealPlan;
-            const storedItems=(liveMp?.meals||[]).flatMap(m=>m.items||[]);
-            const storedCalc=storedItems.length>0?calcMacros(storedItems,foods):null;
-            const src=liveNut||storedCalc;
-            const cal=src?rnd(src.kcal):client.nutrition.calories;
-            const prot=src?rnd1(src.protein):client.nutrition.proteins;
-            const gluc=src?rnd1(src.carbs):client.nutrition.carbs;
-            const lip=src?rnd1(src.fat):client.nutrition.fats;
-            const isLive=!!liveNut;
-            return(
-              <div style={{background:G.bg2,borderRadius:12,padding:18,border:`1px solid ${G.border}`,marginBottom:0}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                  <div>
-                    <div style={{fontWeight:700}}>Objectifs nutritionnels</div>
-                    {isLive&&<div style={{fontSize:10,color:G.gold,marginTop:3}}>● Aperçu en temps réel</div>}
-                  </div>
-                  <BtnSm variant={editNut?"ghost":"gold"} onClick={()=>{setNutForm({...client.nutrition});setEditNut(!editNut);}}>{editNut?"Annuler":"✏️ Notes"}</BtnSm>
-                </div>
-                {editNut&&(
-                  <>
-                    <Txa label="Notes / Allergies / Préférences" value={nutForm.notes} placeholder="Éviter le gluten, shake post-workout..." onChange={e=>setNutForm(p=>({...p,notes:e.target.value}))}/>
-                    <Btn onClick={saveNut}>Enregistrer les notes</Btn>
-                  </>
-                )}
-                <div style={{textAlign:"center",padding:"12px 0 20px"}}>
-                  <div style={{fontFamily:G.fontD,fontSize:56,fontWeight:800,color:G.goldLight,lineHeight:1,transition:"all .3s"}}>{cal}</div>
-                  <div style={{fontSize:11,color:G.grey,letterSpacing:2,textTransform:"uppercase",marginTop:4}}>kcal / jour</div>
-                </div>
-                <MacroBar label="Protéines" value={prot} max={300} color={G.goldLight}/>
-                <MacroBar label="Glucides" value={gluc} max={500} color={G.gold}/>
-                <MacroBar label="Lipides" value={lip} max={150} color="#C9A84C66"/>
-                {client.nutrition.notes&&!editNut&&<div style={{marginTop:16,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {client.nutrition.notes}</div>}
-              </div>
-            );
-          })()}
-          <MealPlanEditor
-            foods={foods}
-            mealPlan={clients.find(c=>c.id===client.id)?.mealPlan||client.mealPlan}
-            onLiveChange={setLiveNut}
-            onSetAsTemplate={onSetAsTemplate}
-            onSave={(mp,totals)=>{
-              setLiveNut(null);
-              upd(c=>({
-                ...c,
-                mealPlan:mp,
-                ...(totals.kcal>0?{nutrition:{...c.nutrition,calories:rnd(totals.kcal),proteins:rnd1(totals.protein),carbs:rnd1(totals.carbs),fats:rnd1(totals.fat)}}:{})
-              }));
-            }}/>
-        </>
-      )}
-
-      {tab==="suivi"&&(
-        <>
-          <Btn onClick={()=>setShowLog(true)} style={{marginBottom:16}}>+ Enregistrer une séance</Btn>
-          {client.sessionLogs.length===0&&<Empty text="Aucune séance enregistrée"/>}
-          {client.sessionLogs.map((log,i)=><LogCard key={log.id||i} log={log} programs={programs}/>)}
-        </>
-      )}
-
-      {showLog&&(
-        <Modal onClose={()=>setShowLog(false)} title="Nouvelle séance">
-          <Inp label="Date" type="date" value={logForm.date} onChange={e=>setLogForm(p=>({...p,date:e.target.value}))}/>
-          <div style={{marginBottom:14}}>
-            <Label>Programme</Label>
-            <select value={logForm.programId} onChange={e=>setLogForm(p=>({...p,programId:e.target.value,weekIdx:"",dayIdx:""}))} style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"11px 14px",color:G.white,fontSize:14,outline:"none"}}>
-              <option value="">Choisir...</option>
-              {assigned.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          {selProg&&<div style={{marginBottom:14}}>
-            <Label>Semaine</Label>
-            <select value={logForm.weekIdx} onChange={e=>setLogForm(p=>({...p,weekIdx:e.target.value,dayIdx:""}))} style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"11px 14px",color:G.white,fontSize:14,outline:"none"}}>
-              <option value="">Choisir...</option>
-              {selProg.weeks.map((w,i)=><option key={i} value={i}>{w.label}</option>)}
-            </select>
-          </div>}
-          {selWeek&&<div style={{marginBottom:14}}>
-            <Label>Séance</Label>
-            <select value={logForm.dayIdx} onChange={e=>setLogForm(p=>({...p,dayIdx:e.target.value}))} style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"11px 14px",color:G.white,fontSize:14,outline:"none"}}>
-              <option value="">Choisir...</option>
-              {selWeek.days.map((d,i)=><option key={i} value={i}>{d.label}</option>)}
-            </select>
-          </div>}
-          <Inp label="Notes" placeholder="Observations..." value={logForm.notes} onChange={e=>setLogForm(p=>({...p,notes:e.target.value}))}/>
-          <div style={{display:"flex",gap:8,marginBottom:20}}>
-            {[true,false].map(v=>(
-              <button key={String(v)} onClick={()=>setLogForm(p=>({...p,completed:v}))} style={{flex:1,padding:"10px 0",background:logForm.completed===v?(v?G.green+"22":G.red+"22"):G.bg3,color:logForm.completed===v?(v?G.green:G.red):G.grey,border:`1px solid ${logForm.completed===v?(v?G.green:G.red):G.border}`,borderRadius:8,fontWeight:700,fontSize:13,cursor:"pointer"}}>
-                {v?"✓ Complétée":"✗ Manquée"}
-              </button>
-            ))}
-          </div>
-          <Btn onClick={saveLog} disabled={!logForm.programId}>Enregistrer</Btn>
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-// ─── NEW CLIENT ───────────────────────────────────────────────────────────────
-function NewClient({setClients,go,defaultMealTemplate}){
-  const [form,setForm]=useState({name:"",goal:"",color:G.goldLight});
-  const colors=[G.goldLight,G.gold,"#C9A84C","#8a7040","#a08030"];
-  const create=()=>{
-    setClients(p=>[...p,{...form,id:Date.now(),code:genCode(form.name,p),since:new Date().toLocaleDateString("fr-FR",{month:"short",year:"numeric"}),sessions:0,programs:[],mealPlan:defaultMealTemplate||emptyMealPlan(),nutrition:{calories:2000,proteins:150,carbs:200,fats:65,notes:""},sessionLogs:[]}]);
-    go("clients");
-  };
-  return(
-    <div style={{padding:"28px 20px 0"}} className="fu">
-      <BackBtn onClick={()=>go("clients")} label="Clients"/>
-      <PageH title="NOUVEAU CLIENT"/>
-      <Inp label="Nom complet" placeholder="Sophie Martin" value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))}/>
-      <Inp label="Objectif" placeholder="Perte de poids..." value={form.goal} onChange={e=>setForm(p=>({...p,goal:e.target.value}))}/>
-      <div style={{marginBottom:20}}>
-        <Label>Couleur</Label>
-        <div style={{display:"flex",gap:10}}>
-          {colors.map(c=><div key={c} onClick={()=>setForm(p=>({...p,color:c}))} style={{width:34,height:34,borderRadius:9,background:c,cursor:"pointer",border:form.color===c?"2.5px solid #fff":"2.5px solid transparent",transition:"border .2s"}}/>)}
-        </div>
-      </div>
-      {form.name&&<div style={{background:G.bg3,borderRadius:10,padding:14,marginBottom:20,border:`1px solid ${G.border}`}}>
-        <div style={{fontSize:11,color:G.grey,marginBottom:4}}>Code d'accès généré</div>
-        <div style={{fontFamily:"monospace",fontSize:22,color:G.goldLight,letterSpacing:3}}>{genCode(form.name)}</div>
-        <div style={{fontSize:11,color:G.greyDim,marginTop:4}}>À transmettre à ton client</div>
-      </div>}
-      {defaultMealTemplate&&<div style={{background:G.gold+"12",borderRadius:10,padding:"10px 14px",marginBottom:16,border:`1px solid ${G.gold}33`,display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontSize:14}}>⭐</span>
-        <div style={{fontSize:12,color:G.goldLight}}>Le plan alimentaire modèle sera automatiquement appliqué</div>
-      </div>}
-      <Btn onClick={create} disabled={!form.name||!form.goal}>Créer le client</Btn>
-    </div>
-  );
-}
-
-// ─── PROGRAMS LIST ────────────────────────────────────────────────────────────
-function ProgramsList({programs,setPrograms,setClients,exercises,go,sel,onEdit}){
-  const deleteProgram=(pid)=>{
-    setPrograms(p=>p.filter(x=>x.id!==pid));
-    setClients(cs=>cs.map(c=>({...c,programs:c.programs.filter(x=>x!==pid)})));
-  };
-  return(
-    <div style={{padding:"28px 20px 0"}} className="fu">
-      <PageH title="PROGRAMMES" subtitle={`${programs.length} créés`} action={<BtnSm onClick={()=>go("new-program")}>+ Nouveau</BtnSm>}/>
-      {programs.length===0&&<Empty text="Aucun programme créé"/>}
-      {programs.map((p,i)=>(
-        <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,animationDelay:`${i*50}ms`}} className="fu">
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div style={{flex:1,cursor:"pointer"}} onClick={()=>sel(p)}>
-              <div style={{fontWeight:700,fontSize:15,marginBottom:8}}>{p.name}</div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {[p.category,p.level,`${p.weeks.length} sem.`,`${p.weeks[0]?.days.length||0} j/sem`].filter(Boolean).map(t=><Tag key={t} text={t} color={G.grey}/>)}
-              </div>
-            </div>
-            <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:10}}>
-              <BtnSm onClick={()=>onEdit(p)}>✏️</BtnSm>
-              <BtnSm onClick={()=>sel(p)}>›</BtnSm>
-              <BtnSm variant="danger" onClick={()=>deleteProgram(p.id)}>✕</BtnSm>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── PROGRAM DETAIL (coach) ───────────────────────────────────────────────────
-function ProgramDetail({program,exercises,go,onEdit,client}){
-  const [weekIdx,setWeekIdx]=useState(0);
-  const [dayIdx,setDayIdx]=useState(0);
-  const [playing,setPlaying]=useState(null);
-  const week=program.weeks[weekIdx];
-  const day=week?.days[dayIdx];
-  const dayLog=client?.sessionLogs?.find(l=>l.programId===program.id&&l.weekIdx===weekIdx&&l.dayIdx===dayIdx&&l.completed);
-  return(
-    <div style={{padding:"28px 20px 0"}} className="fu">
-      <BackBtn onClick={()=>go(client?"client-detail":"programs")} label={client?client.name.split(" ")[0]:"Programmes"}/>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-        <div style={{flex:1}}>
-          <div style={{fontFamily:G.fontD,fontSize:26,fontWeight:800,letterSpacing:-1}} className="gl">{program.name}</div>
-          <div style={{fontSize:12,color:G.grey,marginTop:6}}>{program.weeks.length} semaine{program.weeks.length>1?"s":""}</div>
-        </div>
-        <BtnSm onClick={()=>onEdit(program)}>✏️ Modifier</BtnSm>
-      </div>
-      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap",marginTop:10}}>
-        {[program.category,program.level].filter(Boolean).map(t=><Tag key={t} text={t}/>)}
-      </div>
-
-      {/* Week tabs */}
-      <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,marginBottom:4}}>
-        {program.weeks.map((w,i)=>(
-          <button key={i} onClick={()=>{setWeekIdx(i);setDayIdx(0);setPlaying(null);}} style={{flexShrink:0,padding:"7px 14px",background:weekIdx===i?G.goldLight+"22":G.bg2,color:weekIdx===i?G.goldLight:G.grey,border:`1px solid ${weekIdx===i?G.goldLight+"55":G.border}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-            {w.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Day tabs */}
-      {week&&<div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:20,marginTop:10}}>
-        {week.days.map((d,i)=>{
-          const done=client?.sessionLogs?.some(l=>l.programId===program.id&&l.weekIdx===weekIdx&&l.dayIdx===i&&l.completed);
-          return(
-            <button key={i} onClick={()=>{setDayIdx(i);setPlaying(null);}} style={{flexShrink:0,padding:"6px 14px",background:dayIdx===i?G.bg4:G.bg3,color:dayIdx===i?G.white:done?G.green:G.grey,border:`1px solid ${dayIdx===i?G.border+"88":done?G.green+"55":G.border}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-              {done&&<span style={{marginRight:4}}>✓</span>}{d.label} <span style={{fontSize:11,opacity:.5}}>({d.exercises.length})</span>
-            </button>
-          );
-        })}
-      </div>}
-
-      {dayLog&&(
-        <div style={{background:G.green+"15",border:`1px solid ${G.green}44`,borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:20}}>✓</span>
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:G.green}}>Séance complétée</div>
-            <div style={{fontSize:11,color:G.grey,marginTop:2}}>{dayLog.date}{dayLog.notes?` · "${dayLog.notes}"`:""}</div>
-          </div>
-        </div>
-      )}
-      {day&&day.exercises.map((pe,i)=>{
-        const ex=exercises.find(e=>e.id===pe.exId);
-        if(!ex)return null;
-        const key=`${weekIdx}-${dayIdx}-${i}`;
-        const clientEx=dayLog?.exercises?.find(e=>e.exId===pe.exId);
-        return(
-          <div key={i} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${clientEx?G.green+"44":G.border}`}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:700,fontSize:15}}><span style={{color:G.gold,fontFamily:G.fontD,marginRight:8}}>{i+1}.</span>{ex.name}</div>
-                <div style={{fontSize:12,color:G.grey,marginTop:4}}>{pe.sets} séries × {pe.reps} — repos {pe.rest}</div>
-                {pe.targetLoad&&<div style={{fontSize:12,color:G.goldLight,marginTop:3}}>🎯 Charge cible : {pe.targetLoad}</div>}
-                {ex.notes&&<div style={{fontSize:12,color:G.gold+"88",marginTop:4}}>📝 {ex.notes}</div>}
-                <div style={{marginTop:6}}><Tag text={ex.muscle} color={G.grey}/></div>
-              </div>
-              {ex.videoUrl&&<BtnSm onClick={()=>setPlaying(playing===key?null:key)}>{playing===key?"▼":"▶"}</BtnSm>}
-            </div>
-            {playing===key&&ex.videoUrl&&(
-              <div style={{position:"relative",paddingBottom:"56.25%",borderRadius:8,overflow:"hidden",background:"#000",marginTop:10}}>
-                <iframe style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={ex.videoUrl} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
-              </div>
-            )}
-            {clientEx&&(
-              <div style={{marginTop:10,background:G.bg3,borderRadius:8,padding:10,border:`1px solid ${G.green}33`}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <div style={{fontSize:10,color:G.green,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Résultats client</div>
-                  {clientEx.sensation&&<span style={{fontSize:18}} title="Ressenti">{clientEx.sensation}</span>}
-                </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {clientEx.sets.map((s,si)=>(
-                    <div key={si} style={{background:G.bg4,borderRadius:6,padding:"5px 10px",border:`1px solid ${G.border}`,textAlign:"center",minWidth:58}}>
-                      <div style={{fontSize:10,color:G.grey,marginBottom:2}}>S{si+1}</div>
-                      <div style={{fontSize:13,fontWeight:800,color:s.load?G.goldLight:G.greyDim}}>{s.load||"—"}</div>
-                      <div style={{fontSize:10,color:G.grey}}>{s.reps}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── NEW PROGRAM ──────────────────────────────────────────────────────────────
-function NewProgram({exercises,setPrograms,go}){
-  const [form,setForm]=useState({name:"",category:"",level:"Intermédiaire",weeks:[{label:"Semaine 1",days:[{label:"Séance A",exercises:[]}]}]});
-  const [weekIdx,setWeekIdx]=useState(0);
-  const [dayIdx,setDayIdx]=useState(0);
-  const [picker,setPicker]=useState(false);
-  const [filter,setFilter]=useState("Tous");
-
-  const week=form.weeks[weekIdx];
-  const day=week?.days[dayIdx];
-  const filtered=exercises.filter(e=>filter==="Tous"||e.muscle===filter);
-
-  const addWeek=()=>{
-    if(form.weeks.length>=12)return;
-    const n=form.weeks.length+1;
-    setForm(p=>({...p,weeks:[...p.weeks,{label:`Semaine ${n}`,days:[{label:"Séance A",exercises:[]}]}]}));
-    setWeekIdx(form.weeks.length);setDayIdx(0);
-  };
-  const removeWeek=wi=>{
-    if(form.weeks.length<=1)return;
-    setForm(p=>({...p,weeks:p.weeks.filter((_,i)=>i!==wi)}));
-    setWeekIdx(Math.max(0,weekIdx-(wi<=weekIdx?1:0)));setDayIdx(0);
-  };
-  const duplicateWeek=()=>{
-    if(form.weeks.length>=12)return;
-    const copy=JSON.parse(JSON.stringify(form.weeks[weekIdx]));
-    copy.label=copy.label+" (copie)";
-    const nw=[...form.weeks];
-    nw.splice(weekIdx+1,0,copy);
-    setForm(p=>({...p,weeks:nw}));
-    setWeekIdx(weekIdx+1);setDayIdx(0);
-  };
-  const addDay=()=>{
-    if(week.days.length>=7)return;
-    const labels=["A","B","C","D","E","F","G"];
-    const newDay={label:`Séance ${labels[week.days.length]||week.days.length+1}`,exercises:[]};
-    setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:[...w.days,newDay]})}));
-    setDayIdx(week.days.length);
-  };
-  const removeDay=di=>{
-    if(week.days.length<=1)return;
-    setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.filter((_,j)=>j!==di)})}));
-    setDayIdx(Math.max(0,dayIdx-(di<=dayIdx?1:0)));
-  };
-  const updateLabel=(type,idx,val)=>{
-    if(type==="week") setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==idx?w:{...w,label:val})}));
-    else setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.map((d,j)=>j!==idx?d:{...d,label:val})})}));
-  };
-  const toggleEx=ex=>{
-    setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.find(e=>e.exId===ex.id)?d.exercises.filter(e=>e.exId!==ex.id):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:""}]})})}));
-  };
-  const updateExField=(exId,field,val)=>{
-    setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.map(e=>e.exId===exId?{...e,[field]:val}:e)})})}));
-  };
-  const moveEx=(from,to)=>{
-    setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:(()=>{const a=[...d.exercises];const[item]=a.splice(from,1);a.splice(to,0,item);return a;})()})})}));
-  };
-  const totalEx=form.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.exercises.length,0),0);
-  const create=()=>{setPrograms(p=>[...p,{...form,id:Date.now()}]);go("programs");};
-
-  return(
-    <div style={{padding:"28px 20px 0"}} className="fu">
-      <BackBtn onClick={()=>go("programs")} label="Programmes"/>
-      <PageH title="NOUVEAU PROGRAMME"/>
-      <Inp label="Nom du programme" placeholder="Full Body 3j/sem" value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))}/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <Inp label="Catégorie" placeholder="Force, PPL..." value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))}/>
-        <div style={{marginBottom:14}}>
-          <Label>Niveau</Label>
-          <select value={form.level} onChange={e=>setForm(p=>({...p,level:e.target.value}))} style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"11px 14px",color:G.white,fontSize:13,outline:"none"}}>
-            {["Débutant","Intermédiaire","Avancé"].map(l=><option key={l}>{l}</option>)}
-          </select>
-        </div>
-      </div>
-
-      {/* WEEKS */}
-      <div style={{marginBottom:12}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-          <Label>Semaines ({form.weeks.length}/12)</Label>
-          {form.weeks.length<12&&<BtnSm onClick={addWeek}>+ Semaine</BtnSm>}
-        </div>
-        <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6}}>
-          {form.weeks.map((w,i)=>(
-            <button key={i} onClick={()=>{setWeekIdx(i);setDayIdx(0);}} style={{flexShrink:0,padding:"7px 12px",background:weekIdx===i?G.goldLight+"22":G.bg3,color:weekIdx===i?G.goldLight:G.grey,border:`1px solid ${weekIdx===i?G.goldLight+"55":G.border}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-              S{i+1}
-              <span style={{marginLeft:4,background:weekIdx===i?G.goldLight:G.greyDim,color:weekIdx===i?G.bg:G.bg,borderRadius:99,fontSize:10,padding:"1px 5px",fontWeight:800}}>{w.days.reduce((a,d)=>a+d.exercises.length,0)}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* WEEK EDITOR */}
-      <div style={{background:G.bg2,borderRadius:12,padding:16,border:`1px solid ${G.border}`,marginBottom:16}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <input value={week?.label||""} onChange={e=>updateLabel("week",weekIdx,e.target.value)} style={{background:"transparent",border:"none",color:G.goldLight,fontSize:15,fontWeight:800,outline:"none",fontFamily:G.fontD,letterSpacing:.5,width:"55%"}}/>
-          <div style={{display:"flex",gap:6}}>
-            {form.weeks.length>1&&<BtnSm variant="danger" onClick={()=>removeWeek(weekIdx)}>✕</BtnSm>}
-            {form.weeks.length<12&&<BtnSm variant="ghost" onClick={duplicateWeek}>⧉ Dupliquer</BtnSm>}
-            {week&&week.days.length<7&&<BtnSm onClick={addDay}>+ Jour</BtnSm>}
-          </div>
-        </div>
-
-        {/* DAYS tabs */}
-        {week&&<div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:6,marginBottom:12}}>
-          {week.days.map((d,i)=>(
-            <button key={i} onClick={()=>setDayIdx(i)} style={{flexShrink:0,padding:"5px 12px",background:dayIdx===i?G.bg4:G.bg3,color:dayIdx===i?G.white:G.grey,border:`1px solid ${dayIdx===i?G.border+"88":G.border}`,borderRadius:7,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-              {d.label}
-              <span style={{marginLeft:4,fontSize:10,opacity:.6}}>({d.exercises.length})</span>
-            </button>
-          ))}
-        </div>}
-
-        {/* DAY EDITOR */}
-        {day&&<>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <input value={day.label} onChange={e=>updateLabel("day",dayIdx,e.target.value)} style={{background:"transparent",border:"none",color:G.white,fontSize:14,fontWeight:700,outline:"none",width:"55%"}}/>
-            <div style={{display:"flex",gap:6}}>
-              {week.days.length>1&&<BtnSm variant="danger" onClick={()=>removeDay(dayIdx)}>✕</BtnSm>}
-              <BtnSm onClick={()=>{setFilter("Tous");setPicker(true);}}>+ Exercices</BtnSm>
-            </div>
-          </div>
-          {day.exercises.length===0&&<div style={{textAlign:"center",padding:"16px 0",color:G.greyDim,fontSize:13}}>Aucun exercice — clique sur "+ Exercices"</div>}
-          {day.exercises.map((pe,i)=>{
-            const ex=exercises.find(e=>e.id===pe.exId);
-            return(
-              <div key={pe.exId} style={{background:G.bg3,borderRadius:9,padding:12,marginBottom:8,border:`1px solid ${G.border}`}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                  <div style={{fontWeight:700,fontSize:13}}>{i+1}. {ex?.name}</div>
-                  <div style={{display:"flex",gap:4}}>
-                    {i>0&&<BtnSm variant="ghost" onClick={()=>moveEx(i,i-1)}>▲</BtnSm>}
-                    {i<day.exercises.length-1&&<BtnSm variant="ghost" onClick={()=>moveEx(i,i+1)}>▼</BtnSm>}
-                    <BtnSm variant="danger" onClick={()=>toggleEx(ex)}>✕</BtnSm>
-                  </div>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
-                  {[["Séries","sets","number"],["Reps","reps","text"],["Repos","rest","text"],["Charge cible","targetLoad","text"]].map(([l,k,t])=>(
-                    <div key={k}>
-                      <div style={{fontSize:10,color:G.grey,letterSpacing:.8,textTransform:"uppercase",marginBottom:3}}>{l}</div>
-                      <input type={t} value={pe[k]} placeholder={k==="targetLoad"?"optionnel":""} onChange={e=>updateExField(pe.exId,k,t==="number"?Number(e.target.value):e.target.value)}
-                        style={{width:"100%",background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"6px 7px",color:G.white,fontSize:12,outline:"none"}}/>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </>}
-      </div>
-
-      <Btn onClick={create} disabled={!form.name||totalEx===0}>
-        Créer · {form.weeks.length} sem. · {totalEx} exercices au total
-      </Btn>
-
-      {picker&&(
-        <Modal onClose={()=>setPicker(false)} title={`Exercices — ${day?.label||""}`}>
-          <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:12}}>
-            {MUSCLES.map(m=>(
-              <button key={m} onClick={()=>setFilter(m)} style={{flexShrink:0,padding:"5px 12px",background:filter===m?G.goldLight+"22":G.bg3,color:filter===m?G.goldLight:G.grey,border:`1px solid ${filter===m?G.goldLight+"44":G.border}`,borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>{m}</button>
-            ))}
-          </div>
-          {filtered.map(ex=>{
-            const sel=!!day?.exercises.find(e=>e.exId===ex.id);
-            return(
-              <div key={ex.id} onClick={()=>toggleEx(ex)} style={{background:sel?G.goldLight+"0d":G.bg3,borderRadius:10,padding:12,marginBottom:8,border:`1px solid ${sel?G.goldLight+"55":G.border}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div>
-                  <div style={{fontWeight:600,fontSize:14}}>{ex.name}</div>
-                  <div style={{fontSize:11,color:G.grey,marginTop:2}}>{ex.muscle} · {ex.equipment}</div>
-                </div>
-                <div style={{width:22,height:22,borderRadius:6,border:`1.5px solid ${sel?G.goldLight:G.greyDim}`,background:sel?G.goldLight:"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:G.bg,fontSize:13,fontWeight:800}}>{sel?"✓":""}</div>
-              </div>
-            );
-          })}
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-// ─── EDIT PROGRAM ─────────────────────────────────────────────────────────────
-function EditProgram({program,exercises,setPrograms,go,setSel}){
-  const [form,setForm]=useState(JSON.parse(JSON.stringify(program)));
-  const [weekIdx,setWeekIdx]=useState(0);
-  const [dayIdx,setDayIdx]=useState(0);
-  const [picker,setPicker]=useState(false);
-  const [filter,setFilter]=useState("Tous");
-
-  const week=form.weeks[weekIdx];
-  const day=week?.days[dayIdx];
-  const filtered=exercises.filter(e=>filter==="Tous"||e.muscle===filter);
-
-  const addWeek=()=>{if(form.weeks.length>=12)return;const n=form.weeks.length+1;setForm(p=>({...p,weeks:[...p.weeks,{label:`Semaine ${n}`,days:[{label:"Séance A",exercises:[]}]}]}));setWeekIdx(form.weeks.length);setDayIdx(0);};
-  const removeWeek=wi=>{if(form.weeks.length<=1)return;setForm(p=>({...p,weeks:p.weeks.filter((_,i)=>i!==wi)}));setWeekIdx(Math.max(0,weekIdx-(wi<=weekIdx?1:0)));setDayIdx(0);};
-  const duplicateWeek=()=>{if(form.weeks.length>=12)return;const copy=JSON.parse(JSON.stringify(form.weeks[weekIdx]));copy.label=copy.label+" (copie)";const nw=[...form.weeks];nw.splice(weekIdx+1,0,copy);setForm(p=>({...p,weeks:nw}));setWeekIdx(weekIdx+1);setDayIdx(0);};
-  const addDay=()=>{if(week.days.length>=7)return;const labels=["A","B","C","D","E","F","G"];const nd={label:`Séance ${labels[week.days.length]||week.days.length+1}`,exercises:[]};setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:[...w.days,nd]})}));setDayIdx(week.days.length);};
-  const removeDay=di=>{if(week.days.length<=1)return;setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.filter((_,j)=>j!==di)})}));setDayIdx(Math.max(0,dayIdx-(di<=dayIdx?1:0)));};
-  const updateLabel=(type,idx,val)=>{if(type==="week")setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==idx?w:{...w,label:val})}));else setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.map((d,j)=>j!==idx?d:{...d,label:val})})}));};
-  const toggleEx=ex=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.find(e=>e.exId===ex.id)?d.exercises.filter(e=>e.exId!==ex.id):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:""}]})})}));};
-  const updateExField=(exId,field,val)=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.map(e=>e.exId===exId?{...e,[field]:val}:e)})})}));};
-  const moveEx=(from,to)=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:(()=>{const a=[...d.exercises];const[item]=a.splice(from,1);a.splice(to,0,item);return a;})()})})}));};
-
-  const save=()=>{
-    setPrograms(p=>p.map(x=>x.id===form.id?form:x));
-    setSel(form);
-    go("program-detail");
-  };
-
-  return(
-    <div style={{padding:"28px 20px 0"}} className="fu">
-      <BackBtn onClick={()=>go("program-detail")} label="Programme"/>
-      <PageH title="MODIFIER LE PROGRAMME"/>
-      <Inp label="Nom du programme" value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))}/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <Inp label="Catégorie" value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))}/>
-        <div style={{marginBottom:14}}>
-          <Label>Niveau</Label>
-          <select value={form.level} onChange={e=>setForm(p=>({...p,level:e.target.value}))} style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"11px 14px",color:G.white,fontSize:13,outline:"none"}}>
-            {["Débutant","Intermédiaire","Avancé"].map(l=><option key={l}>{l}</option>)}
-          </select>
-        </div>
-      </div>
-
-      <div style={{marginBottom:12}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-          <Label>Semaines ({form.weeks.length}/12)</Label>
-          {form.weeks.length<12&&<BtnSm onClick={addWeek}>+ Semaine</BtnSm>}
-        </div>
-        <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6}}>
-          {form.weeks.map((w,i)=>(
-            <button key={i} onClick={()=>{setWeekIdx(i);setDayIdx(0);}} style={{flexShrink:0,padding:"7px 12px",background:weekIdx===i?G.goldLight+"22":G.bg3,color:weekIdx===i?G.goldLight:G.grey,border:`1px solid ${weekIdx===i?G.goldLight+"55":G.border}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-              S{i+1}<span style={{marginLeft:4,fontSize:10,opacity:.6}}>({w.days.reduce((a,d)=>a+d.exercises.length,0)})</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={{background:G.bg2,borderRadius:12,padding:16,border:`1px solid ${G.border}`,marginBottom:16}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <input value={week?.label||""} onChange={e=>updateLabel("week",weekIdx,e.target.value)} style={{background:"transparent",border:"none",color:G.goldLight,fontSize:15,fontWeight:800,outline:"none",fontFamily:G.fontD,letterSpacing:.5,width:"55%"}}/>
-          <div style={{display:"flex",gap:6}}>
-            {form.weeks.length>1&&<BtnSm variant="danger" onClick={()=>removeWeek(weekIdx)}>✕</BtnSm>}
-            {form.weeks.length<12&&<BtnSm variant="ghost" onClick={duplicateWeek}>⧉ Dupliquer</BtnSm>}
-            {week&&week.days.length<7&&<BtnSm onClick={addDay}>+ Jour</BtnSm>}
-          </div>
-        </div>
-        {week&&<div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:6,marginBottom:12}}>
-          {week.days.map((d,i)=>(
-            <button key={i} onClick={()=>setDayIdx(i)} style={{flexShrink:0,padding:"5px 12px",background:dayIdx===i?G.bg4:G.bg3,color:dayIdx===i?G.white:G.grey,border:`1px solid ${dayIdx===i?G.border+"88":G.border}`,borderRadius:7,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-              {d.label}<span style={{marginLeft:4,fontSize:10,opacity:.6}}>({d.exercises.length})</span>
-            </button>
-          ))}
-        </div>}
-        {day&&<>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <input value={day.label} onChange={e=>updateLabel("day",dayIdx,e.target.value)} style={{background:"transparent",border:"none",color:G.white,fontSize:14,fontWeight:700,outline:"none",width:"55%"}}/>
-            <div style={{display:"flex",gap:6}}>
-              {week.days.length>1&&<BtnSm variant="danger" onClick={()=>removeDay(dayIdx)}>✕</BtnSm>}
-              <BtnSm onClick={()=>{setFilter("Tous");setPicker(true);}}>+ Exercices</BtnSm>
-            </div>
-          </div>
-          {day.exercises.length===0&&<div style={{textAlign:"center",padding:"16px 0",color:G.greyDim,fontSize:13}}>Aucun exercice</div>}
-          {day.exercises.map((pe,i)=>{
-            const ex=exercises.find(e=>e.id===pe.exId);
-            return(
-              <div key={pe.exId} style={{background:G.bg3,borderRadius:9,padding:12,marginBottom:8,border:`1px solid ${G.border}`}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                  <div style={{fontWeight:700,fontSize:13}}>{i+1}. {ex?.name}</div>
-                  <div style={{display:"flex",gap:4}}>
-                    {i>0&&<BtnSm variant="ghost" onClick={()=>moveEx(i,i-1)}>▲</BtnSm>}
-                    {i<day.exercises.length-1&&<BtnSm variant="ghost" onClick={()=>moveEx(i,i+1)}>▼</BtnSm>}
-                    <BtnSm variant="danger" onClick={()=>toggleEx(ex)}>✕</BtnSm>
-                  </div>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
-                  {[["Séries","sets","number"],["Reps","reps","text"],["Repos","rest","text"],["Charge","targetLoad","text"]].map(([l,k,t])=>(
-                    <div key={k}>
-                      <div style={{fontSize:10,color:G.grey,letterSpacing:.8,textTransform:"uppercase",marginBottom:3}}>{l}</div>
-                      <input type={t} value={pe[k]} placeholder={k==="targetLoad"?"optionnel":""} onChange={e=>updateExField(pe.exId,k,t==="number"?Number(e.target.value):e.target.value)}
-                        style={{width:"100%",background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"6px 7px",color:G.white,fontSize:12,outline:"none"}}/>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </>}
-      </div>
-
-      <Btn onClick={save}>✓ Enregistrer les modifications</Btn>
-
-      {picker&&(
-        <Modal onClose={()=>setPicker(false)} title={`Exercices — ${day?.label||""}`}>
-          <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:12}}>
-            {MUSCLES.map(m=>(
-              <button key={m} onClick={()=>setFilter(m)} style={{flexShrink:0,padding:"5px 12px",background:filter===m?G.goldLight+"22":G.bg3,color:filter===m?G.goldLight:G.grey,border:`1px solid ${filter===m?G.goldLight+"44":G.border}`,borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>{m}</button>
-            ))}
-          </div>
-          {filtered.map(ex=>{
-            const sel=!!day?.exercises.find(e=>e.exId===ex.id);
-            return(
-              <div key={ex.id} onClick={()=>toggleEx(ex)} style={{background:sel?G.goldLight+"0d":G.bg3,borderRadius:10,padding:12,marginBottom:8,border:`1px solid ${sel?G.goldLight+"55":G.border}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><div style={{fontWeight:600,fontSize:14}}>{ex.name}</div><div style={{fontSize:11,color:G.grey,marginTop:2}}>{ex.muscle} · {ex.equipment}</div></div>
-                <div style={{width:22,height:22,borderRadius:6,border:`1.5px solid ${sel?G.goldLight:G.greyDim}`,background:sel?G.goldLight:"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:G.bg,fontSize:13,fontWeight:800}}>{sel?"✓":""}</div>
-              </div>
-            );
-          })}
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-// ─── EXERCISES LIBRARY ────────────────────────────────────────────────────────
-function ExLib({exercises,setExercises,go}){
-  const [filter,setFilter]=useState("Tous");
-  const [search,setSearch]=useState("");
-  const [playing,setPlaying]=useState(null);
-  const filtered=exercises.filter(e=>(filter==="Tous"||e.muscle===filter)&&e.name.toLowerCase().includes(search.toLowerCase()));
-  return(
-    <div style={{padding:"28px 20px 0"}} className="fu">
-      <PageH title="EXERCICES" subtitle={`${exercises.length} dans la bibliothèque`} action={<BtnSm onClick={()=>go("new-exercise")}>+ Nouveau</BtnSm>}/>
-      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..." style={{width:"100%",background:G.bg2,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 14px",color:G.white,fontSize:14,outline:"none",marginBottom:14}}/>
-      <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:10,marginBottom:16}}>
-        {MUSCLES.map(m=>(
-          <button key={m} onClick={()=>setFilter(m)} style={{flexShrink:0,padding:"5px 12px",background:filter===m?G.goldLight+"22":G.bg2,color:filter===m?G.goldLight:G.grey,border:`1px solid ${filter===m?G.goldLight+"44":G.border}`,borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>{m}</button>
-        ))}
-      </div>
-      {filtered.length===0&&<Empty text="Aucun exercice trouvé"/>}
-      {filtered.map((ex,i)=>(
-        <div key={ex.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${G.border}`,animationDelay:`${i*40}ms`}} className="fu">
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-            <div style={{flex:1}}>
-              <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>{ex.name}</div>
-              <div style={{display:"flex",gap:6}}><Tag text={ex.muscle}/><Tag text={ex.equipment} color={G.grey}/></div>
-              {ex.notes&&<div style={{fontSize:12,color:G.grey,marginTop:8,fontStyle:"italic"}}>📝 {ex.notes}</div>}
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:6,marginLeft:10}}>
-              {ex.videoUrl&&<BtnSm onClick={()=>setPlaying(playing===ex.id?null:ex.id)}>{playing===ex.id?"▼":"▶"}</BtnSm>}
-              <BtnSm variant="danger" onClick={()=>setExercises(p=>p.filter(e=>e.id!==ex.id))}>✕</BtnSm>
-            </div>
-          </div>
-          {playing===ex.id&&ex.videoUrl&&(
-            <div style={{position:"relative",paddingBottom:"56.25%",borderRadius:8,overflow:"hidden",background:"#000",marginTop:6}}>
-              <iframe style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={ex.videoUrl} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function NewEx({setExercises,go}){
-  const [form,setForm]=useState({name:"",muscle:"Jambes",equipment:"Barre",videoUrl:"",notes:""});
-  const create=()=>{setExercises(p=>[...p,{...form,id:Date.now()}]);go("exercises");};
-  return(
-    <div style={{padding:"28px 20px 0"}} className="fu">
-      <BackBtn onClick={()=>go("exercises")} label="Exercices"/>
-      <PageH title="NOUVEL EXERCICE"/>
-      <Inp label="Nom de l'exercice" placeholder="Squat Barre" value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))}/>
-      <div style={{marginBottom:16}}>
-        <Label>Groupe musculaire</Label>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          {MUSCLES.slice(1).map(m=>(
-            <button key={m} onClick={()=>setForm(p=>({...p,muscle:m}))} style={{padding:"6px 12px",background:form.muscle===m?G.goldLight+"22":G.bg3,color:form.muscle===m?G.goldLight:G.grey,border:`1px solid ${form.muscle===m?G.goldLight+"55":G.border}`,borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>{m}</button>
-          ))}
-        </div>
-      </div>
-      <div style={{marginBottom:16}}>
-        <Label>Équipement</Label>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          {EQUIPS.map(eq=>(
-            <button key={eq} onClick={()=>setForm(p=>({...p,equipment:eq}))} style={{padding:"6px 12px",background:form.equipment===eq?G.goldLight+"22":G.bg3,color:form.equipment===eq?G.goldLight:G.grey,border:`1px solid ${form.equipment===eq?G.goldLight+"55":G.border}`,borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>{eq}</button>
-          ))}
-        </div>
-      </div>
-      <div style={{marginBottom:14}}>
-        <Label>Lien vidéo YouTube (optionnel)</Label>
-        <input placeholder="https://www.youtube.com/embed/XXXXX" value={form.videoUrl} onChange={e=>setForm(p=>({...p,videoUrl:e.target.value}))} onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border} style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"11px 14px",color:G.white,fontSize:13,outline:"none",transition:"border .2s"}}/>
-        <div style={{fontSize:11,color:G.greyDim,marginTop:5}}>Remplace "watch?v=" par "embed/" dans l'URL</div>
-      </div>
-      <Txa label="Notes techniques (optionnel)" placeholder="Conseils d'exécution..." value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))}/>
-      <Btn onClick={create} disabled={!form.name}>Ajouter à la bibliothèque</Btn>
-    </div>
-  );
-}
-
 // ─── CLIENT : OUTILS ──────────────────────────────────────────────────────────
 const pad2=n=>String(n).padStart(2,"0");
+const isoOf=d=>`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 // Date locale (et non UTC) : une séance terminée à 0h30 reste datée du bon jour
-const todayISO=()=>{const d=new Date();return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;};
+const todayISO=()=>isoOf(new Date());
+const parseISO=iso=>/^\d{4}-\d{2}-\d{2}/.test(iso||"")?new Date(Number(iso.slice(0,4)),Number(iso.slice(5,7))-1,Number(iso.slice(8,10))):null;
+const mondayOf=d=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-(x.getDay()+6)%7);return x;};
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x;};
 const fmtDate=iso=>{
-  if(!iso||!/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso||"";
-  const [y,m,d]=iso.slice(0,10).split("-").map(Number);
+  const d=parseISO(iso);
+  if(!d) return iso||"";
   const opts={weekday:"short",day:"numeric",month:"short"};
-  if(y!==new Date().getFullYear()) opts.year="numeric";
-  return new Date(y,m-1,d).toLocaleDateString("fr-FR",opts);
+  if(d.getFullYear()!==new Date().getFullYear()) opts.year="numeric";
+  return d.toLocaleDateString("fr-FR",opts);
 };
 const fmtClock=s=>`${Math.floor(s/60)}:${pad2(s%60)}`;
 const fmtDuration=min=>min<60?`${min} min`:`${Math.floor(min/60)}h${pad2(min%60)}`;
+const firstName=n=>(n||"").trim().split(/\s+/)[0]||"";
+const initials=n=>(n||"?").trim().split(/\s+/).map(w=>w[0]).join("").toUpperCase().slice(0,2);
+const cap=s=>s?s[0].toUpperCase()+s.slice(1):s;
 
 // Accepte aussi les liens YouTube classiques (watch?v=, youtu.be, shorts) et force la lecture intégrée sur iPhone
 const toEmbed=url=>{
@@ -1744,6 +529,8 @@ const toEmbed=url=>{
   const m=String(url).match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/);
   return m?`https://www.youtube.com/embed/${m[1]}?playsinline=1&rel=0`:url;
 };
+// Sans lien du coach, le bouton vidéo propose une recherche YouTube : chaque exercice garde sa démo
+const videoSearchUrl=name=>`https://www.youtube.com/results?search_query=${encodeURIComponent(`${name} exercice technique`)}`;
 
 // Charges en % (1RM, FCmax, VMA) calculées à partir des tests du client — même logique que l'espace coach
 const LOAD_REFS=[
@@ -1778,6 +565,21 @@ const withUnit=(load,unit)=>{
   if(/^\d+([.,]\d+)?$/.test(v)) return unit==="kg"||!unit?`${v}kg`:`${v} ${unit}`;
   return v;
 };
+const parseKg=load=>{
+  const s=String(load??"").toLowerCase().trim();
+  if(!/kg$/.test(s)&&!/^\d+([.,]\d+)?$/.test(s)) return 0;
+  return parseFloat(s.replace(",","."))||0;
+};
+const logVolume=log=>(log.exercises||[]).reduce((a,ex)=>a+(ex.sets||[]).reduce((b,s)=>{
+  const l=parseKg(s.load),r=parseInt(s.reps);
+  return b+(l>0&&r>0?l*r:0);
+},0),0);
+// Durée estimée d'une séance : temps d'effort (~40 s par série) + récupérations
+const estMinutes=day=>{
+  let s=0;
+  (day.exercises||[]).forEach(pe=>{const n=Math.max(1,Number(pe.sets)||1);s+=n*((isTimed(pe.reps)?parseRest(pe.reps):40)+parseRest(pe.rest));});
+  return Math.max(5,Math.round(s/300)*5);
+};
 
 // Les saisies manuelles du coach peuvent avoir weekIdx/dayIdx vides : on les ignore
 const sameIdx=(a,b)=>a!==""&&a!=null&&Number(a)===b;
@@ -1797,31 +599,170 @@ const nextSessionOf=(prog,logs)=>{
   return null;
 };
 const isSameSession=(s,progId,wi,di)=>!!s&&String(s.progId)===String(progId)&&s.weekIdx===wi&&s.dayIdx===di;
+const countSets=s=>s?s.exercises.reduce((a,ex)=>({done:a.done+ex.sets.filter(x=>x.done).length,total:a.total+ex.sets.length}),{done:0,total:0}):{done:0,total:0};
 
-const ProgressBar=({value,max,color=G.goldLight,height=5})=>(
-  <div style={{background:G.bg4,borderRadius:99,height,overflow:"hidden"}}>
-    <div style={{width:`${max?Math.min(100,value/max*100):0}%`,height:"100%",background:`linear-gradient(90deg,${G.gold},${color})`,borderRadius:99,transition:"width .4s"}}/>
+// ─── CLIENT : UI ──────────────────────────────────────────────────────────────
+const C={
+  card:"linear-gradient(180deg,#151515 0%,#0f0f0f 100%)",
+  line:"#ffffff0f",line2:"#ffffff1a",soft:"#ffffff0a",
+  muted:"#8d8d8d",dim:"#5c5c5c",bronze:"#9a7a35",
+  goldGrad:`linear-gradient(135deg,${G.goldLight},${G.gold})`,
+};
+const ellipsis={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"};
+const eyebrow={fontSize:11,fontWeight:700,letterSpacing:1.6,textTransform:"uppercase",color:C.muted};
+
+const ICONS={
+  home:"M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z",
+  dumbbell:"M6.5 6.5v11M17.5 6.5v11M3 9.5v5M21 9.5v5M6.5 12h11",
+  leaf:"M5 20c0-9 5.5-15 15-15 0 10-6 15-14 15M5 20l7-7",
+  chart:"M4 20V11M10 20V5M16 20v-6M2 20h20",
+  play:"M7 4.5v15l12-7.5z",
+  check:"M5 12.5 10 17.5 19 7",
+  x:"M6 6l12 12M18 6 6 18",
+  clock:"M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z",
+  right:"m9 6 6 6-6 6",down:"m6 9 6 6 6-6",
+  logout:"M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4",
+  video:"M4 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM16 10l5-3v10l-5-3",
+  history:"M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 8v4l3 2",
+  flame:"M12 3c1 4 5 5.5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-4 2.5-5 .3 2 1.5 3 2.5 3-1-3 0-6 0-8z",
+  bolt:"M13 2 4 14h7l-1 8 9-12h-7z",
+  trophy:"M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3",
+  stop:"M7 7h10v10H7z",
+  target:"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  calendar:"M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
+  weight:"M6 8h12l2 12H4zM9 8a3 3 0 0 1 6 0",
+};
+const Icon=({name,size=20,color="currentColor",sw=1.9,fill="none",style})=>(
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,display:"block",...style}} aria-hidden="true"><path d={ICONS[name]}/></svg>
+);
+
+const Ring=({value=0,max=1,size=64,stroke=6,color=G.goldLight,track="#ffffff12",children})=>{
+  const r=(size-stroke)/2,c=2*Math.PI*r,p=max?Math.min(1,Math.max(0,value/max)):0;
+  return(
+    <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
+      <svg width={size} height={size} style={{transform:"rotate(-90deg)",display:"block"}} aria-hidden="true">
+        <circle cx={size/2} cy={size/2} r={r} stroke={track} strokeWidth={stroke} fill="none"/>
+        <circle cx={size/2} cy={size/2} r={r} stroke={color} strokeWidth={stroke} fill="none" strokeLinecap="round" strokeOpacity={p>0?1:0}
+          strokeDasharray={c} strokeDashoffset={c*(1-p)} style={{transition:"stroke-dashoffset .6s ease, stroke .3s"}}/>
+      </svg>
+      {children&&<div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>{children}</div>}
+    </div>
+  );
+};
+
+const Card=({children,style,...p})=>(
+  <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:22,padding:18,...style}} {...p}>{children}</div>
+);
+const PrimaryBtn=({children,danger,style,...p})=>(
+  <button style={{width:"100%",height:54,borderRadius:16,border:danger?`1px solid ${G.red}55`:"none",background:danger?G.red+"1f":C.goldGrad,color:danger?G.red:G.bg,
+    fontSize:16,fontWeight:800,letterSpacing:.2,display:"flex",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",
+    boxShadow:danger?"none":`0 10px 30px ${G.gold}33`,...style}} {...p}>{children}</button>
+);
+const GhostBtn=({children,style,...p})=>(
+  <button style={{width:"100%",height:50,borderRadius:16,border:`1px solid ${C.line2}`,background:C.soft,color:G.white,fontSize:15,fontWeight:700,
+    display:"flex",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",...style}} {...p}>{children}</button>
+);
+const Chip=({children,gold,style,...p})=>(
+  <span style={{display:"inline-flex",alignItems:"center",gap:5,height:28,padding:"0 10px",borderRadius:99,fontSize:12,fontWeight:700,
+    background:gold?G.gold+"1f":C.soft,color:gold?G.goldLight:"#bdbdbd",border:`1px solid ${gold?G.gold+"44":C.line}`,whiteSpace:"nowrap",...style}} {...p}>{children}</span>
+);
+const SectionTitle=({children,action})=>(
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"26px 2px 12px"}}>
+    <div style={eyebrow}>{children}</div>
+    {action}
   </div>
 );
+const LinkBtn=({children,style,...p})=>(
+  <button style={{background:"none",border:"none",color:G.goldLight,fontSize:13,fontWeight:700,cursor:"pointer",padding:"4px 0",display:"flex",alignItems:"center",gap:2,...style}} {...p}>{children}</button>
+);
+const roundBtn={width:42,height:42,borderRadius:14,border:`1px solid ${C.line2}`,background:C.soft,color:G.white,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0};
+
+// Feuille du bas (remplace les fenêtres de confirmation du navigateur)
+function Sheet({open,onClose,children}){
+  if(!open) return null;
+  return(
+    <div onClick={onClose} style={{position:"absolute",inset:0,zIndex:400,background:"#000000b8",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .2s ease"}}>
+      <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true"
+        style={{width:"100%",maxWidth:520,background:"#121212",borderTop:`1px solid ${C.line2}`,borderRadius:"28px 28px 0 0",padding:"10px 22px calc(24px + env(safe-area-inset-bottom))",animation:"sheetUp .32s cubic-bezier(.2,.9,.3,1)",maxHeight:"88%",overflowY:"auto"}}>
+        <div style={{width:40,height:4,borderRadius:2,background:"#ffffff26",margin:"0 auto 20px"}}/>
+        {children}
+      </div>
+    </div>
+  );
+}
+function useConfirm(){
+  const [state,setState]=useState(null);
+  const ask=useCallback(opts=>new Promise(resolve=>setState({...opts,resolve})),[]);
+  const close=v=>{state?.resolve(v);setState(null);};
+  const node=(
+    <Sheet open={!!state} onClose={()=>close(false)}>
+      {state&&<>
+        <div style={{fontFamily:G.fontD,fontSize:26,fontWeight:800,letterSpacing:-.5,marginBottom:8}}>{state.title}</div>
+        {state.text&&<div style={{fontSize:14,color:C.muted,lineHeight:1.55,marginBottom:24}}>{state.text}</div>}
+        <PrimaryBtn danger={state.danger} onClick={()=>close(true)}>{state.confirm||"Confirmer"}</PrimaryBtn>
+        <GhostBtn style={{marginTop:10}} onClick={()=>close(false)}>{state.cancel||"Annuler"}</GhostBtn>
+      </>}
+    </Sheet>
+  );
+  return [ask,node];
+}
+
+// Vidéo d'un exercice : feuille du bas ouverte depuis n'importe quel écran du portail client
+const VideoCtx=createContext(()=>{});
+function VideoSheet({ex,onClose}){
+  return(
+    <Sheet open={!!ex} onClose={onClose}>
+      {ex&&<>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+          <div style={{flex:1,minWidth:0,fontFamily:G.fontD,fontSize:24,fontWeight:800,letterSpacing:-.4,lineHeight:1.1}}>{ex.name}</div>
+          <button aria-label="Fermer" onClick={onClose} style={roundBtn}><Icon name="x" size={18}/></button>
+        </div>
+        {ex.videoUrl?(
+          <div style={{position:"relative",paddingBottom:"56.25%",borderRadius:16,overflow:"hidden",background:"#000",marginBottom:14}}>
+            <iframe title={`Vidéo — ${ex.name}`} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={toEmbed(ex.videoUrl)} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
+          </div>
+        ):(
+          <div style={{fontSize:14,color:C.muted,lineHeight:1.5,marginBottom:16}}>Ton coach n'a pas encore ajouté de vidéo pour cet exercice. Tu peux regarder une démonstration sur YouTube.</div>
+        )}
+        {ex.notes&&<div style={{fontSize:13,color:"#ccc",lineHeight:1.5,marginBottom:16}}>💡 {ex.notes}</div>}
+        {!ex.videoUrl&&(
+          <a href={videoSearchUrl(ex.name)} target="_blank" rel="noopener noreferrer"
+            style={{width:"100%",height:54,borderRadius:16,background:C.goldGrad,color:G.bg,fontSize:16,fontWeight:800,textDecoration:"none",
+              display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:`0 10px 30px ${G.gold}33`}}>
+            <Icon name="play" size={16} fill="currentColor" sw={0}/>Voir une démo sur YouTube
+          </a>
+        )}
+      </>}
+    </Sheet>
+  );
+}
+const VideoBtn=({ex,size=38})=>{
+  const open=useContext(VideoCtx);
+  return(
+    <button aria-label={`Vidéo — ${ex.name}`} onClick={e=>{e.stopPropagation();open(ex);}}
+      style={{...roundBtn,width:size,height:size,borderRadius:12,color:ex.videoUrl?G.goldLight:"#aaa",borderColor:ex.videoUrl?G.gold+"55":C.line2,background:ex.videoUrl?G.gold+"14":C.soft}}>
+      <Icon name="video" size={16}/>
+    </button>
+  );
+};
 
 // ─── CLIENT PORTAL ────────────────────────────────────────────────────────────
 function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLogout,foods=FOODS_DB}){
   const logs=live.sessionLogs||[];
-  const nutrition=live.nutrition||{};
   const SESSION_KEY=`wandy_session_${clientId}`;
 
   // Séance en cours : sauvegardée sur le téléphone pour survivre à un rafraîchissement,
   // à la fermeture de l'onglet ou à un passage sur un autre onglet de l'app.
   // activeSession: { progId, weekIdx, dayIdx, dayLabel, weekLabel, startedAt, notes, exercises:[{exId,name,unit,sets:[{reps,load,done,actualReps}]}] }
   const [session,setSession]=useState(()=>{try{const s=JSON.parse(store.get(SESSION_KEY)||"null");return s?.exercises?s:null;}catch{return null;}});
-  const [tab,setTab]=useState("home");
-  const [view,setView]=useState(()=>session?"session-active":"list"); // list | week-detail | session-active | session-done
-  const [selProg,setSelProg]=useState(()=>session?.progId??null);
-  const [selWeek,setSelWeek]=useState(()=>session?.weekIdx??null);
+  const [tab,setTab]=useState("home"); // home | train | food | progress
+  const [workoutOpen,setWorkoutOpen]=useState(()=>!!session);
   const [doneInfo,setDoneInfo]=useState(null);
+  const [profileOpen,setProfileOpen]=useState(false);
+  const [trainSel,setTrainSel]=useState({progId:null,wi:null});
   useEffect(()=>{if(session)store.set(SESSION_KEY,JSON.stringify(session));else store.del(SESSION_KEY);},[session,SESSION_KEY]);
 
-  // Chrono de récupération global : reste visible en bas de l'écran pendant qu'on fait défiler
+  // Chrono de récupération global : reste visible même en changeant d'écran
   const rest=useCountdown();
   const [restOwner,setRestOwner]=useState(null); // {ei, name}
   const startRest=useCallback((ei,secs,name)=>{unlockAudio();setRestOwner({ei,name});rest.start(secs);},[rest.start]); // eslint-disable-line
@@ -1840,12 +781,15 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
     return()=>{cancelled=true;document.removeEventListener("visibilitychange",request);lock?.release().catch(()=>{});};
   },[sessionActive]);
 
+  const [confirm,confirmNode]=useConfirm();
+  const [videoEx,setVideoEx]=useState(null);
   const assigned=programs.filter(p=>(live.programs||[]).some(id=>String(id)===String(p.id)));
+  const next=assigned.map(p=>nextSessionOf(p,logs)).find(Boolean);
 
-  const startSession=(prog,weekIdx,day,dayIdx)=>{
+  const startSession=async(prog,weekIdx,day,dayIdx)=>{
     // Même séance déjà en cours → on la reprend
-    if(isSameSession(session,prog.id,weekIdx,dayIdx)){setView("session-active");return;}
-    if(session&&!window.confirm(`La séance « ${session.dayLabel} » est en cours. L'abandonner pour commencer celle-ci ?`)) return;
+    if(isSameSession(session,prog.id,weekIdx,dayIdx)){setWorkoutOpen(true);return;}
+    if(session&&!(await confirm({title:"Une séance est en cours",text:`« ${session.dayLabel} » n'est pas terminée. L'abandonner pour commencer « ${day.label} » ?`,confirm:"Commencer la nouvelle",cancel:"Garder l'actuelle",danger:true}))) return;
     rest.stop();
     const exEntries=(day.exercises||[]).map(pe=>{
       const ex=exercises.find(e=>e.id===pe.exId);
@@ -1854,21 +798,20 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
         sets:Array.from({length:Math.max(1,Number(pe.sets)||1)},()=>({reps:String(pe.reps??""),load:target.load,done:false,actualReps:""}))};
     });
     setSession({progId:prog.id,weekIdx,dayIdx,dayLabel:day.label,weekLabel:prog.weeks[weekIdx]?.label||"",exercises:exEntries,notes:"",startedAt:Date.now()});
-    setSelProg(prog.id);setSelWeek(weekIdx);
-    setView("session-active");
+    setWorkoutOpen(true);
   };
 
   const updateSet=useCallback((exIdx,setIdx,patch)=>{
-    setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,...(typeof patch==="function"?patch(st):patch)})})}));
+    setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,sets:ex.sets.map((st,si)=>si!==setIdx?st:{...st,...patch})})}));
   },[]);
   const updateEx=useCallback((exIdx,patch)=>{
     setSession(s=>({...s,exercises:s.exercises.map((ex,ei)=>ei!==exIdx?ex:{...ex,...patch})}));
   },[]);
 
-  const completeSession=()=>{
+  const finishSession=async()=>{
     const all=session.exercises.flatMap(ex=>ex.sets);
     const pending=all.filter(s=>!s.done).length;
-    if(pending>0&&!window.confirm(`${pending} série${pending>1?"s":""} non validée${pending>1?"s":""}. Terminer quand même la séance ?`)) return;
+    if(pending>0&&!(await confirm({title:"Terminer la séance ?",text:`${pending} série${pending>1?"s":""} non validée${pending>1?"s":""}. Elles seront enregistrées telles quelles.`,confirm:"Terminer quand même",cancel:"Continuer la séance"}))) return;
     const duration=session.startedAt?Math.max(1,Math.round((Date.now()-session.startedAt)/60000)):null;
     const log={id:uid(),date:todayISO(),programId:session.progId,weekIdx:session.weekIdx,dayIdx:session.dayIdx,dayLabel:session.dayLabel,weekLabel:session.weekLabel,completed:true,notes:session.notes||"",
       ...(duration?{duration}:{}),
@@ -1879,361 +822,833 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
       const l=parseFloat(String(s.load).replace(",",".")),r=parseInt(s.actualReps||s.reps);
       return b+(l>0&&r>0?l*r:0);
     },0),0);
-    setDoneInfo({duration,setsDone:all.length-pending,totalSets:all.length,volume:Math.round(volume)});
+    setDoneInfo({duration,setsDone:all.length-pending,totalSets:all.length,volume:Math.round(volume),label:session.dayLabel});
     rest.stop();
     setSession(null);
-    setView("session-done");
+    setWorkoutOpen(false);
   };
-  const abandonSession=()=>{
-    if(!window.confirm("Abandonner cette séance ? Les données saisies ne seront pas enregistrées.")) return;
+  const abandonSession=async()=>{
+    if(!(await confirm({title:"Abandonner la séance ?",text:"Les séries saisies ne seront pas enregistrées.",confirm:"Abandonner",cancel:"Continuer",danger:true}))) return;
     rest.stop();
     setSession(null);
-    setView(selProg!=null&&selWeek!=null?"week-detail":"list");
+    setWorkoutOpen(false);
   };
+  const logout=async()=>{
+    setProfileOpen(false);
+    if(await confirm({title:"Se déconnecter ?",text:"Tu pourras te reconnecter à tout moment avec ton code d'accès.",confirm:"Se déconnecter",danger:true})) onLogout();
+  };
+  const openTrain=(progId,wi)=>{setTrainSel({progId,wi});setTab("train");};
 
-  const goTab=t=>{setTab(t);setView("list");};
-  const openWeek=(progId,wi)=>{setSelProg(progId);setSelWeek(wi);setView("week-detail");};
-
-  const restBar=rest.running?(
-    <RestBar timeLeft={rest.timeLeft} total={rest.total} label={restOwner?.name} onStop={rest.stop} onAdd={()=>rest.add(15)}
-      onOpen={session&&view!=="session-active"?()=>setView("session-active"):null}/>
-  ):null;
-  const shell={active:tab,onNav:goTab,onLogout,restBar,scrollKey:`${tab}|${view}|${selProg}|${selWeek}`};
-
-  // Bandeau « séance en cours » affiché quand on navigue ailleurs pendant une séance
-  const sessionDone=session?session.exercises.reduce((a,ex)=>a+ex.sets.filter(s=>s.done).length,0):0;
-  const sessionTotal=session?session.exercises.reduce((a,ex)=>a+ex.sets.length,0):0;
-  const resumeBanner=session&&(
-    <button onClick={()=>setView("session-active")} style={{width:"100%",textAlign:"left",background:`linear-gradient(135deg,${G.gold}26,${G.bg2} 70%)`,border:`1px solid ${G.gold}66`,borderRadius:12,padding:"12px 14px",marginBottom:18,cursor:"pointer",color:G.white,display:"flex",alignItems:"center",gap:12,animation:"pulseGold 2.4s ease infinite"}}>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:10,color:G.goldLight,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:3}}>● Séance en cours</div>
-        <div style={{fontWeight:700,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{session.dayLabel}</div>
-        <div style={{fontSize:11,color:G.grey,marginTop:2}}>{sessionDone}/{sessionTotal} séries validées</div>
+  let screen;
+  if(doneInfo){
+    screen=<DoneView info={doneInfo} name={firstName(live.name)} onHome={()=>{setDoneInfo(null);setTab("home");}} onProgress={()=>{setDoneInfo(null);setTab("progress");}}/>;
+  }else if(workoutOpen&&session){
+    screen=<WorkoutView session={session} setSession={setSession} updateSet={updateSet} updateEx={updateEx} logs={logs}
+      rest={rest} restOwner={restOwner} startRest={startRest}
+      onMinimize={()=>setWorkoutOpen(false)} onFinish={finishSession} onAbandon={abandonSession}/>;
+  }else{
+    const common={live,logs,assigned,session,exercises,programs,onStart:startSession,onResume:()=>setWorkoutOpen(true)};
+    screen=(<>
+      <div key={tab} style={{position:"absolute",inset:0,overflowY:"auto",overscrollBehavior:"contain",WebkitOverflowScrolling:"touch"}}>
+        <div className="fu" style={{maxWidth:640,margin:"0 auto",padding:`22px 18px ${session?190:130}px`}}>
+          {tab==="home"&&<HomeTab {...common} next={next} onOpenTrain={openTrain} onProfile={()=>setProfileOpen(true)} setTab={setTab}/>}
+          {tab==="train"&&<TrainTab {...common} sel={trainSel} setSel={setTrainSel}/>}
+          {tab==="food"&&<NutritionTab live={live} foods={foods}/>}
+          {tab==="progress"&&<ProgressTab logs={logs} programs={programs}/>}
+        </div>
       </div>
-      <span style={{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,borderRadius:8,padding:"9px 14px",fontWeight:700,fontSize:13,flexShrink:0}}>Reprendre ›</span>
-    </button>
-  );
-
-  // ── SESSION ACTIVE VIEW ──
-  if(view==="session-active"&&session){
-    return(
-      <ClientShell {...shell}>
-        <BackBtn onClick={()=>setView(selProg!=null&&selWeek!=null?"week-detail":"list")} label="Retour"/>
-        <div style={{marginBottom:6}}>
-          <div style={{fontSize:11,color:G.gold,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>En cours</div>
-          <div style={{fontFamily:G.fontD,fontSize:24,fontWeight:800,letterSpacing:-1}}>{session.dayLabel}</div>
-          {session.weekLabel&&<div style={{fontSize:12,color:G.grey,marginTop:2}}>{session.weekLabel}</div>}
-        </div>
-        {/* Progression (reste collée en haut pendant le défilement) */}
-        <div style={{position:"sticky",top:0,zIndex:5,background:G.bg,padding:"10px 0 12px",marginBottom:4}}>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>
-            <span>Progression</span>
-            <span style={{color:sessionDone===sessionTotal?G.green:G.goldLight}}>{sessionDone}/{sessionTotal} séries</span>
-          </div>
-          <ProgressBar value={sessionDone} max={sessionTotal} color={sessionDone===sessionTotal?G.green:G.goldLight}/>
-        </div>
-
-        {session.exercises.map((ex,ei)=>(
-          <ExerciseSessionCard key={ei} ex={ex} ei={ei} onSetChange={updateSet} onExChange={updateEx} sessionLogs={logs}
-            restActive={rest.running&&restOwner?.ei===ei} restLeft={rest.timeLeft} onStartRest={startRest} onStopRest={rest.stop}/>
-        ))}
-
-        <Txa label="Notes de séance (optionnel)" placeholder="Ressenti, observations..." value={session.notes} onChange={e=>{const v=e.target.value;setSession(s=>({...s,notes:v}));}}/>
-        <Btn onClick={completeSession}>✓ Terminer la séance</Btn>
-        <button onClick={abandonSession} style={{display:"block",margin:"14px auto 0",background:"none",border:"none",color:G.grey,fontSize:12,textDecoration:"underline",cursor:"pointer",padding:8}}>Abandonner la séance</button>
-      </ClientShell>
-    );
+      <BottomDock tab={tab} setTab={setTab} session={session} rest={rest} onResume={()=>setWorkoutOpen(true)}/>
+    </>);
   }
 
-  // ── SESSION DONE ──
-  if(view==="session-done"){
-    const stats=doneInfo?[
-      doneInfo.duration&&[fmtDuration(doneInfo.duration),"Durée"],
-      [`${doneInfo.setsDone}/${doneInfo.totalSets}`,"Séries"],
-      doneInfo.volume>0&&[`${doneInfo.volume.toLocaleString("fr-FR")} kg`,"Volume"],
-    ].filter(Boolean):[];
-    return(
-      <ClientShell {...shell}>
-        <div style={{textAlign:"center",padding:"48px 4px"}} className="fu">
-          <div style={{fontSize:56,marginBottom:16}}>🏆</div>
-          <div style={{fontFamily:G.fontD,fontSize:32,fontWeight:800,color:G.goldLight,letterSpacing:-1,marginBottom:8}}>SÉANCE TERMINÉE</div>
-          <div style={{fontSize:14,color:G.grey,marginBottom:28}}>Bravo, ta séance a bien été enregistrée !</div>
-          {stats.length>0&&(
-            <div style={{display:"grid",gridTemplateColumns:`repeat(${stats.length},1fr)`,gap:8,marginBottom:32}}>
-              {stats.map(([v,l])=>(
-                <div key={l} style={{background:G.bg2,borderRadius:12,padding:"14px 6px",border:`1px solid ${G.border}`}}>
-                  <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800,color:G.goldLight,lineHeight:1.1}}>{v}</div>
-                  <div style={{fontSize:10,color:G.grey,letterSpacing:1,textTransform:"uppercase",marginTop:4}}>{l}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          <Btn onClick={()=>{setView("list");setTab("historique");}}>Voir mon historique</Btn>
-          <div style={{height:12}}/>
-          <Btn variant="ghost" onClick={()=>{setView("list");setTab("home");}}>Retour à l'accueil</Btn>
-        </div>
-      </ClientShell>
-    );
-  }
-
-  // ── WEEK DETAIL (list of days) ──
-  if(view==="week-detail"&&selProg!=null&&selWeek!==null){
-    const prog=programs.find(p=>String(p.id)===String(selProg));
-    const week=prog?.weeks?.[selWeek];
-    if(!prog||!week) return(
-      <ClientShell {...shell}>
-        <BackBtn onClick={()=>setView("list")} label="Mes programmes"/>
-        <Empty text="Ce programme n'est plus disponible."/>
-      </ClientShell>
-    );
-    const hasPrev=selWeek>0, hasNext=selWeek<prog.weeks.length-1;
-    const navBtn=on=>({background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,width:40,height:40,color:on?G.goldLight:G.greyDim,fontSize:18,cursor:on?"pointer":"default",opacity:on?1:.4,flexShrink:0});
-    return(
-      <ClientShell {...shell}>
-        <BackBtn onClick={()=>setView("list")} label="Mes programmes"/>
-        {resumeBanner}
-        <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:10,marginBottom:20}}>
+  return(
+    <div style={{position:"relative",flex:1,minHeight:0,overflow:"hidden"}}>
+      <VideoCtx.Provider value={setVideoEx}>{screen}</VideoCtx.Provider>
+      <VideoSheet ex={videoEx} onClose={()=>setVideoEx(null)}/>
+      <Sheet open={profileOpen} onClose={()=>setProfileOpen(false)}>
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:22}}>
+          <div style={{width:64,height:64,borderRadius:22,background:C.goldGrad,color:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:26}}>{initials(live.name)}</div>
           <div style={{minWidth:0}}>
-            <div style={{fontSize:12,color:G.gold,fontWeight:600,marginBottom:4}}>{prog.name}</div>
-            <div style={{fontFamily:G.fontD,fontSize:24,fontWeight:800,letterSpacing:-1}} className="gl">{week.label}</div>
+            <div style={{fontFamily:G.fontD,fontSize:26,fontWeight:800,letterSpacing:-.5,...ellipsis}}>{live.name}</div>
+            {live.goal&&<div style={{fontSize:13,color:C.muted,marginTop:2}}>Objectif : {live.goal}</div>}
+            {live.since&&<div style={{fontSize:12,color:C.dim,marginTop:2}}>Suivi depuis {live.since}</div>}
           </div>
-          {prog.weeks.length>1&&(
-            <div style={{display:"flex",gap:6}}>
-              <button aria-label="Semaine précédente" disabled={!hasPrev} onClick={()=>setSelWeek(selWeek-1)} style={navBtn(hasPrev)}>‹</button>
-              <button aria-label="Semaine suivante" disabled={!hasNext} onClick={()=>setSelWeek(selWeek+1)} style={navBtn(hasNext)}>›</button>
-            </div>
-          )}
         </div>
-        {(week.days||[]).map((d,di)=>{
-          const doneLog=findDoneLog(logs,prog.id,selWeek,di);
-          const inProgress=isSameSession(session,prog.id,selWeek,di);
+        <GhostBtn onClick={logout} style={{color:G.red}}><Icon name="logout" size={18}/>Se déconnecter</GhostBtn>
+      </Sheet>
+      {confirmNode}
+    </div>
+  );
+}
+
+// ─── ACCUEIL ──────────────────────────────────────────────────────────────────
+function HomeTab({live,logs,assigned,session,next,onStart,onResume,onOpenTrain,onProfile,setTab,programs}){
+  const now=new Date();
+  const hour=now.getHours();
+  const hello=hour<5||hour>=18?"Bonsoir":"Bonjour";
+  const completed=logs.filter(l=>l.completed);
+  const doneDates=new Set(completed.map(l=>l.date));
+  const mon=mondayOf(now);
+  const week=[...Array(7)].map((_,i)=>addDays(mon,i));
+  const today=isoOf(now);
+  const thisWeek=week.filter(d=>doneDates.has(isoOf(d))).length;
+  // Série de semaines consécutives avec au moins une séance
+  const weeksWith=new Set(completed.map(l=>{const d=parseISO(l.date);return d?isoOf(mondayOf(d)):null;}).filter(Boolean));
+  let w=mon,streak=0;
+  if(!weeksWith.has(isoOf(w))) w=addDays(w,-7);
+  while(weeksWith.has(isoOf(w))){streak++;w=addDays(w,-7);}
+  const prog=next?.prog||assigned[0];
+  const pp=prog?progProgress(prog,logs):null;
+  const sp=countSets(session);
+  const lastLog=logs[0];
+  const lastProg=lastLog&&programs.find(p=>String(p.id)===String(lastLog.programId));
+
+  return(<>
+    {/* En-tête */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:22}}>
+      <div style={{minWidth:0}}>
+        <div style={{...eyebrow,color:G.gold}}>{cap(now.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"}))}</div>
+        <div style={{fontFamily:G.fontD,fontSize:34,fontWeight:800,letterSpacing:-1,lineHeight:1.05,marginTop:4,...ellipsis}}>
+          {hello}, <span style={{background:C.goldGrad,WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>{firstName(live.name)}</span>
+        </div>
+      </div>
+      <button onClick={onProfile} aria-label="Mon profil" style={{width:48,height:48,borderRadius:16,border:`1px solid ${G.gold}55`,background:`radial-gradient(circle at 30% 20%,${G.gold}40,#141414 70%)`,color:G.goldLight,fontFamily:G.fontD,fontWeight:800,fontSize:18,cursor:"pointer",flexShrink:0}}>
+        {initials(live.name)}
+      </button>
+    </div>
+
+    {/* Semaine en cours */}
+    <Card style={{padding:"16px 14px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,padding:"0 4px"}}>
+        <div style={{fontSize:14,fontWeight:700}}>Cette semaine</div>
+        <div style={{display:"flex",gap:10,alignItems:"center",fontSize:12,color:C.muted}}>
+          <span><b style={{color:G.white}}>{thisWeek}</b> séance{thisWeek>1?"s":""}</span>
+          {streak>1&&<span style={{display:"flex",alignItems:"center",gap:3,color:G.goldLight,fontWeight:700}}><Icon name="flame" size={14}/>{streak} sem.</span>}
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+        {week.map(d=>{
+          const iso=isoOf(d),done=doneDates.has(iso),isToday=iso===today;
           return(
-            <div key={di} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${inProgress?G.gold+"88":G.border}`,borderLeft:`3px solid ${inProgress?G.goldLight:doneLog?G.green:G.border}`}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:10}}>
-                <div style={{minWidth:0}}>
-                  <div style={{fontWeight:700,fontSize:16}}>{d.label}</div>
-                  <div style={{fontSize:12,color:doneLog?G.green:G.grey,marginTop:3}}>
-                    {inProgress?<span style={{color:G.goldLight}}>● En cours</span>:doneLog?`✓ Faite · ${fmtDate(doneLog.date)}`:`${(d.exercises||[]).length} exercices`}
-                  </div>
-                </div>
-                <button onClick={()=>startSession(prog,selWeek,d,di)} style={doneLog&&!inProgress
-                  ?{background:"transparent",color:G.grey,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 14px",fontWeight:700,fontSize:13,cursor:"pointer",flexShrink:0}
-                  :{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none",borderRadius:8,padding:"10px 16px",fontWeight:700,fontSize:13,cursor:"pointer",flexShrink:0}}>
-                  {inProgress?"▶ Reprendre":doneLog?"↻ Refaire":"▶ Commencer"}
-                </button>
+            <div key={iso} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+              <div style={{fontSize:11,fontWeight:700,color:isToday?G.goldLight:C.dim}}>{"LMMJVSD"[(d.getDay()+6)%7]}</div>
+              <div style={{width:36,height:36,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,
+                background:done?C.goldGrad:isToday?G.gold+"14":C.soft,color:done?G.bg:isToday?G.goldLight:"#777",
+                border:isToday&&!done?`1.5px solid ${G.gold}aa`:`1px solid ${done?"transparent":C.line}`,boxShadow:done?`0 4px 14px ${G.gold}40`:"none"}}>
+                {done?<Icon name="check" size={16} sw={2.6}/>:d.getDate()}
               </div>
-              {/* Exercise preview */}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+
+    {/* Séance en cours / prochaine séance */}
+    <div style={{marginTop:14}}>
+      {session?(
+        <HeroCard label="Séance en cours" title={session.dayLabel} sub={session.weekLabel}
+          aside={<Ring value={sp.done} max={sp.total} size={58} stroke={5}><span style={{fontFamily:G.fontD,fontWeight:800,fontSize:15}}>{sp.total?Math.round(sp.done/sp.total*100):0}%</span></Ring>}
+          meta={[`${sp.done}/${sp.total} séries`]}
+          cta={<PrimaryBtn onClick={onResume}><Icon name="play" size={16} fill="currentColor" sw={0}/>Reprendre la séance</PrimaryBtn>}/>
+      ):next?(
+        <HeroCard label="Prochaine séance" title={next.day.label} sub={`${next.prog.name} · ${next.week.label}`}
+          meta={[`${(next.day.exercises||[]).length} exercices`,`≈ ${estMinutes(next.day)} min`]}
+          preview={(next.day.exercises||[]).map(pe=>pe.exId)}
+          cta={<PrimaryBtn onClick={()=>onStart(next.prog,next.wi,next.day,next.di)}><Icon name="play" size={16} fill="currentColor" sw={0}/>Démarrer la séance</PrimaryBtn>}
+          footer={<LinkBtn onClick={()=>onOpenTrain(next.prog.id,next.wi)} style={{margin:"12px auto 0"}}>Voir toute la semaine <Icon name="right" size={14}/></LinkBtn>}/>
+      ):assigned.length>0?(
+        <Card style={{textAlign:"center",padding:"28px 20px"}}>
+          <div style={{width:56,height:56,borderRadius:18,background:C.goldGrad,color:G.bg,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><Icon name="trophy" size={28}/></div>
+          <div style={{fontFamily:G.fontD,fontSize:24,fontWeight:800}}>Programme terminé !</div>
+          <div style={{fontSize:13,color:C.muted,marginTop:6,lineHeight:1.5}}>Bravo. Ton coach va te préparer la suite.</div>
+        </Card>
+      ):(
+        <Card style={{textAlign:"center",padding:"28px 20px"}}>
+          <div style={{width:56,height:56,borderRadius:18,background:C.soft,color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><Icon name="dumbbell" size={26}/></div>
+          <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800}}>Ton programme arrive</div>
+          <div style={{fontSize:13,color:C.muted,marginTop:6,lineHeight:1.5}}>Ton coach prépare ton entraînement. Il apparaîtra ici.</div>
+        </Card>
+      )}
+    </div>
+
+    {/* Programme */}
+    {prog&&pp&&pp.total>0&&(<>
+      <SectionTitle>Mon programme</SectionTitle>
+      <button onClick={()=>onOpenTrain(prog.id,next&&String(next.prog.id)===String(prog.id)?next.wi:null)} style={{width:"100%",textAlign:"left",color:G.white,cursor:"pointer",background:C.card,border:`1px solid ${C.line}`,borderRadius:22,padding:16,display:"flex",alignItems:"center",gap:14}}>
+        <Ring value={pp.done} max={pp.total} size={62} stroke={6}><span style={{fontFamily:G.fontD,fontWeight:800,fontSize:16}}>{Math.round(pp.done/pp.total*100)}%</span></Ring>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:16,...ellipsis}}>{prog.name}</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:4}}>{next&&String(next.prog.id)===String(prog.id)?`Semaine ${next.wi+1} sur ${prog.weeks.length} · `:""}{pp.done}/{pp.total} séances</div>
+        </div>
+        <Icon name="right" size={18} color={C.muted}/>
+      </button>
+    </>)}
+
+    {/* Dernière séance */}
+    {lastLog&&(<>
+      <SectionTitle action={<LinkBtn onClick={()=>setTab("progress")}>Tout voir <Icon name="right" size={14}/></LinkBtn>}>Dernière séance</SectionTitle>
+      <Card style={{padding:14,display:"flex",alignItems:"center",gap:14}}>
+        <DateBadge iso={lastLog.date}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:15,...ellipsis}}>{lastLog.dayLabel||lastProg?.name||"Séance"}</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:3,...ellipsis}}>
+            {[lastProg?.name,lastLog.duration&&fmtDuration(lastLog.duration),`${(lastLog.exercises||[]).length} exercices`].filter(Boolean).join(" · ")}
+          </div>
+        </div>
+        {lastLog.completed&&<div style={{width:30,height:30,borderRadius:10,background:G.green+"1f",color:G.green,display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="check" size={16} sw={2.4}/></div>}
+      </Card>
+    </>)}
+  </>);
+}
+
+function HeroCard({label,title,sub,meta=[],aside,cta,footer}){
+  return(
+    <div style={{position:"relative",overflow:"hidden",borderRadius:26,padding:20,border:`1px solid ${G.gold}40`,
+      background:`radial-gradient(120% 90% at 100% 0%,${G.gold}38 0%,transparent 55%),radial-gradient(80% 60% at 0% 100%,${G.gold}14 0%,transparent 60%),linear-gradient(180deg,#171717,#0d0d0d)`,
+      boxShadow:`0 20px 50px #000a, inset 0 1px 0 #ffffff10`}}>
+      <div style={{position:"absolute",right:-30,top:-30,opacity:.07,color:G.goldLight}}><Icon name="bolt" size={170} fill="currentColor" sw={0}/></div>
+      <div style={{position:"relative",display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start"}}>
+        <div style={{minWidth:0}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:6,...eyebrow,color:G.goldLight,fontSize:10}}>
+            <span style={{width:6,height:6,borderRadius:3,background:G.goldLight,animation:"pulseDot 1.8s ease infinite"}}/>{label}
+          </span>
+          <div style={{fontFamily:G.fontD,fontSize:32,fontWeight:800,letterSpacing:-.8,lineHeight:1.05,marginTop:8}}>{title}</div>
+          {sub&&<div style={{fontSize:13,color:C.muted,marginTop:5,lineHeight:1.4}}>{sub}</div>}
+        </div>
+        {aside}
+      </div>
+      {meta.length>0&&(
+        <div style={{position:"relative",display:"flex",gap:6,flexWrap:"wrap",margin:"14px 0 18px"}}>
+          {meta.map((m,i)=><Chip key={i}>{i===0?<Icon name="dumbbell" size={13}/>:<Icon name="clock" size={13}/>}{m}</Chip>)}
+        </div>
+      )}
+      <div style={{position:"relative"}}>{cta}{footer}</div>
+    </div>
+  );
+}
+
+const DateBadge=({iso})=>{
+  const d=parseISO(iso);
+  return(
+    <div style={{width:48,height:52,borderRadius:14,background:C.soft,border:`1px solid ${C.line}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+      <div style={{fontFamily:G.fontD,fontSize:20,fontWeight:800,lineHeight:1,color:G.goldLight}}>{d?d.getDate():"–"}</div>
+      <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",marginTop:3}}>{d?d.toLocaleDateString("fr-FR",{month:"short"}).replace(".",""):""}</div>
+    </div>
+  );
+};
+
+// ─── ENTRAÎNEMENT ─────────────────────────────────────────────────────────────
+function TrainTab({live,logs,assigned,session,exercises,sel,setSel,onStart,onResume}){
+  const prog=assigned.find(p=>String(p.id)===String(sel.progId))||assigned[0];
+  const weekBar=useRef(null);
+  const n=prog?nextSessionOf(prog,logs):null;
+  const wi=prog&&sel.wi!=null&&prog.weeks?.[sel.wi]?sel.wi:(n?n.wi:0);
+  const [openDay,setOpenDay]=useState(()=>n&&n.wi===wi?n.di:null);
+  useEffect(()=>{weekBar.current?.querySelector("[data-active=true]")?.scrollIntoView({inline:"center",block:"nearest"});},[wi,prog?.id]);
+
+  if(!prog) return(<>
+    <PageTitle>Entraînement</PageTitle>
+    <Card style={{textAlign:"center",color:C.muted,fontSize:14,padding:28}}>Aucun programme assigné pour l'instant.</Card>
+  </>);
+
+  const pp=progProgress(prog,logs);
+  const week=prog.weeks[wi];
+  const pick=(progId,w)=>{setSel({progId,wi:w});setOpenDay(null);};
+
+  return(<>
+    <PageTitle>Entraînement</PageTitle>
+
+    {assigned.length>1&&(
+      <div className="noscroll" style={{display:"flex",gap:8,overflowX:"auto",margin:"0 -18px 14px",padding:"0 18px"}}>
+        {assigned.map(p=>{
+          const a=String(p.id)===String(prog.id);
+          return <button key={p.id} onClick={()=>pick(p.id,null)} style={{flexShrink:0,height:38,padding:"0 16px",borderRadius:99,border:`1px solid ${a?G.gold+"88":C.line2}`,background:a?G.gold+"1f":C.soft,color:a?G.goldLight:"#bbb",fontWeight:700,fontSize:13,cursor:"pointer"}}>{p.name}</button>;
+        })}
+      </div>
+    )}
+
+    <Card style={{display:"flex",alignItems:"center",gap:16}}>
+      <Ring value={pp.done} max={pp.total} size={72} stroke={7}>
+        <span style={{fontFamily:G.fontD,fontWeight:800,fontSize:18,lineHeight:1}}>{pp.done}</span>
+        <span style={{fontSize:10,color:C.muted}}>/ {pp.total}</span>
+      </Ring>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800,letterSpacing:-.4,lineHeight:1.1}}>{prog.name}</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+          {prog.level&&<Chip gold>{prog.level}</Chip>}
+          <Chip>{prog.weeks.length} sem.</Chip>
+          <Chip>{prog.weeks[0]?.days?.length||0} j/sem</Chip>
+        </div>
+      </div>
+    </Card>
+
+    {/* Sélecteur de semaine */}
+    <div ref={weekBar} className="noscroll" style={{display:"flex",gap:8,overflowX:"auto",margin:"18px -18px 0",padding:"2px 18px 4px"}}>
+      {prog.weeks.map((w,i)=>{
+        const days=w.days||[];
+        const done=days.filter((_,di)=>findDoneLog(logs,prog.id,i,di)).length;
+        const complete=days.length>0&&done===days.length;
+        const a=i===wi;
+        return(
+          <button key={i} data-active={a} onClick={()=>pick(prog.id,i)} style={{flexShrink:0,minWidth:62,height:62,borderRadius:18,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,
+            background:a?C.goldGrad:C.soft,color:a?G.bg:G.white,border:`1px solid ${a?"transparent":n?.wi===i?G.gold+"77":C.line}`,boxShadow:a?`0 8px 24px ${G.gold}40`:"none"}}>
+            <span style={{fontSize:10,fontWeight:700,opacity:.7,letterSpacing:1}}>SEM.</span>
+            <span style={{fontFamily:G.fontD,fontSize:20,fontWeight:800,lineHeight:1}}>{complete?<Icon name="check" size={18} sw={2.6}/>:i+1}</span>
+          </button>
+        );
+      })}
+    </div>
+    {week&&<div style={{fontSize:13,color:C.muted,margin:"12px 2px 14px"}}>{week.label}</div>}
+
+    {(week?.days||[]).map((d,di)=>{
+      const doneLog=findDoneLog(logs,prog.id,wi,di);
+      const inProgress=isSameSession(session,prog.id,wi,di);
+      const isNext=n&&n.wi===wi&&n.di===di;
+      const open=openDay===di;
+      return(
+        <div key={di} style={{background:C.card,borderRadius:22,marginBottom:10,border:`1px solid ${inProgress||isNext?G.gold+"66":C.line}`,overflow:"hidden"}}>
+          <button onClick={()=>setOpenDay(open?null:di)} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:16,background:"none",border:"none",color:G.white,textAlign:"left",cursor:"pointer"}}>
+            <div style={{width:42,height:42,borderRadius:14,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:17,
+              background:doneLog?G.green+"1f":inProgress||isNext?G.gold+"1f":C.soft,color:doneLog?G.green:inProgress||isNext?G.goldLight:"#999"}}>
+              {doneLog?<Icon name="check" size={20} sw={2.4}/>:String.fromCharCode(65+di)}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:16,...ellipsis}}>{d.label}</div>
+              <div style={{fontSize:12,marginTop:3,color:doneLog?G.green:inProgress?G.goldLight:C.muted}}>
+                {inProgress?"● En cours":doneLog?`Faite · ${fmtDate(doneLog.date)}`:`${(d.exercises||[]).length} exercices · ≈ ${estMinutes(d)} min`}
+              </div>
+            </div>
+            <Icon name="down" size={18} color={C.muted} style={{transform:open?"rotate(180deg)":"none",transition:"transform .2s"}}/>
+          </button>
+          {open&&(
+            <div style={{padding:"0 16px 16px",animation:"fadeIn .2s ease"}}>
               {(d.exercises||[]).map((pe,i)=>{
                 const ex=exercises.find(e=>e.id===pe.exId);
                 const t=slotTarget(pe,live.tests).text;
                 return(
-                  <div key={i} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"8px 0",borderTop:`1px solid ${G.border}`,fontSize:13}}>
-                    <span style={{color:G.white,minWidth:0}}>{ex?.name||"?"}</span>
-                    <span style={{color:G.grey,flexShrink:0,textAlign:"right"}}>{pe.sets}×{pe.reps}{t?` · ${t}`:""}</span>
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:`1px solid ${C.line}`}}>
+                    <div style={{width:24,fontFamily:G.fontD,fontWeight:800,color:C.dim,fontSize:14}}>{i+1}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:600}}>{ex?.name||"Exercice"}</div>
+                      {t&&<div style={{fontSize:12,color:G.gold,marginTop:2}}>{t}</div>}
+                    </div>
+                    <div style={{fontSize:13,color:"#bbb",fontWeight:700,flexShrink:0}}>{pe.sets} × {pe.reps}</div>
+                    {ex&&<VideoBtn ex={ex} size={34}/>}
                   </div>
                 );
               })}
+              <div style={{marginTop:12}}>
+                {inProgress
+                  ?<PrimaryBtn onClick={onResume}><Icon name="play" size={16} fill="currentColor" sw={0}/>Reprendre</PrimaryBtn>
+                  :doneLog
+                    ?<GhostBtn onClick={()=>onStart(prog,wi,d,di)}>Refaire cette séance</GhostBtn>
+                    :<PrimaryBtn onClick={()=>onStart(prog,wi,d,di)}><Icon name="play" size={16} fill="currentColor" sw={0}/>Démarrer</PrimaryBtn>}
+              </div>
             </div>
-          );
-        })}
-      </ClientShell>
-    );
-  }
+          )}
+        </div>
+      );
+    })}
+  </>);
+}
 
-  // ── MAIN TABS ──
-  const completed=logs.filter(l=>l.completed);
-  const weekAgo=(()=>{const d=new Date();d.setDate(d.getDate()-6);return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;})();
-  const thisWeek=completed.filter(l=>(l.date||"")>=weekAgo).length;
-  const next=assigned.map(p=>nextSessionOf(p,logs)).find(Boolean);
+const PageTitle=({children,sub})=>(
+  <div style={{marginBottom:20}}>
+    <div style={{fontFamily:G.fontD,fontSize:34,fontWeight:800,letterSpacing:-1,lineHeight:1}}>{children}</div>
+    {sub&&<div style={{fontSize:13,color:C.muted,marginTop:6}}>{sub}</div>}
+  </div>
+);
+
+// ─── MODE SÉANCE (plein écran) ────────────────────────────────────────────────
+function WorkoutView({session,setSession,updateSet,updateEx,logs,rest,restOwner,startRest,onMinimize,onFinish,onAbandon}){
+  const {done,total}=countSets(session);
+  const goNext=ei=>{
+    const el=document.getElementById(`ex-${ei+1}`);
+    if(el) el.scrollIntoView({behavior:"smooth",block:"start"});
+  };
+  return(
+    <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",background:G.bg,animation:"fadeIn .2s ease"}}>
+      <header style={{flexShrink:0,padding:"10px 14px 0",background:"linear-gradient(180deg,#101010,#0a0a0a)",borderBottom:`1px solid ${C.line}`}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,maxWidth:640,margin:"0 auto"}}>
+          <button aria-label="Réduire la séance" onClick={onMinimize} style={roundBtn}><Icon name="down" size={20}/></button>
+          <div style={{flex:1,minWidth:0,textAlign:"center"}}>
+            <div style={{fontFamily:G.fontD,fontSize:19,fontWeight:800,letterSpacing:-.3,...ellipsis}}>{session.dayLabel}</div>
+            <div style={{fontSize:12,color:C.muted,display:"flex",gap:6,justifyContent:"center",alignItems:"center",marginTop:1}}>
+              <Icon name="clock" size={12}/><Elapsed since={session.startedAt}/><span>·</span><span style={{color:done===total?G.green:G.goldLight,fontWeight:700}}>{done}/{total} séries</span>
+            </div>
+          </div>
+          <button onClick={onFinish} style={{height:42,padding:"0 14px",borderRadius:14,border:"none",background:done===total?C.goldGrad:G.gold+"22",color:done===total?G.bg:G.goldLight,fontWeight:800,fontSize:13,cursor:"pointer",flexShrink:0}}>Terminer</button>
+        </div>
+        <div style={{height:3,background:"#ffffff0d",margin:"10px -14px 0"}}>
+          <div style={{height:"100%",width:`${total?done/total*100:0}%`,background:done===total?G.green:C.goldGrad,transition:"width .4s ease"}}/>
+        </div>
+      </header>
+
+      <div style={{flex:1,minHeight:0,overflowY:"auto",overscrollBehavior:"contain",WebkitOverflowScrolling:"touch"}}>
+        <div style={{maxWidth:640,margin:"0 auto",padding:`14px 12px ${rest.running?150:40}px`}}>
+          {session.exercises.map((ex,ei)=>(
+            <ExerciseBlock key={ei} ex={ex} ei={ei} logs={logs} onSetChange={updateSet} onExChange={updateEx}
+              restActive={rest.running&&restOwner?.ei===ei} onStartRest={startRest} onDone={goNext}/>
+          ))}
+          <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:22,padding:16,marginTop:4}}>
+            <div style={{...eyebrow,marginBottom:10}}>Notes de séance</div>
+            <textarea value={session.notes} onChange={e=>{const v=e.target.value;setSession(s=>({...s,notes:v}));}} placeholder="Ressenti, observations pour ton coach…" rows={3}
+              style={{width:"100%",background:C.soft,border:`1px solid ${C.line}`,borderRadius:14,padding:"12px 14px",color:G.white,fontSize:15,outline:"none",resize:"vertical",lineHeight:1.5}}/>
+          </div>
+          <PrimaryBtn onClick={onFinish} style={{marginTop:16}}><Icon name="check" size={18} sw={2.6}/>Terminer la séance</PrimaryBtn>
+          <button onClick={onAbandon} style={{display:"block",margin:"14px auto 0",background:"none",border:"none",color:C.dim,fontSize:13,cursor:"pointer",padding:8}}>Abandonner la séance</button>
+        </div>
+      </div>
+
+      {rest.running&&<RestPill timeLeft={rest.timeLeft} total={rest.total} label={restOwner?.name} onAdd={rest.add} onSkip={rest.stop}/>}
+    </div>
+  );
+}
+
+function Elapsed({since}){
+  const [now,setNow]=useState(()=>Date.now());
+  useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(t);},[]);
+  const s=since?Math.max(0,Math.floor((now-since)/1000)):0;
+  const h=Math.floor(s/3600);
+  return <span style={{fontVariantNumeric:"tabular-nums"}}>{h?`${h}:${pad2(Math.floor(s/60)%60)}:${pad2(s%60)}`:fmtClock(s)}</span>;
+}
+
+const cellInput={width:"100%",height:42,background:C.soft,border:`1px solid ${C.line}`,borderRadius:12,color:G.white,fontSize:16,fontWeight:700,textAlign:"center",outline:"none",padding:0,fontVariantNumeric:"tabular-nums"};
+const stripKg=v=>String(v??"").replace(/\s*kg$/i,"");
+
+function ExerciseBlock({ex,ei,logs,onSetChange,onExChange,restActive,onStartRest,onDone}){
+  const allDone=ex.sets.every(s=>s.done);
+  const [open,setOpen]=useState(!allDone);
+  const openVideo=useContext(VideoCtx);
+  const [hist,setHist]=useState(false);
+  const unit=ex.unit||"kg";
+  const restSecs=parseRest(ex.rest);
+  const doneCount=ex.sets.filter(s=>s.done).length;
+
+  const history=[];
+  for(const log of logs){
+    if(history.length>=4) break;
+    const found=(log.exercises||[]).find(e=>e.exId===ex.exId);
+    if(found) history.push({date:log.date,dayLabel:log.dayLabel,sets:found.sets||[]});
+  }
+  const last=history[0];
+
+  // Valide une série : vibration, récupération, et si c'était la dernière, on replie et on passe à l'exercice suivant
+  const complete=si=>{
+    const willAllDone=ex.sets.every((s,i)=>i===si||s.done);
+    // Charge vide : on reprend celle de la série précédente (on ne la tape qu'une fois)
+    const carried=!String(ex.sets[si].load||"").trim()&&si>0?ex.sets[si-1].load:"";
+    onSetChange(ei,si,carried?{done:true,load:carried}:{done:true});
+    try{navigator.vibrate?.(12);}catch{/* non supporté */}
+    if(restSecs>0) onStartRest(ei,restSecs,ex.name);
+    if(willAllDone) setTimeout(()=>{setOpen(false);onDone(ei);},380);
+  };
+
+  // Chrono de travail (exercices en temps) : à la fin, la série est validée automatiquement
+  const [activeWork,setActiveWork]=useState(null);
+  const activeWorkRef=useRef(null);
+  useEffect(()=>{activeWorkRef.current=activeWork;},[activeWork]);
+  const work=useCountdown(()=>{
+    const a=activeWorkRef.current;
+    if(a===null) return;
+    setActiveWork(null);
+    complete(a);
+  });
 
   return(
-    <ClientShell {...shell}>
+    <div id={`ex-${ei}`} style={{scrollMarginTop:12,background:C.card,border:`1px solid ${allDone?G.green+"44":C.line}`,borderRadius:22,marginBottom:12,overflow:"hidden",transition:"border .3s"}}>
+      <div style={{display:"flex",alignItems:"center"}}>
+      <button onClick={()=>setOpen(!open)} aria-expanded={open} style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:12,padding:14,background:"none",border:"none",color:G.white,textAlign:"left",cursor:"pointer"}}>
+        <div style={{width:40,height:40,borderRadius:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:G.fontD,fontWeight:800,fontSize:17,
+          background:allDone?G.green+"22":G.gold+"18",color:allDone?G.green:G.goldLight}}>
+          {allDone?<Icon name="check" size={20} sw={2.6}/>:ei+1}
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:16,lineHeight:1.25}}>{ex.name}</div>
+          <div style={{fontSize:12,color:allDone?G.green:C.muted,marginTop:3}}>{doneCount}/{ex.sets.length} séries{ex.muscle?` · ${ex.muscle}`:""}</div>
+        </div>
+        <Icon name="down" size={18} color={C.muted} style={{transform:open?"rotate(180deg)":"none",transition:"transform .2s"}}/>
+      </button>
+      <div style={{paddingRight:12}}><VideoBtn ex={ex}/></div>
+      </div>
 
-      {tab==="home"&&(
-        <div className="fu">
-          <div style={{marginBottom:22}}>
-            <div style={{fontSize:11,color:G.gold,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Mon espace</div>
-            <div style={{fontFamily:G.fontD,fontSize:30,fontWeight:800,letterSpacing:-1}} className="gl">{(live.name||"").split(" ")[0].toUpperCase()}</div>
+      {open&&(
+        <div style={{padding:"0 12px 14px",animation:"fadeIn .2s ease"}}>
+          {/* Infos et raccourcis */}
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,margin:"0 2px 12px"}}>
+            {ex.target&&<Chip gold><Icon name="target" size={13}/>{ex.target}</Chip>}
+            {restSecs>0&&<button aria-label="Lancer la récupération" onClick={()=>onStartRest(ei,restSecs,ex.name)} style={{all:"unset",cursor:"pointer"}}><Chip gold={restActive}><Icon name="clock" size={13}/>Récup {fmtClock(restSecs)}</Chip></button>}
+            <label style={{position:"relative",display:"inline-flex"}}>
+              <Chip style={{paddingRight:26}}><Icon name="weight" size={13}/>{unit}</Chip>
+              <Icon name="down" size={12} color="#999" style={{position:"absolute",right:9,top:8,pointerEvents:"none"}}/>
+              <select aria-label="Unité de charge" value={unit} onChange={e=>onExChange(ei,{unit:e.target.value})} style={{position:"absolute",inset:0,opacity:0,cursor:"pointer",width:"100%"}}>
+                {LOAD_UNITS.map(u=><option key={u} value={u}>{u}</option>)}
+              </select>
+            </label>
+            <button onClick={()=>openVideo(ex)} style={{all:"unset",cursor:"pointer"}}><Chip gold={!!ex.videoUrl}><Icon name="video" size={13}/>Vidéo</Chip></button>
+            {history.length>0&&<button onClick={()=>setHist(!hist)} style={{all:"unset",cursor:"pointer"}}><Chip gold={hist}><Icon name="history" size={13}/>Historique</Chip></button>}
           </div>
 
-          {resumeBanner}
-          {/* Prochaine séance : accès direct en un clic */}
-          {!session&&next&&(
-            <div style={{background:`linear-gradient(145deg,${G.gold}22,${G.bg2} 65%)`,border:`1px solid ${G.gold}55`,borderRadius:14,padding:18,marginBottom:22}}>
-              <div style={{fontSize:10,color:G.goldLight,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Prochaine séance</div>
-              <div style={{fontFamily:G.fontD,fontSize:24,fontWeight:800,letterSpacing:-.5,lineHeight:1.1}}>{next.day.label}</div>
-              <div style={{fontSize:12,color:G.grey,marginTop:4}}>{next.prog.name} · {next.week.label} · {(next.day.exercises||[]).length} exercices</div>
-              <Btn style={{marginTop:14}} onClick={()=>startSession(next.prog,next.wi,next.day,next.di)}>▶ Commencer la séance</Btn>
-              <button onClick={()=>{setTab("programme");openWeek(next.prog.id,next.wi);}} style={{display:"block",margin:"10px auto 0",background:"none",border:"none",color:G.grey,fontSize:12,cursor:"pointer",padding:6}}>Voir le détail de la semaine</button>
+          {ex.coachNote&&<div style={{fontSize:13,color:"#ddd",lineHeight:1.45,margin:"0 2px 10px",padding:"10px 12px",background:G.gold+"0f",borderRadius:12,borderLeft:`3px solid ${G.gold}`}}>{ex.coachNote}</div>}
+          {ex.notes&&<div style={{fontSize:12,color:C.muted,lineHeight:1.45,margin:"0 2px 12px"}}>💡 {ex.notes}</div>}
+
+
+          {hist&&(
+            <div style={{background:"#0b0b0b",borderRadius:14,padding:12,marginBottom:12,border:`1px solid ${C.line}`}}>
+              {history.map((h,hi)=>(
+                <div key={hi} style={{marginBottom:hi<history.length-1?12:0}}>
+                  <div style={{fontSize:12,color:G.gold,fontWeight:700,marginBottom:6}}>{fmtDate(h.date)}{h.dayLabel?` · ${h.dayLabel}`:""}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {h.sets.map((s,si)=><Chip key={si}>{stripKg(s.load)||"—"} × {s.reps}</Chip>)}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:28}}>
-            {[[completed.length,"Séances"],[thisWeek,"7 derniers j."],[assigned.length,"Programmes"]].map(([v,l])=>(
-              <div key={l} style={{background:G.bg2,borderRadius:12,padding:"14px 10px",border:`1px solid ${G.border}`}}>
-                <div style={{fontFamily:G.fontD,fontSize:32,fontWeight:800,color:G.goldLight,lineHeight:1}}>{v}</div>
-                <div style={{fontSize:9,color:G.grey,letterSpacing:1,textTransform:"uppercase",marginTop:5}}>{l}</div>
-              </div>
-            ))}
+          {/* Tableau des séries */}
+          <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) 70px 58px 44px",gap:6,padding:"0 4px 6px",fontSize:10,fontWeight:700,letterSpacing:1,color:C.dim,textTransform:"uppercase"}}>
+            <span style={{textAlign:"center"}}>#</span><span>Précédent</span><span style={{textAlign:"center"}}>{unit==="élastique"?"Élast.":unit}</span><span style={{textAlign:"center"}}>Reps</span><span/>
           </div>
-          <SH title="Mes programmes"/>
-          {assigned.length===0&&<Empty text="Aucun programme assigné pour l'instant"/>}
-          {assigned.map(p=>{
-            const {total,done}=progProgress(p,logs);
-            const n=nextSessionOf(p,logs);
+          {ex.sets.map((st,si)=>{
+            const timed=isTimed(st.reps);
+            const isActive=work.running&&activeWork===si;
+            const prev=last?.sets?.[si];
             return(
-              <button key={p.id} onClick={()=>{setTab("programme");openWeek(p.id,n?n.wi:0);}} style={{display:"block",width:"100%",textAlign:"left",color:G.white,background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,borderLeft:`3px solid ${G.gold}`,cursor:"pointer"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontWeight:700,fontSize:16,marginBottom:8}}>{p.name}</div>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                      {p.level&&<Tag text={p.level}/>}<Tag text={`${(p.weeks||[]).length} sem.`} color={G.grey}/><Tag text={`${p.weeks?.[0]?.days?.length||0} j/sem`} color={G.grey}/>
-                    </div>
+              <div key={si} style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) 70px 58px 44px",gap:6,alignItems:"center",padding:"5px 4px",borderRadius:14,background:st.done?G.green+"12":"transparent",transition:"background .25s"}}>
+                <div style={{fontFamily:G.fontD,fontWeight:800,fontSize:15,textAlign:"center",color:st.done?G.green:"#aaa"}}>{si+1}</div>
+                <button onClick={()=>prev&&onSetChange(ei,si,{load:unit==="kg"?stripKg(prev.load):String(prev.load||"")})} disabled={!prev}
+                  style={{all:"unset",cursor:prev?"pointer":"default",fontSize:13,color:prev?"#9a9a9a":C.dim,...ellipsis}} aria-label={prev?"Reprendre la charge précédente":undefined}>
+                  {prev?`${stripKg(prev.load)||"—"} × ${prev.reps}`:"—"}
+                </button>
+                <input value={st.load} onChange={e=>onSetChange(ei,si,{load:e.target.value})} placeholder={(si>0&&ex.sets[si-1].load)||(prev?stripKg(prev.load):"")||"—"}
+                  inputMode={unit==="élastique"?"text":"decimal"} aria-label={`Charge série ${si+1}`}
+                  style={{...cellInput,color:st.done?G.green:G.white,background:st.done?"transparent":C.soft}}/>
+                {timed
+                  ?<div style={{...cellInput,display:"flex",alignItems:"center",justifyContent:"center",fontSize:isActive?17:14,color:isActive?(work.timeLeft<=3?G.red:G.goldLight):st.done?G.green:"#ccc",background:isActive?G.gold+"1a":st.done?"transparent":C.soft,borderColor:isActive?G.gold+"66":C.line}}>
+                    {isActive?fmtClock(work.timeLeft):st.reps}
                   </div>
-                  <div style={{color:G.gold,fontSize:22}}>›</div>
-                </div>
-                {total>0&&(
-                  <div style={{marginTop:12}}>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:G.grey,marginBottom:5}}>
-                      <span>{n?"Progression":"Programme terminé 🎉"}</span><span>{done}/{total} séances</span>
-                    </div>
-                    <ProgressBar value={done} max={total} color={n?G.goldLight:G.green}/>
-                  </div>
-                )}
+                  :<input value={st.actualReps||""} onChange={e=>onSetChange(ei,si,{actualReps:e.target.value.replace(/[^\d]/g,"")})} placeholder={st.reps}
+                    inputMode="numeric" aria-label={`Répétitions série ${si+1}`}
+                    style={{...cellInput,color:st.done?G.green:G.goldLight,background:st.done?"transparent":C.soft}}/>
+                }
+                {st.done
+                  ?<button aria-label={`Annuler la validation de la série ${si+1}`} onClick={()=>onSetChange(ei,si,{done:false})} style={{width:44,height:42,borderRadius:12,border:"none",background:G.green,color:"#062b14",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",animation:"pop .25s ease"}}><Icon name="check" size={20} sw={3}/></button>
+                  :timed
+                    ?(isActive
+                      ?<button aria-label="Arrêter le chrono" onClick={()=>{work.stop();setActiveWork(null);}} style={{width:44,height:42,borderRadius:12,border:`1px solid ${G.red}66`,background:G.red+"22",color:G.red,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Icon name="stop" size={16} fill="currentColor" sw={0}/></button>
+                      :<button aria-label={`Lancer le chrono série ${si+1}`} onClick={()=>{unlockAudio();setActiveWork(si);work.start(parseRest(st.reps));}} style={{width:44,height:42,borderRadius:12,border:"none",background:C.goldGrad,color:G.bg,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Icon name="play" size={16} fill="currentColor" sw={0}/></button>)
+                    :<button aria-label={`Valider la série ${si+1}`} onClick={()=>complete(si)} style={{width:44,height:42,borderRadius:12,border:`1.5px solid ${G.gold}77`,background:G.gold+"14",color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Icon name="check" size={20} sw={2.4}/></button>
+                }
+              </div>
+            );
+          })}
+
+          {/* Ressenti */}
+          <div style={{display:"flex",gap:6,marginTop:12}}>
+            {[["😊","Facile"],["😐","Correct"],["😤","Dur"],["💀","Épuisant"]].map(([emoji,label])=>{
+              const a=ex.sensation===emoji;
+              return(
+                <button key={emoji} onClick={()=>onExChange(ei,{sensation:a?"":emoji})} aria-pressed={a}
+                  style={{flex:1,height:40,borderRadius:12,border:`1px solid ${a?G.gold+"88":C.line}`,background:a?G.gold+"1f":"transparent",color:a?G.goldLight:C.muted,fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+                  <span style={{fontSize:15}}>{emoji}</span>{label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Chrono de récupération flottant (mode séance)
+function RestPill({timeLeft,total,label,onAdd,onSkip}){
+  const urgent=timeLeft<=3;
+  const small={width:44,height:44,borderRadius:14,border:`1px solid ${C.line2}`,background:C.soft,color:G.white,fontWeight:800,fontSize:13,cursor:"pointer",flexShrink:0};
+  return(
+    <div role="timer" style={{position:"absolute",left:12,right:12,bottom:"calc(12px + env(safe-area-inset-bottom))",zIndex:50,maxWidth:560,margin:"0 auto",
+      background:"rgba(22,22,22,.94)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:`1px solid ${urgent?G.red+"88":G.gold+"55"}`,borderRadius:24,padding:10,
+      display:"flex",alignItems:"center",gap:10,boxShadow:"0 20px 60px #000d",animation:"sheetUp .3s ease"}}>
+      <Ring value={timeLeft} max={total} size={60} stroke={5} color={urgent?G.red:G.goldLight}>
+        <span style={{fontFamily:G.fontD,fontSize:17,fontWeight:800,fontVariantNumeric:"tabular-nums",color:urgent?G.red:G.white}}>{fmtClock(timeLeft)}</span>
+      </Ring>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{...eyebrow,fontSize:10}}>Récupération</div>
+        <div style={{fontSize:14,fontWeight:700,marginTop:2,...ellipsis}}>{label||"Repos"}</div>
+      </div>
+      <button aria-label="Retirer 15 secondes" onClick={()=>onAdd(-15)} style={small}>−15</button>
+      <button aria-label="Ajouter 15 secondes" onClick={()=>onAdd(15)} style={small}>+15</button>
+      <button onClick={onSkip} style={{...small,width:"auto",padding:"0 14px",border:"none",background:C.goldGrad,color:G.bg}}>Passer</button>
+    </div>
+  );
+}
+
+// ─── FIN DE SÉANCE ────────────────────────────────────────────────────────────
+function DoneView({info,name,onHome,onProgress}){
+  const stats=[
+    info.duration&&[fmtDuration(info.duration),"Durée","clock"],
+    [`${info.setsDone}/${info.totalSets}`,"Séries","check"],
+    info.volume>0&&[`${info.volume.toLocaleString("fr-FR")} kg`,"Volume","weight"],
+  ].filter(Boolean);
+  return(
+    <div style={{position:"absolute",inset:0,overflowY:"auto",display:"flex",flexDirection:"column",background:`radial-gradient(90% 50% at 50% 0%,${G.gold}2a,transparent 70%),${G.bg}`}}>
+      <div style={{maxWidth:480,width:"100%",margin:"auto",padding:"40px 22px calc(32px + env(safe-area-inset-bottom))",textAlign:"center"}} className="fu">
+        <div style={{width:112,height:112,borderRadius:36,margin:"0 auto 24px",background:C.goldGrad,color:G.bg,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 20px 60px ${G.gold}55`,animation:"pop .5s cubic-bezier(.2,1.4,.4,1)"}}>
+          <Icon name="trophy" size={56} sw={1.7}/>
+        </div>
+        <div style={{fontFamily:G.fontD,fontSize:38,fontWeight:800,letterSpacing:-1,lineHeight:1}}>SÉANCE TERMINÉE</div>
+        <div style={{fontSize:15,color:C.muted,marginTop:10}}>Bravo {name} ! « {info.label} » est enregistrée.</div>
+        <div style={{display:"grid",gridTemplateColumns:`repeat(${stats.length},1fr)`,gap:8,margin:"30px 0 32px"}}>
+          {stats.map(([v,l,ic])=>(
+            <div key={l} style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:20,padding:"16px 6px"}}>
+              <div style={{color:G.goldLight,display:"flex",justifyContent:"center",marginBottom:8}}><Icon name={ic} size={18}/></div>
+              <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800,lineHeight:1.05}}>{v}</div>
+              <div style={{...eyebrow,fontSize:10,marginTop:5}}>{l}</div>
+            </div>
+          ))}
+        </div>
+        <PrimaryBtn onClick={onHome}>Retour à l'accueil</PrimaryBtn>
+        <GhostBtn onClick={onProgress} style={{marginTop:10}}>Voir mes progrès</GhostBtn>
+      </div>
+    </div>
+  );
+}
+
+// ─── BARRE DU BAS (onglets flottants + séance réduite) ────────────────────────
+function BottomDock({tab,setTab,session,rest,onResume}){
+  const items=[["home","home","Accueil"],["train","dumbbell","Training"],["food","leaf","Nutrition"],["progress","chart","Progrès"]];
+  const sp=countSets(session);
+  return(
+    <div style={{position:"absolute",left:0,right:0,bottom:0,zIndex:40,padding:"28px 12px calc(10px + env(safe-area-inset-bottom))",pointerEvents:"none",background:"linear-gradient(180deg,transparent,#080808e6 40%)"}}>
+      <div style={{maxWidth:520,margin:"0 auto",pointerEvents:"auto"}}>
+        {session&&(
+          <button onClick={onResume} style={{width:"100%",height:52,display:"flex",alignItems:"center",gap:10,background:C.goldGrad,color:G.bg,border:"none",borderRadius:18,padding:"0 14px",marginBottom:8,fontWeight:800,fontSize:14,cursor:"pointer",boxShadow:`0 10px 30px ${G.gold}40`,animation:"sheetUp .3s ease"}}>
+            <span style={{width:8,height:8,borderRadius:4,background:G.bg,animation:"pulseDot 1.4s ease infinite",flexShrink:0}}/>
+            <span style={{flex:1,minWidth:0,textAlign:"left",...ellipsis}}>{rest.running?`Récup · ${fmtClock(rest.timeLeft)}`:session.dayLabel}</span>
+            <span style={{fontSize:12,opacity:.75}}>{sp.done}/{sp.total}</span>
+            <span style={{display:"flex",alignItems:"center",gap:2}}>Reprendre<Icon name="right" size={16} sw={2.4}/></span>
+          </button>
+        )}
+        <nav style={{display:"flex",gap:4,background:"rgba(24,24,24,.88)",backdropFilter:"blur(22px)",WebkitBackdropFilter:"blur(22px)",border:`1px solid ${C.line2}`,borderRadius:26,padding:6,boxShadow:"0 14px 40px #000c"}}>
+          {items.map(([key,icon,label])=>{
+            const a=tab===key;
+            return(
+              <button key={key} onClick={()=>setTab(key)} aria-current={a?"page":undefined}
+                style={{flex:1,height:54,borderRadius:20,border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,
+                  background:a?G.gold+"1c":"transparent",color:a?G.goldLight:"#7d7d7d",transition:"background .2s,color .2s"}}>
+                <Icon name={icon} size={21} sw={a?2.2:1.8}/>
+                <span style={{fontSize:10,fontWeight:700,letterSpacing:.3}}>{label}</span>
               </button>
             );
           })}
-          {logs.length>0&&<>
-            <div style={{margin:"24px 0 12px"}}><SH title="Dernières séances" onMore={()=>setTab("historique")}/></div>
-            {logs.slice(0,3).map((log,i)=>(
-              <MiniLogCard key={log.id||i} log={log} programs={programs}/>
-            ))}
-          </>}
-        </div>
-      )}
+        </nav>
+      </div>
+    </div>
+  );
+}
 
-      {tab==="programme"&&(
-        <div className="fu">
-          <PageH title="MES PROGRAMMES"/>
-          {resumeBanner}
-          {assigned.length===0&&<Empty text="Aucun programme assigné"/>}
-          {assigned.map(p=>{
-            const n=nextSessionOf(p,logs);
+// ─── NUTRITION ────────────────────────────────────────────────────────────────
+function NutritionTab({live,foods}){
+  const nutrition=live.nutrition||{};
+  const storedItems=(live.mealPlan?.meals||[]).flatMap(m=>m.items||[]);
+  const src=storedItems.length>0?calcMacros(storedItems,foods):null;
+  const cal=src?rnd(src.kcal):(Number(nutrition.calories)||0);
+  const prot=src?rnd1(src.protein):(Number(nutrition.proteins)||0);
+  const gluc=src?rnd1(src.carbs):(Number(nutrition.carbs)||0);
+  const lip=src?rnd1(src.fat):(Number(nutrition.fats)||0);
+  const macros=[["Protéines",prot,prot*4,G.goldLight],["Glucides",gluc,gluc*4,G.gold],["Lipides",lip,lip*9,C.bronze]];
+  const sum=macros.reduce((a,m)=>a+m[2],0)||1;
+  const meals=(live.mealPlan?.meals||[]).filter(m=>(m.items||[]).length>0);
+
+  // Anneau segmenté : part de chaque macro dans les calories
+  const size=168,stroke=14,r=(size-stroke)/2,c=2*Math.PI*r,gap=macros.filter(m=>m[2]>0).length>1?6:0;
+  let offset=0;
+
+  return(<>
+    <PageTitle sub="Tes objectifs quotidiens">Nutrition</PageTitle>
+    <Card style={{padding:"22px 18px"}}>
+      <div style={{position:"relative",width:size,height:size,margin:"0 auto"}}>
+        <svg width={size} height={size} style={{transform:"rotate(-90deg)",display:"block"}} aria-hidden="true">
+          <circle cx={size/2} cy={size/2} r={r} stroke="#ffffff10" strokeWidth={stroke} fill="none"/>
+          {macros.map(([l,,k,col])=>{
+            if(k<=0) return null;
+            const len=Math.max(0,c*k/sum-gap);
+            const el=<circle key={l} cx={size/2} cy={size/2} r={r} stroke={col} strokeWidth={stroke} fill="none" strokeLinecap="round" strokeDasharray={`${len} ${c}`} strokeDashoffset={-offset}/>;
+            offset+=c*k/sum;
+            return el;
+          })}
+        </svg>
+        <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+          <div style={{fontFamily:G.fontD,fontSize:44,fontWeight:800,lineHeight:1,letterSpacing:-1}}>{cal.toLocaleString("fr-FR")}</div>
+          <div style={{...eyebrow,fontSize:10,marginTop:4}}>kcal / jour</div>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:22}}>
+        {macros.map(([l,g,k,col])=>(
+          <div key={l} style={{background:C.soft,borderRadius:16,padding:"12px 10px",border:`1px solid ${C.line}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.muted,fontWeight:700}}><span style={{width:8,height:8,borderRadius:4,background:col}}/>{l}</div>
+            <div style={{fontFamily:G.fontD,fontSize:24,fontWeight:800,marginTop:6,lineHeight:1}}>{g}<span style={{fontSize:13,color:C.muted,marginLeft:2}}>g</span></div>
+            <div style={{fontSize:11,color:C.dim,marginTop:3}}>{Math.round(k/sum*100)}% des kcal</div>
+          </div>
+        ))}
+      </div>
+      {nutrition.notes&&<div style={{marginTop:14,padding:"12px 14px",background:G.gold+"0f",borderRadius:14,fontSize:13,color:"#ddd",lineHeight:1.5,borderLeft:`3px solid ${G.gold}`}}>{nutrition.notes}</div>}
+    </Card>
+
+    <SectionTitle>Plan alimentaire</SectionTitle>
+    {meals.length===0
+      ?<Card style={{textAlign:"center",padding:"26px 20px",color:C.muted,fontSize:14,lineHeight:1.5}}>Ton coach n'a pas encore défini de plan alimentaire.</Card>
+      :meals.map(meal=><MealCard key={meal.id} meal={meal} foods={foods}/>)}
+  </>);
+}
+
+function MealCard({meal,foods}){
+  const [open,setOpen]=useState(false);
+  const slot=MEAL_SLOTS.find(s=>s.id===meal.id);
+  const m=calcMacros(meal.items,foods);
+  return(
+    <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:20,marginBottom:10,overflow:"hidden"}}>
+      <button onClick={()=>setOpen(!open)} aria-expanded={open} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:14,background:"none",border:"none",color:G.white,textAlign:"left",cursor:"pointer"}}>
+        <div style={{width:44,height:44,borderRadius:14,background:C.soft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{slot?.icon||"🍽"}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:15}}>{meal.label}</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:2}}>{meal.items.length} aliment{meal.items.length>1?"s":""} · P {rnd(m.protein)} · G {rnd(m.carbs)} · L {rnd(m.fat)}</div>
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{fontFamily:G.fontD,fontSize:18,fontWeight:800,color:G.goldLight,lineHeight:1}}>{rnd(m.kcal)}</div>
+          <div style={{fontSize:10,color:C.muted}}>kcal</div>
+        </div>
+        <Icon name="down" size={16} color={C.muted} style={{transform:open?"rotate(180deg)":"none",transition:"transform .2s"}}/>
+      </button>
+      {open&&(
+        <div style={{padding:"0 14px 10px",animation:"fadeIn .2s ease"}}>
+          {meal.items.map((item,idx)=>{
+            const food=foods.find(f=>f.id===item.foodId);
+            if(!food) return null;
+            const im=calcMacros([item],foods);
             return(
-              <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:12,border:`1px solid ${G.border}`}}>
-                <div style={{fontWeight:700,fontSize:16,marginBottom:10}}>{p.name}</div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
-                  {p.level&&<Tag text={p.level}/>}<Tag text={`${(p.weeks||[]).length} semaine${(p.weeks||[]).length>1?"s":""}`} color={G.grey}/>
+              <div key={idx} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:`1px solid ${C.line}`}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:600,lineHeight:1.35}}>{food.name}</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:2}}>{rnd(im.kcal)} kcal · P {rnd1(im.protein)} · G {rnd1(im.carbs)} · L {rnd1(im.fat)}</div>
                 </div>
-                {/* Week list */}
-                {(p.weeks||[]).map((w,wi)=>{
-                  const days=w.days||[];
-                  const done=days.filter((_,di)=>findDoneLog(logs,p.id,wi,di)).length;
-                  const complete=days.length>0&&done===days.length;
-                  const current=n&&n.wi===wi;
-                  return(
-                    <button key={wi} onClick={()=>openWeek(p.id,wi)} style={{width:"100%",textAlign:"left",color:G.white,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"12px",background:current?G.gold+"12":G.bg3,borderRadius:9,marginBottom:7,cursor:"pointer",border:`1px solid ${current?G.gold+"66":G.border}`}}>
-                      <div style={{minWidth:0}}>
-                        <div style={{fontWeight:600,fontSize:14}}>{w.label}</div>
-                        <div style={{fontSize:11,color:G.grey,marginTop:2}}>
-                          {days.length} séance{days.length>1?"s":""} · {days.reduce((a,d)=>a+(d.exercises||[]).length,0)} exercices
-                          {current&&<span style={{color:G.goldLight}}> · En cours</span>}
-                        </div>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                        {done>0&&<span style={{fontSize:11,fontWeight:700,color:complete?G.green:G.goldLight}}>{complete?"✓":`${done}/${days.length}`}</span>}
-                        <span style={{color:G.gold,fontSize:18}}>›</span>
-                      </div>
-                    </button>
-                  );
-                })}
+                <Chip gold>{item.qty} {food.unit==="g"?"g":"port."}</Chip>
               </div>
             );
           })}
         </div>
       )}
+    </div>
+  );
+}
 
-      {tab==="nutrition"&&(
-        <div className="fu">
-          <PageH title="NUTRITION"/>
-          {resumeBanner}
-          {/* Macros */}
-          {(()=>{
-            const storedItems=(live.mealPlan?.meals||[]).flatMap(m=>m.items||[]);
-            const src=storedItems.length>0?calcMacros(storedItems,foods):null;
-            const cal=src?rnd(src.kcal):(nutrition.calories||0);
-            const prot=src?rnd1(src.protein):(nutrition.proteins||0);
-            const gluc=src?rnd1(src.carbs):(nutrition.carbs||0);
-            const lip=src?rnd1(src.fat):(nutrition.fats||0);
-            return(
-              <div style={{background:G.bg2,borderRadius:12,padding:18,border:`1px solid ${G.border}`,marginBottom:20}}>
-                <div style={{textAlign:"center",padding:"12px 0 24px"}}>
-                  <div style={{fontFamily:G.fontD,fontSize:60,fontWeight:800,color:G.goldLight,lineHeight:1}}>{cal}</div>
-                  <div style={{fontSize:11,color:G.grey,letterSpacing:2,textTransform:"uppercase",marginTop:6}}>kcal / jour</div>
-                </div>
-                <MacroBar label="Protéines" value={prot} max={300} color={G.goldLight}/>
-                <MacroBar label="Glucides" value={gluc} max={500} color={G.gold}/>
-                <MacroBar label="Lipides" value={lip} max={150} color="#C9A84C66"/>
-                {nutrition.notes&&<div style={{marginTop:16,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {nutrition.notes}</div>}
+// ─── PROGRÈS ──────────────────────────────────────────────────────────────────
+function ProgressTab({logs,programs}){
+  const completed=logs.filter(l=>l.completed);
+  const volume=completed.reduce((a,l)=>a+logVolume(l),0);
+  const minutes=completed.reduce((a,l)=>a+(Number(l.duration)||0),0);
+  const now=new Date();
+  const monthKey=`${now.getFullYear()}-${pad2(now.getMonth()+1)}`;
+  const thisMonth=completed.filter(l=>(l.date||"").startsWith(monthKey)).length;
+  // 8 dernières semaines
+  const mon=mondayOf(now);
+  const weeks=[...Array(8)].map((_,i)=>addDays(mon,-7*(7-i)));
+  const counts=weeks.map(w=>{const a=isoOf(w),b=isoOf(addDays(w,7));return completed.filter(l=>l.date>=a&&l.date<b).length;});
+  const maxC=Math.max(1,...counts);
+  // Historique groupé par mois
+  const groups=[];
+  logs.forEach(l=>{
+    const d=parseISO(l.date);
+    const key=d?cap(d.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})):"Autres";
+    const g=groups.find(x=>x.key===key);
+    if(g) g.items.push(l); else groups.push({key,items:[l]});
+  });
+  const fmtVol=v=>v>=10000?`${(v/1000).toLocaleString("fr-FR",{maximumFractionDigits:1})} t`:`${Math.round(v).toLocaleString("fr-FR")} kg`;
+  const stats=[
+    [completed.length,"Séances","dumbbell"],
+    [thisMonth,"Ce mois-ci","calendar"],
+    [volume>0?fmtVol(volume):"—","Volume soulevé","weight"],
+    [minutes>0?fmtDuration(minutes):"—","Temps d'entraînement","clock"],
+  ];
+  return(<>
+    <PageTitle>Progrès</PageTitle>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      {stats.map(([v,l,ic])=>(
+        <Card key={l} style={{padding:16}}>
+          <div style={{width:34,height:34,borderRadius:11,background:G.gold+"18",color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12}}><Icon name={ic} size={17}/></div>
+          <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,lineHeight:1,letterSpacing:-.5}}>{v}</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:5}}>{l}</div>
+        </Card>
+      ))}
+    </div>
+
+    <Card style={{marginTop:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:16}}>
+        <div style={{fontSize:14,fontWeight:700}}>Séances par semaine</div>
+        <div style={{fontSize:12,color:C.muted}}>8 semaines</div>
+      </div>
+      <div style={{display:"flex",alignItems:"flex-end",gap:8,height:110}}>
+        {counts.map((c,i)=>{
+          const cur=i===counts.length-1;
+          return(
+            <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6,height:"100%",justifyContent:"flex-end"}}>
+              <div style={{fontSize:11,fontWeight:700,color:c?(cur?G.goldLight:"#bbb"):"transparent"}}>{c}</div>
+              <div style={{width:"100%",maxWidth:28,height:`${Math.max(6,c/maxC*72)}px`,borderRadius:8,background:c?(cur?C.goldGrad:G.gold+"55"):"#ffffff0d",transition:"height .5s ease"}}/>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{display:"flex",gap:8,marginTop:8}}>
+        {weeks.map((w,i)=><div key={i} style={{flex:1,textAlign:"center",fontSize:10,color:i===weeks.length-1?G.goldLight:C.dim,fontWeight:700}}>{`${w.getDate()}/${w.getMonth()+1}`}</div>)}
+      </div>
+    </Card>
+
+    {logs.length===0
+      ?<Card style={{marginTop:24,textAlign:"center",color:C.muted,fontSize:14,padding:28}}>Ton historique apparaîtra ici après ta première séance.</Card>
+      :groups.map(g=>(
+        <div key={g.key}>
+          <SectionTitle>{g.key}</SectionTitle>
+          {g.items.map((log,i)=><HistoryItem key={log.id||i} log={log} programs={programs}/>)}
+        </div>
+      ))}
+  </>);
+}
+
+function HistoryItem({log,programs}){
+  const [open,setOpen]=useState(false);
+  const prog=programs.find(p=>String(p.id)===String(log.programId));
+  const sens=(log.exercises||[]).map(e=>e.sensation).filter(Boolean);
+  return(
+    <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:20,marginBottom:10,overflow:"hidden"}}>
+      <button onClick={()=>setOpen(!open)} aria-expanded={open} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:14,background:"none",border:"none",color:G.white,textAlign:"left",cursor:"pointer"}}>
+        <DateBadge iso={log.date}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:15,...ellipsis}}>{log.dayLabel||prog?.name||"Séance"}</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:3,...ellipsis}}>
+            {[prog?.name,log.duration&&fmtDuration(log.duration),!log.completed&&"Manquée"].filter(Boolean).join(" · ")||fmtDate(log.date)}
+          </div>
+        </div>
+        {sens.length>0&&<div style={{fontSize:14,letterSpacing:-2,flexShrink:0}}>{sens.slice(0,3).join("")}</div>}
+        <Icon name="down" size={16} color={C.muted} style={{transform:open?"rotate(180deg)":"none",transition:"transform .2s"}}/>
+      </button>
+      {open&&(
+        <div style={{padding:"0 14px 14px",animation:"fadeIn .2s ease"}}>
+          {log.notes&&<div style={{fontSize:13,color:"#ccc",fontStyle:"italic",margin:"0 0 12px",padding:"10px 12px",background:C.soft,borderRadius:12}}>« {log.notes} »</div>}
+          {(log.exercises||[]).map((ex,i)=>(
+            <div key={i} style={{padding:"10px 0",borderTop:`1px solid ${C.line}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                <div style={{fontWeight:700,fontSize:14,color:G.goldLight}}>{ex.name}</div>
+                {ex.sensation&&<span style={{fontSize:15}}>{ex.sensation}</span>}
               </div>
-            );
-          })()}
-          {/* Plan alimentaire */}
-          {(()=>{
-            const meals=(live.mealPlan?.meals||[]).filter(m=>(m.items||[]).length>0);
-            if(meals.length===0)return(
-              <div style={{textAlign:"center",padding:"24px 20px",color:G.grey,fontSize:13,background:G.bg2,borderRadius:12,border:`1px solid ${G.border}`}}>
-                <div style={{fontSize:24,marginBottom:8}}>🍽</div>
-                Ton coach n'a pas encore assigné de plan alimentaire.
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {(ex.sets||[]).map((s,j)=><Chip key={j}>{stripKg(s.load)||"—"}{s.load&&/kg$/i.test(String(s.load))?" kg":""} × {s.reps}</Chip>)}
               </div>
-            );
-            return(
-              <div>
-                <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>Plan alimentaire</div>
-                {meals.map(meal=>{
-                  const slot=MEAL_SLOTS.find(s=>s.id===meal.id);
-                  const mMacros=calcMacros(meal.items,foods);
-                  return(
-                    <div key={meal.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`,borderLeft:`3px solid ${G.gold}55`}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontSize:20}}>{slot?.icon||"🍽"}</span>
-                          <div style={{fontSize:11,color:G.goldLight,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{meal.label}</div>
-                        </div>
-                        <div style={{fontSize:11,color:G.grey}}>{rnd(mMacros.kcal)} kcal</div>
-                      </div>
-                      {(meal.items||[]).map((item,idx)=>{
-                        const food=foods.find(f=>f.id===item.foodId);
-                        if(!food)return null;
-                        const im=calcMacros([item],foods);
-                        return(
-                          <div key={idx} style={{paddingBottom:8,marginBottom:8,borderBottom:idx<meal.items.length-1?`1px solid ${G.border}`:"none"}}>
-                            <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:3}}>
-                              <div style={{fontSize:13,color:G.white,fontWeight:600}}>{food.name}</div>
-                              <div style={{fontSize:12,color:G.gold,fontWeight:700,flexShrink:0}}>{item.qty} {food.unit==="g"?"g":"port."}</div>
-                            </div>
-                            <div style={{fontSize:11,color:G.grey}}>{rnd(im.kcal)} kcal · P {rnd1(im.protein)}g · G {rnd1(im.carbs)}g · L {rnd1(im.fat)}g</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
+            </div>
+          ))}
         </div>
       )}
-
-      {tab==="historique"&&(
-        <div className="fu">
-          <PageH title="HISTORIQUE" subtitle={completed.length?`${completed.length} séance${completed.length>1?"s":""} enregistrée${completed.length>1?"s":""}`:undefined}/>
-          {resumeBanner}
-          {logs.length===0&&<Empty text="Aucune séance enregistrée"/>}
-          {logs.map((log,i)=><LogCard key={log.id||i} log={log} programs={programs}/>)}
-        </div>
-      )}
-    </ClientShell>
+    </div>
   );
 }
 
@@ -2271,7 +1686,11 @@ function useCountdown(onEnd){
   },[endAt]);
   const start=useCallback(secs=>{setTotal(secs);setTimeLeft(secs);setEndAt(Date.now()+secs*1000);},[]);
   const stop=useCallback(()=>{setEndAt(null);setTimeLeft(0);},[]);
-  const add=useCallback(secs=>{setEndAt(e=>e?e+secs*1000:e);setTotal(t=>t+secs);},[]);
+  // Ajoute (ou retire, si négatif) du temps au chrono en cours
+  const add=useCallback(secs=>{
+    setEndAt(e=>e?Math.max(Date.now()+1000,e+secs*1000):e);
+    setTotal(t=>Math.max(1,t+secs));
+  },[]);
   return{timeLeft,running:!!endAt,total,start,stop,add};
 }
 
@@ -2317,469 +1736,3 @@ function parseRest(rest){
 }
 // Détecte si la valeur de reps est un temps (ex: "30s", "45s", "2min")
 const isTimed=r=>/^\d+(\.\d+)?(s|sec|min)$/.test(String(r??"").toLowerCase().replace(/\s/g,""));
-
-// ─── BARRE DE RÉCUPÉRATION (au-dessus du menu) ────────────────────────────────
-function RestBar({timeLeft,total,label,onStop,onAdd,onOpen}){
-  const urgent=timeLeft<=3;
-  const c=urgent?G.red:G.goldLight;
-  return(
-    <div role="timer" aria-live="off" style={{flexShrink:0,background:G.bg2,borderTop:`1px solid ${c}66`,position:"relative"}}>
-      <div style={{position:"absolute",top:0,left:0,height:2,width:`${total?timeLeft/total*100:0}%`,background:c,transition:"width .25s linear"}}/>
-      <div style={{maxWidth:640,margin:"0 auto",display:"flex",alignItems:"center",gap:10,padding:"10px 16px"}}>
-        <div onClick={onOpen||undefined} style={{flex:1,minWidth:0,cursor:onOpen?"pointer":"default"}}>
-          <div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-            Récup{label?` · ${label}`:""}{onOpen?" · revenir ›":""}
-          </div>
-          <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,color:c,lineHeight:1.05,fontVariantNumeric:"tabular-nums"}}>{fmtClock(timeLeft)}</div>
-        </div>
-        <button onClick={onAdd} style={{background:G.bg3,color:G.goldLight,border:`1px solid ${G.gold}44`,borderRadius:8,padding:"10px 12px",fontWeight:700,fontSize:13,cursor:"pointer"}}>+15s</button>
-        <button onClick={onStop} aria-label="Arrêter la récupération" style={{background:G.red+"22",color:G.red,border:`1px solid ${G.red}44`,borderRadius:8,padding:"10px 12px",fontWeight:700,fontSize:13,cursor:"pointer"}}>✕ Stop</button>
-      </div>
-    </div>
-  );
-}
-
-// ─── EXERCISE SESSION CARD ────────────────────────────────────────────────────
-const iconBtn=active=>({background:active?G.goldLight+"22":G.bg3,color:active?G.goldLight:G.grey,border:`1px solid ${active?G.gold+"66":G.border}`,borderRadius:8,minWidth:38,height:38,padding:"0 10px",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"});
-const setBtn={width:"100%",borderRadius:7,padding:"10px 0",fontSize:13,fontWeight:700,cursor:"pointer"};
-
-function ExerciseSessionCard({ex,ei,onSetChange,onExChange,sessionLogs,restActive,restLeft,onStartRest,onStopRest}){
-  const [vidOpen,setVidOpen]=useState(false);
-  const [histOpen,setHistOpen]=useState(false);
-  const unit=ex.unit||"kg";
-  const restSecs=parseRest(ex.rest);
-  const startRest=()=>{if(restSecs>0)onStartRest(ei,restSecs,ex.name);};
-
-  // Chrono de travail (exercices en temps) : à la fin, la série est validée et la récup démarre
-  const [activeWorkSet,setActiveWorkSet]=useState(null);
-  const activeWorkSetRef=useRef(null);
-  useEffect(()=>{activeWorkSetRef.current=activeWorkSet;},[activeWorkSet]);
-  const work=useCountdown(()=>{
-    const aws=activeWorkSetRef.current;
-    if(aws===null) return;
-    onSetChange(ei,aws,{done:true});
-    setActiveWorkSet(null);
-    startRest();
-  });
-
-  const allSetsDone=ex.sets.every(s=>s.done);
-
-  const history=[];
-  for(const log of (sessionLogs||[])){
-    if(history.length>=4) break;
-    const found=(log.exercises||[]).find(e=>e.exId===ex.exId);
-    if(found) history.push({date:log.date,dayLabel:log.dayLabel,sets:found.sets||[]});
-  }
-  const last=history[0];
-
-  return(
-    <div style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:14,border:`1.5px solid ${allSetsDone?G.green+"55":G.border}`,transition:"border .3s"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontWeight:700,fontSize:15}}><span style={{color:G.gold,fontFamily:G.fontD,marginRight:6}}>{ei+1}.</span>{ex.name}</div>
-          {ex.target&&<div style={{fontSize:12,color:G.goldLight,marginTop:4,fontWeight:600}}>🎯 {ex.target}</div>}
-          {ex.coachNote&&<div style={{fontSize:12,color:G.white+"cc",marginTop:4,lineHeight:1.4}}>📝 {ex.coachNote}</div>}
-          {ex.notes&&<div style={{fontSize:11,color:G.gold+"aa",marginTop:4,lineHeight:1.4}}>💡 {ex.notes}</div>}
-          {ex.muscle&&<div style={{marginTop:6}}><Tag text={ex.muscle} color={G.grey}/></div>}
-        </div>
-        <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:8}}>
-          {allSetsDone&&<div style={{...iconBtn(false),color:G.green,borderColor:G.green+"55",background:G.green+"18",cursor:"default"}}>✓</div>}
-          {history.length>0&&<button aria-label="Historique de l'exercice" onClick={()=>setHistOpen(!histOpen)} style={iconBtn(histOpen)}>📊</button>}
-          {ex.videoUrl&&<button aria-label="Vidéo de démonstration" onClick={()=>setVidOpen(!vidOpen)} style={iconBtn(vidOpen)}>▶</button>}
-        </div>
-      </div>
-
-      {/* Dernière performance, visible d'un coup d'œil */}
-      {last&&!histOpen&&(
-        <div style={{fontSize:11,color:G.grey,marginBottom:10,lineHeight:1.5}}>
-          <span style={{color:G.gold}}>Dernière fois</span> ({fmtDate(last.date)}) : {last.sets.map(s=>`${s.load||"—"}×${s.reps}`).join(" · ")}
-        </div>
-      )}
-
-      {histOpen&&history.length>0&&(
-        <div style={{background:G.bg3,borderRadius:10,padding:12,marginBottom:12,border:`1px solid ${G.border}`}}>
-          <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Historique récent</div>
-          {history.map((h,hi)=>(
-            <div key={hi} style={{marginBottom:hi<history.length-1?10:0}}>
-              <div style={{fontSize:11,color:G.gold,marginBottom:5}}>{fmtDate(h.date)}{h.dayLabel?` — ${h.dayLabel}`:""}</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {h.sets.map((s,si)=>(
-                  <div key={si} style={{background:G.bg4,borderRadius:6,padding:"5px 10px",border:`1px solid ${G.border}`,textAlign:"center",minWidth:60}}>
-                    <div style={{fontSize:10,color:G.grey,marginBottom:2}}>S{si+1}</div>
-                    <div style={{fontSize:13,fontWeight:800,color:s.load?G.goldLight:G.greyDim}}>{s.load||"—"}</div>
-                    <div style={{fontSize:10,color:G.grey}}>{s.reps}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {vidOpen&&ex.videoUrl&&(
-        <div style={{position:"relative",paddingBottom:"56.25%",borderRadius:8,overflow:"hidden",background:"#000",marginBottom:12}}>
-          <iframe title={`Vidéo — ${ex.name}`} loading="lazy" style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={toEmbed(ex.videoUrl)} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
-        </div>
-      )}
-
-      {/* Chrono récupération + unité de charge */}
-      <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"stretch"}}>
-        {restSecs>0&&(
-          <div style={{flex:1,background:restActive&&restLeft<=3?G.red+"22":restActive?G.gold+"15":G.bg3,border:`1px solid ${restActive&&restLeft<=3?G.red+"88":restActive?G.gold+"55":G.border}`,borderRadius:10,padding:"8px 8px 8px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,transition:"all .3s"}}>
-            <div>
-              <div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:1}}>Récup</div>
-              <div style={{fontFamily:G.fontD,fontSize:restActive?24:16,fontWeight:800,color:restActive?(restLeft<=3?G.red:G.goldLight):G.grey,transition:"all .3s",letterSpacing:-.5,lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{restActive?fmtClock(restLeft):fmtClock(restSecs)}</div>
-            </div>
-            {restActive
-              ?<button onClick={onStopRest} style={{background:G.red+"22",color:G.red,border:`1px solid ${G.red}44`,borderRadius:8,padding:"10px 12px",fontWeight:700,fontSize:13,cursor:"pointer"}}>✕ Stop</button>
-              :<button onClick={startRest} style={{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none",borderRadius:8,padding:"10px 14px",fontWeight:700,fontSize:13,cursor:"pointer"}}>▶ Go</button>
-            }
-          </div>
-        )}
-        <label style={{flex:restSecs>0?"0 0 auto":1,background:G.bg3,border:`1px solid ${G.border}`,borderRadius:10,padding:"8px 10px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-          <span style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:2}}>Unité</span>
-          <select value={unit} onChange={e=>onExChange(ei,{unit:e.target.value})}
-            style={{background:"transparent",border:"none",color:G.goldLight,fontSize:14,fontWeight:700,outline:"none",cursor:"pointer",padding:0}}>
-            {LOAD_UNITS.map(u=><option key={u} value={u} style={{background:G.bg2}}>{u}</option>)}
-          </select>
-        </label>
-      </div>
-
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
-        {ex.sets.map((st,si)=>{
-          const timed=isTimed(st.reps);
-          const workSecs=timed?parseRest(st.reps):0;
-          const isActiveWork=work.running&&activeWorkSet===si;
-          const prevLoad=last?.sets?.[si]?.load;
-          return(
-            <div key={si} style={{background:st.done?G.green+"18":G.bg3,borderRadius:9,padding:"10px 8px 8px",border:`1.5px solid ${st.done?G.green+"55":G.border}`,transition:"all .2s"}}>
-              {/* Titre série */}
-              <div style={{fontSize:10,color:st.done?G.green:G.grey,fontWeight:700,letterSpacing:.8,marginBottom:6}}>
-                SÉRIE {si+1}
-                {st.actualReps&&!timed
-                  ?<span> · <span style={{color:G.red,textDecoration:"line-through"}}>{st.reps}</span> <span style={{color:G.goldLight}}>{st.actualReps}</span></span>
-                  :<span> · {st.reps}</span>
-                }
-              </div>
-
-              {/* Chrono de travail (exercices en temps) */}
-              {timed&&!st.done&&(
-                <div style={{textAlign:"center",padding:"6px 0 8px",borderBottom:`1px solid ${G.border}`,marginBottom:8}}>
-                  <div style={{fontFamily:G.fontD,fontWeight:800,lineHeight:1,transition:"all .3s",fontVariantNumeric:"tabular-nums",
-                    fontSize:isActiveWork?(work.timeLeft<=3?44:28):20,
-                    color:isActiveWork?(work.timeLeft<=3?G.red:G.goldLight):G.grey}}>
-                    {isActiveWork?(work.timeLeft<=3?work.timeLeft:fmtClock(work.timeLeft)):st.reps}
-                  </div>
-                </div>
-              )}
-
-              {/* Charge (visible sauf si timed et chrono en cours) */}
-              {!(timed&&isActiveWork)&&(
-                <div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:8,borderBottom:`1px solid ${G.border}`}}>
-                  <input value={st.load} onChange={e=>onSetChange(ei,si,{load:e.target.value})} placeholder={prevLoad?String(prevLoad).replace(/\s*kg$/i,""):"—"}
-                    inputMode={unit==="élastique"?"text":"decimal"} aria-label={`Charge série ${si+1}`}
-                    style={{flex:1,background:"transparent",border:"none",color:st.done?G.green:G.white,fontSize:16,fontWeight:700,outline:"none",padding:"4px 0",textAlign:"center",minWidth:0}}/>
-                  <span style={{fontSize:11,color:G.grey,flexShrink:0}}>{unit}</span>
-                </div>
-              )}
-
-              {/* Reps réalisées (exercices non-chronométrés uniquement) */}
-              {!timed&&!st.done&&(
-                <input
-                  type="number" inputMode="numeric" min="0"
-                  value={st.actualReps||""}
-                  onChange={e=>onSetChange(ei,si,{actualReps:e.target.value})}
-                  placeholder={`reps : ${st.reps}`} aria-label={`Répétitions réalisées série ${si+1}`}
-                  style={{width:"100%",background:"transparent",border:"none",borderBottom:`1px solid ${G.border}`,color:st.actualReps?G.goldLight:G.grey,fontSize:12,fontWeight:600,outline:"none",padding:"4px 0",textAlign:"center",marginBottom:8}}/>
-              )}
-
-              {/* Bouton action */}
-              {st.done?(
-                <button onClick={()=>onSetChange(ei,si,{done:false})}
-                  style={{...setBtn,background:"transparent",color:G.green,border:`1px solid ${G.green+"55"}`}}>
-                  ✓ Fait
-                </button>
-              ):timed?(
-                isActiveWork
-                  ?<button onClick={()=>{work.stop();setActiveWorkSet(null);}}
-                    style={{...setBtn,background:G.red+"22",color:G.red,border:`1px solid ${G.red}44`}}>
-                    ✕ Stop
-                  </button>
-                  :<button onClick={()=>{unlockAudio();setActiveWorkSet(si);work.start(workSecs);}}
-                    style={{...setBtn,background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none"}}>
-                    ▶ Lancer
-                  </button>
-              ):(
-                <button onClick={()=>{onSetChange(ei,si,{done:true});startRest();}}
-                  style={{...setBtn,background:G.goldLight+"18",color:G.goldLight,border:`1px solid ${G.gold+"44"}`}}>
-                  Valider
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div style={{marginTop:12}}>
-        <div style={{fontSize:10,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Ressenti</div>
-        <div style={{display:"flex",gap:6}}>
-          {[["😊","Facile"],["😐","Correct"],["😤","Difficile"],["💀","Épuisant"]].map(([emoji,label])=>(
-            <button key={emoji} onClick={()=>onExChange(ei,{sensation:ex.sensation===emoji?"":emoji})} aria-label={label} aria-pressed={ex.sensation===emoji}
-              style={{flex:1,padding:"6px 0 4px",background:ex.sensation===emoji?G.gold+"33":"transparent",border:`1px solid ${ex.sensation===emoji?G.gold:G.border}`,borderRadius:8,cursor:"pointer",transition:"all .2s",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-              <span style={{fontSize:18}}>{emoji}</span>
-              <span style={{fontSize:9,color:ex.sensation===emoji?G.goldLight:G.grey,fontWeight:600}}>{label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── CLIENT SHELL ─────────────────────────────────────────────────────────────
-function ClientShell({children,active,onNav,onLogout,scrollKey,restBar}){
-  const items=[{key:"home",icon:"◈",label:"Accueil"},{key:"programme",icon:"▦",label:"Programme"},{key:"nutrition",icon:"◎",label:"Nutrition"},{key:"historique",icon:"◷",label:"Historique"}];
-  const scrollRef=useRef(null);
-  // Chaque nouvel écran s'ouvre en haut de page
-  useEffect(()=>{scrollRef.current?.scrollTo(0,0);},[scrollKey]);
-  return(
-    <>
-      <div ref={scrollRef} style={{flex:1,minHeight:0,overflowY:"auto",overscrollBehavior:"contain",WebkitOverflowScrolling:"touch"}}>
-        <div style={{maxWidth:640,margin:"0 auto",padding:"16px 20px 32px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <div style={{fontFamily:G.fontD,fontSize:13,fontWeight:800,letterSpacing:.5,color:G.grey}}>WANDY<span style={{color:G.gold}}> COACH</span></div>
-            <button onClick={()=>{if(window.confirm("Se déconnecter de ton espace ?"))onLogout();}} style={{background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 12px",color:G.grey,fontSize:11,cursor:"pointer"}}>Déconnexion</button>
-          </div>
-          {children}
-        </div>
-      </div>
-      {restBar}
-      <nav className="sb" style={{flexShrink:0,width:"100%",background:G.bg2,borderTop:`1px solid ${G.border}`,zIndex:100}}>
-        <div style={{display:"flex",maxWidth:640,margin:"0 auto"}}>
-          {items.map(({key,icon,label})=>{
-            const a=active===key;
-            return<button key={key} onClick={()=>onNav(key)} aria-current={a?"page":undefined} style={{flex:1,minHeight:56,padding:"10px 0 8px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"none",border:"none",cursor:"pointer",color:a?G.goldLight:G.grey,fontSize:10,fontWeight:600,letterSpacing:.5,transition:"color .2s",borderTop:a?`2px solid ${G.goldLight}`:"2px solid transparent"}}>
-              <span style={{fontSize:18,lineHeight:1}}>{icon}</span><span>{label}</span>
-            </button>;
-          })}
-        </div>
-      </nav>
-    </>
-  );
-}
-
-
-// ─── AI COACH ─────────────────────────────────────────────────────────────────
-function AICoach({exercises,setPrograms,go}){
-  const [messages,setMessages]=useState([
-    {role:"assistant",content:"Bonjour ! Je suis ton assistant IA Coach. Je peux créer des programmes d'entraînement complets directement dans ton application.\n\nDis-moi par exemple :\n• \"Crée un programme PPL 6 jours sur 4 semaines pour un client intermédiaire\"\n• \"Génère un full body débutant 3j/sem avec progression sur 8 semaines\"\n• \"Fais un programme de force sur 6 semaines axé squat et développé couché\""}
-  ]);
-  const [input,setInput]=useState("");
-  const [loading,setLoading]=useState(false);
-  const bottomRef=useRef(null);
-
-  const scrollBottom=()=>setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}),100);
-
-  const SYSTEM=`Tu es un assistant coach sportif expert intégré dans l'application Wandy Coach.
-Tu peux créer des programmes d'entraînement complets. Quand l'utilisateur te demande de créer un programme, tu dois OBLIGATOIREMENT répondre avec un JSON valide dans un bloc \`\`\`json ... \`\`\` en plus de ton message texte.
-
-La liste des exercices disponibles dans l'app (utilise leurs IDs exacts) :
-${exercises.map(e=>`- id:${e.id} "${e.name}" (${e.muscle}, ${e.equipment})`).join("\n")}
-
-Format JSON du programme :
-{
-  "action": "create_program",
-  "program": {
-    "name": "Nom du programme",
-    "category": "Force|PPL|Full Body|CrossFit|Cardio|etc",
-    "level": "Débutant|Intermédiaire|Avancé",
-    "weeks": [
-      {
-        "label": "Semaine 1 — Description",
-        "days": [
-          {
-            "label": "Séance A",
-            "exercises": [
-              {"exId": 1, "sets": 4, "reps": "8", "rest": "90s", "targetLoad": "60kg"}
-            ]
-          }
-        ]
-      }
-    ]
-  }
-}
-
-Règles importantes :
-- Utilise uniquement les IDs d'exercices listés ci-dessus
-- Le champ "rest" accepte : "30s", "60s", "90s", "2min", "3min"
-- Le champ "targetLoad" est optionnel (laisse "" si pas de charge)
-- Crée toujours plusieurs semaines avec progression
-- Réponds en français, sois précis et professionnel
-- TOUJOURS inclure le JSON si tu crées un programme`;
-
-  const send=async()=>{
-    if(!input.trim()||loading)return;
-    const userMsg={role:"user",content:input.trim()};
-    const newMsgs=[...messages,userMsg];
-    setMessages(newMsgs);
-    setInput("");
-    setLoading(true);
-    scrollBottom();
-
-    try{
-      // Modèle et longueur de réponse sont fixés côté serveur ; l'accès est réservé au coach connecté
-      const idToken=await auth.currentUser?.getIdToken();
-      if(!idToken) throw new Error("Session expirée, reconnecte-toi");
-      // La conversation envoyée commence au premier message du coach (le message d'accueil reste local)
-      const history=newMsgs.slice(newMsgs.findIndex(m=>m.role==="user"));
-      const res=await fetch(`${API_BASE}/api/chat`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json",Authorization:`Bearer ${idToken}`},
-        body:JSON.stringify({
-          system:SYSTEM,
-          messages:history.map(m=>({role:m.role,content:m.content||"(programme créé)"}))
-        })
-      });
-      const data=await res.json().catch(()=>({}));
-      if(!res.ok) throw new Error(data.error||"Erreur serveur");
-      const text=data.text||"Désolé, une erreur s'est produite.";
-
-      // Cherche un bloc JSON dans la réponse
-      const jsonMatch=text.match(/```json\s*([\s\S]*?)```/);
-      let programCreated=null;
-      if(jsonMatch){
-        try{
-          const parsed=JSON.parse(jsonMatch[1]);
-          if(parsed.action==="create_program"&&parsed.program){
-            const newProg={...parsed.program,id:Date.now()};
-            setPrograms(p=>[...p,newProg]);
-            programCreated=newProg;
-          }
-        }catch(e){console.error("JSON parse error",e);}
-      }
-
-      // Nettoie le JSON du message affiché
-      const cleanText=text.replace(/```json[\s\S]*?```/g,"").trim();
-      setMessages(p=>[...p,{role:"assistant",content:cleanText,programCreated}]);
-    }catch(e){
-      setMessages(p=>[...p,{role:"assistant",content:`Erreur : ${e.message}`}]);
-    }
-    setLoading(false);
-    scrollBottom();
-  };
-
-  return(
-    <div style={{display:"flex",flexDirection:"column",height:"100%",padding:"20px 0 0"}}>
-      {/* Header */}
-      <div style={{padding:"0 20px 16px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:40,height:40,borderRadius:12,background:`linear-gradient(135deg,${G.goldLight}22,${G.gold}44)`,border:`1px solid ${G.gold}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>✦</div>
-          <div>
-            <div style={{fontFamily:G.fontD,fontSize:18,fontWeight:800,letterSpacing:-.5}}>IA Coach</div>
-            <div style={{fontSize:11,color:G.grey}}>Création automatique de programmes</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:12}}>
-        {messages.map((m,i)=>(
-          <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.role==="user"?"flex-end":"flex-start"}}>
-            <div style={{maxWidth:"85%",background:m.role==="user"?`linear-gradient(135deg,${G.goldLight},${G.gold})`:G.bg3,color:m.role==="user"?G.bg:G.white,borderRadius:m.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px",padding:"12px 14px",fontSize:13,lineHeight:1.55,border:m.role==="user"?"none":`1px solid ${G.border}`,whiteSpace:"pre-wrap"}}>
-              {m.content}
-            </div>
-            {m.programCreated&&(
-              <div style={{marginTop:8,background:G.green+"15",border:`1px solid ${G.green}44`,borderRadius:12,padding:"10px 14px",maxWidth:"85%",display:"flex",alignItems:"center",gap:10}}>
-                <span style={{fontSize:18}}>✓</span>
-                <div>
-                  <div style={{fontSize:12,fontWeight:700,color:G.green}}>Programme créé !</div>
-                  <div style={{fontSize:11,color:G.grey,marginTop:2}}>"{m.programCreated.name}" ajouté à ta bibliothèque</div>
-                </div>
-                <button onClick={()=>go("programs")} style={{marginLeft:"auto",background:G.green+"22",color:G.green,border:`1px solid ${G.green}44`,borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>Voir →</button>
-              </div>
-            )}
-          </div>
-        ))}
-        {loading&&(
-          <div style={{display:"flex",alignItems:"flex-start"}}>
-            <div style={{background:G.bg3,border:`1px solid ${G.border}`,borderRadius:"16px 16px 16px 4px",padding:"12px 16px",display:"flex",gap:6,alignItems:"center"}}>
-              {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:G.gold,animation:"pulse 1.2s ease infinite",animationDelay:`${i*0.2}s`}}/>)}
-            </div>
-          </div>
-        )}
-        <div ref={bottomRef}/>
-      </div>
-
-      {/* Input */}
-      <div style={{padding:"12px 20px 16px",borderTop:`1px solid ${G.border}`,flexShrink:0}}>
-        <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
-          <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} placeholder="Décris le programme que tu veux créer..." rows={2}
-            style={{flex:1,background:G.bg3,border:`1px solid ${G.border}`,borderRadius:12,padding:"10px 14px",color:G.white,fontSize:13,outline:"none",resize:"none",lineHeight:1.5,fontFamily:G.font}}/>
-          <button onClick={send} disabled={!input.trim()||loading}
-            style={{background:input.trim()&&!loading?`linear-gradient(135deg,${G.goldLight},${G.gold})`:`${G.gold}33`,color:input.trim()&&!loading?G.bg:G.greyDim,border:"none",borderRadius:12,width:44,height:44,fontSize:20,cursor:input.trim()&&!loading?"pointer":"default",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
-            ↑
-          </button>
-        </div>
-        <div style={{fontSize:10,color:G.greyDim,marginTop:6,textAlign:"center"}}>Entrée pour envoyer · Maj+Entrée pour un retour à la ligne</div>
-      </div>
-
-      <style>{`@keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}`}</style>
-    </div>
-  );
-}
-
-const MiniLogCard=({log,programs})=>{
-  const prog=programs.find(p=>p.id===log.programId);
-  return(
-    <div style={{background:G.bg2,borderRadius:10,padding:12,marginBottom:8,border:`1px solid ${G.border}`,borderLeft:`3px solid ${log.completed?G.green:G.red}`}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div>
-          <div style={{fontWeight:700,fontSize:13}}>{prog?.name||"Séance"}{log.dayLabel?` — ${log.dayLabel}`:""}</div>
-          <div style={{fontSize:11,color:G.grey,marginTop:2}}>{fmtDate(log.date)}</div>
-        </div>
-        <Tag text={log.completed?"✓":"✗"} color={log.completed?G.green:G.red}/>
-      </div>
-    </div>
-  );
-};
-
-const LogCard=({log,programs})=>{
-  const [open,setOpen]=useState(false);
-  const prog=programs.find(p=>p.id===log.programId);
-  return(
-    <div style={{background:G.bg2,borderRadius:10,marginBottom:10,border:`1px solid ${G.border}`,borderLeft:`3px solid ${log.completed?G.green:G.red}`,overflow:"hidden"}}>
-      <div onClick={()=>setOpen(!open)} style={{padding:14,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-        <div style={{flex:1}}>
-          <div style={{fontWeight:700,fontSize:14}}>{prog?.name||"Séance"}{log.dayLabel?` — ${log.dayLabel}`:""}</div>
-          <div style={{fontSize:12,color:G.grey,marginTop:2}}>{fmtDate(log.date)}{log.weekLabel?` · ${log.weekLabel}`:""}{log.duration?` · ${fmtDuration(log.duration)}`:""}</div>
-          {log.notes&&<div style={{fontSize:12,color:"#aaa",marginTop:4,fontStyle:"italic"}}>"{log.notes}"</div>}
-        </div>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0,marginLeft:10}}>
-          <Tag text={log.completed?"✓ Fait":"✗ Manqué"} color={log.completed?G.green:G.red}/>
-          <span style={{color:G.greyDim,fontSize:14}}>{open?"▲":"▼"}</span>
-        </div>
-      </div>
-      {open&&log.exercises&&log.exercises.length>0&&(
-        <div style={{padding:"0 14px 14px"}}>
-          <div style={{height:1,background:G.border,marginBottom:12}}/>
-          {log.exercises.map((ex,i)=>(
-            <div key={i} style={{marginBottom:12}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                <div style={{fontWeight:600,fontSize:13,color:G.goldLight}}>{ex.name}</div>
-                {ex.sensation&&<span style={{fontSize:16}} title="Ressenti">{ex.sensation}</span>}
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(88px,1fr))",gap:6}}>
-                {ex.sets.map((s,j)=>(
-                  <div key={j} style={{background:G.bg3,borderRadius:7,padding:"8px 10px",border:`1px solid ${G.border}`,textAlign:"center"}}>
-                    <div style={{fontSize:10,color:G.grey,marginBottom:4,letterSpacing:.5}}>Série {j+1}</div>
-                    <div style={{fontSize:15,fontWeight:800,color:s.load?G.goldLight:G.greyDim}}>{s.load||"—"}</div>
-                    <div style={{fontSize:11,color:G.grey,marginTop:2}}>{s.reps}{isTimed(s.reps)?"":" reps"}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};

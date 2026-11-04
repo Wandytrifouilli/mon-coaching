@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:emulators": "firebase emulators:exec --only auth,firestore --project demo-wandy \"node --test --test-concurrency=1 tests/*.test.mjs\"",
-    "dev:emulators": "vite --mode emulators",
+    "dev:emulators": "vite --mode emulators --host 127.0.0.1",
     "emulators": "firebase emulators:start --only auth,firestore --project demo-wandy",
     "seed:emulators": "node scripts/seed-emulators.mjs"
   },

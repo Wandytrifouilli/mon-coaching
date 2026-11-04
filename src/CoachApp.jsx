@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginCoach } from "./firebase.js";
+import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from "react";
+import { createPortal } from "react-dom";
+import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginCoach, API_BASE } from "./firebase.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
@@ -12,15 +13,28 @@ const G = {
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@700;800&display=swap');
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{background:${G.bg};color:${G.white};font-family:${G.font};}
-  input,textarea,select{font-family:${G.font};}
-  ::-webkit-scrollbar{width:5px;}
+  html,body{background:${G.bg};color:${G.white};font-family:${G.font};-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;}
+  input,textarea,select,button{font-family:${G.font};}
+  input::placeholder,textarea::placeholder{color:#5c5c5c;}
+  input[type=search]::-webkit-search-cancel-button{display:none;}
+  select option{background:#151515;color:${G.white};}
+  ::-webkit-scrollbar{width:8px;height:8px;}
   ::-webkit-scrollbar-track{background:transparent;}
-  ::-webkit-scrollbar-thumb{background:${G.border};border-radius:3px;}
-  ::-webkit-scrollbar-thumb:hover{background:${G.greyDim};}
+  ::-webkit-scrollbar-thumb{background:#262626;border-radius:8px;border:2px solid ${G.bg};}
+  .noscroll{scrollbar-width:none;}
+  .noscroll::-webkit-scrollbar{display:none;}
+  .hov{transition:background-color .15s,border-color .15s;}
+  .hov:hover{background-color:#ffffff0a!important;border-color:#ffffff22!important;}
+  .inp:focus{border-color:${G.gold}!important;box-shadow:0 0 0 3px ${G.gold}1f;}
+  button:focus-visible,a:focus-visible{outline:2px solid ${G.gold};outline-offset:2px;}
   @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-  .fu{animation:fadeUp .2s ease both;}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes sheetUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes popIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
   @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important;}}
+  .fu{animation:fadeUp .25s ease both;}
 `;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -1874,83 +1888,370 @@ function useFirestoreCollection(collectionName, seed) {
     return ()=>{ unsub(); clearTimeout(timer); };
   },[collectionName]); // eslint-disable-line
 
-  const setData=(updater)=>{
+  const setData=useCallback(updater=>{
     setDataLocal(prev=>{
       const next=typeof updater==="function"?updater(prev):updater;
       const prevMap=new Map(prev.map(x=>[String(x.id),x]));
       const nextIds=new Set(next.map(x=>String(x.id)));
-      next.forEach(item=>{
-        const p=prevMap.get(String(item.id));
-        if(!p||JSON.stringify(p)!==JSON.stringify(item))
-          setDoc(doc(db,collectionName,String(item.id)),item).catch(console.error);
-      });
-      prev.forEach(item=>{
-        if(!nextIds.has(String(item.id)))
-          deleteDoc(doc(db,collectionName,String(item.id))).catch(console.error);
-      });
+      // Écritures Firestore hors de la phase de rendu (un updater peut être rejoué par React)
+      const toWrite=next.filter(item=>{const p=prevMap.get(String(item.id));return !p||JSON.stringify(p)!==JSON.stringify(item);});
+      const toDelete=prev.filter(item=>!nextIds.has(String(item.id)));
+      setTimeout(()=>{
+        toWrite.forEach(item=>setDoc(doc(db,collectionName,String(item.id)),item).catch(console.error));
+        toDelete.forEach(item=>deleteDoc(doc(db,collectionName,String(item.id))).catch(console.error));
+      },0);
       return next;
     });
-  };
+  },[collectionName]);
   return [data, setData, ready];
 }
 
-// ─── UI PRIMITIVES ────────────────────────────────────────────────────────────
-const Tag=({text,color=G.gold})=>(
-  <span style={{background:color+"18",color,border:`1px solid ${color}33`,borderRadius:4,padding:"2px 9px",fontSize:11,fontWeight:600,letterSpacing:.8,textTransform:"uppercase"}}>{text}</span>
-);
-const Label=({children})=>(
-  <div style={{fontSize:11,color:G.grey,fontWeight:600,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>{children}</div>
-);
-const Inp=({label,...p})=>(
-  <div style={{marginBottom:14}}>
-    {label&&<Label>{label}</Label>}
-    <input style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 14px",color:G.white,fontSize:14,outline:"none"}}
-      onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border} {...p}/>
-  </div>
-);
-const Txa=({label,...p})=>(
-  <div style={{marginBottom:14}}>
-    {label&&<Label>{label}</Label>}
-    <textarea style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 14px",color:G.white,fontSize:14,outline:"none",resize:"vertical",minHeight:66}}
-      onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border} {...p}/>
-  </div>
-);
-const Btn=({children,variant="gold",style:s={},...p})=>{
-  const v={gold:{background:`linear-gradient(135deg,${G.goldLight},${G.gold})`,color:G.bg,border:"none"},outline:{background:"transparent",color:G.gold,border:`1px solid ${G.gold}55`},ghost:{background:G.bg3,color:G.grey,border:`1px solid ${G.border}`},danger:{background:"#E0525215",color:G.red,border:`1px solid ${G.red}33`}};
-  return <button style={{...v[variant],borderRadius:8,padding:"10px 20px",fontWeight:700,fontSize:14,cursor:"pointer",...s}} {...p}>{children}</button>;
+// ─── OUTILS ───────────────────────────────────────────────────────────────────
+const pad2=n=>String(n).padStart(2,"0");
+const isoOf=d=>`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+const todayISO=()=>isoOf(new Date());
+const parseISO=iso=>/^\d{4}-\d{2}-\d{2}/.test(iso||"")?new Date(Number(iso.slice(0,4)),Number(iso.slice(5,7))-1,Number(iso.slice(8,10))):null;
+const mondayISO=()=>{const x=new Date();x.setHours(0,0,0,0);x.setDate(x.getDate()-(x.getDay()+6)%7);return isoOf(x);};
+const daysSince=iso=>{const d=parseISO(iso);if(!d)return null;const t=new Date();t.setHours(0,0,0,0);return Math.round((t-d)/86400000);};
+const fmtDate=iso=>{
+  const d=parseISO(iso);
+  if(!d) return iso||"";
+  const opts={weekday:"short",day:"numeric",month:"short"};
+  if(d.getFullYear()!==new Date().getFullYear()) opts.year="numeric";
+  return d.toLocaleDateString("fr-FR",opts);
 };
-const BtnSm=({children,variant="gold",...p})=>{
-  const v={gold:{background:G.goldLight+"18",color:G.goldLight,border:`1px solid ${G.gold}44`},ghost:{background:G.bg3,color:G.grey,border:`1px solid ${G.border}`},danger:{background:"#E0525210",color:G.red,border:`1px solid ${G.red}22`}};
-  return <button style={{...v[variant],borderRadius:6,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}} {...p}>{children}</button>;
+const fmtRel=iso=>{
+  const n=daysSince(iso);
+  if(n==null) return iso||"";
+  if(n<=0) return "aujourd'hui";
+  if(n===1) return "hier";
+  if(n<7) return `il y a ${n} j`;
+  return fmtDate(iso);
 };
-const MacroBar=({label,value,max,color})=>(
-  <div style={{marginBottom:12}}>
-    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:5}}>
-      <span style={{color:G.grey}}>{label}</span><span style={{color:G.white,fontWeight:700}}>{value}g</span>
-    </div>
-    <div style={{background:G.bg4,borderRadius:99,height:5}}><div style={{width:`${Math.min(100,(value/max)*100)}%`,height:"100%",background:color,borderRadius:99}}/></div>
+const fmtDuration=min=>min<60?`${min} min`:`${Math.floor(min/60)}h${pad2(min%60)}`;
+const isTimed=r=>/^\d+(\.\d+)?(s|sec|min)$/.test(String(r??"").toLowerCase().replace(/\s/g,""));
+const firstName=n=>(n||"").trim().split(/\s+/)[0]||"";
+const initials=n=>(n||"?").trim().split(/\s+/).map(w=>w[0]).join("").toUpperCase().slice(0,2);
+const norm=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
+const matches=(q,...fields)=>!q||fields.some(f=>norm(f).includes(norm(q)));
+const clone=o=>JSON.parse(JSON.stringify(o));
+const PALETTE=["#E8C547","#C9A84C","#52C07A","#5285C0","#C05252","#9B59B6"];
+
+// Séances : les saisies manuelles anciennes peuvent avoir weekIdx/dayIdx vides
+const sameIdx=(a,b)=>a!==""&&a!=null&&Number(a)===b;
+const doneLogsOf=c=>(c.sessionLogs||[]).filter(l=>l.completed);
+const lastLogOf=c=>doneLogsOf(c).reduce((best,l)=>!best||String(l.date)>String(best.date)?l:best,null);
+const findDoneLog=(logs,progId,wi,di)=>logs.find(l=>l.completed&&String(l.programId)===String(progId)&&sameIdx(l.weekIdx,wi)&&sameIdx(l.dayIdx,di));
+const progProgress=(prog,logs)=>{
+  let total=0,done=0;
+  (prog.weeks||[]).forEach((w,wi)=>(w.days||[]).forEach((_,di)=>{total++;if(findDoneLog(logs,prog.id,wi,di))done++;}));
+  return {total,done};
+};
+const nextSessionOf=(prog,logs)=>{
+  for(let wi=0;wi<(prog.weeks||[]).length;wi++){
+    const days=prog.weeks[wi].days||[];
+    for(let di=0;di<days.length;di++) if(!findDoneLog(logs,prog.id,wi,di)) return {wi,di,day:days[di]};
+  }
+  return null;
+};
+const exCount=p=>(p.weeks||[]).reduce((a,w)=>a+(w.days||[]).reduce((b,d)=>b+(d.exercises||[]).length,0),0);
+const usesExercise=(p,exId)=>(p.weeks||[]).some(w=>(w.days||[]).some(d=>(d.exercises||[]).some(e=>e.exId===exId)));
+
+// Statut de suivi d'un client (accueil + liste clients)
+const ORANGE="#E0A052";
+const clientStatus=c=>{
+  if(!(c.programs||[]).length) return {key:"noprog",label:"Sans programme",color:G.red};
+  const last=lastLogOf(c);
+  if(!last) return {key:"new",label:"Pas encore commencé",color:"#9a9a9a"};
+  const n=daysSince(last.date);
+  if(n>=7) return {key:"inactive",label:`Inactif · ${n} j`,color:ORANGE};
+  return {key:"active",label:`Séance ${fmtRel(last.date)}`,color:G.green};
+};
+
+// Vidéos YouTube : tous les formats de lien sont acceptés et convertis en lecteur intégré
+const ytId=url=>String(url||"").match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/)?.[1]||null;
+const toEmbed=url=>{const id=ytId(url);return id?`https://www.youtube.com/embed/${id}?playsinline=1&rel=0`:url;};
+const normalizeVideo=url=>{const v=String(url||"").trim();const id=ytId(v);return id?`https://www.youtube.com/embed/${id}`:v;};
+const videoSearchUrl=name=>`https://www.youtube.com/results?search_query=${encodeURIComponent(`${name} exercice technique`)}`;
+
+// ─── UI ───────────────────────────────────────────────────────────────────────
+const C={
+  card:"linear-gradient(180deg,#151515 0%,#0f0f0f 100%)",
+  line:"#ffffff0f",line2:"#ffffff1a",soft:"#ffffff0a",
+  muted:"#8d8d8d",dim:"#5c5c5c",
+  goldGrad:`linear-gradient(135deg,${G.goldLight},${G.gold})`,
+};
+const ellipsis={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"};
+const eyebrow={fontSize:11,fontWeight:700,letterSpacing:1.6,textTransform:"uppercase",color:C.muted};
+
+const ICONS={
+  home:"M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z",
+  users:"M16 20v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 20v-1a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+  clipboard:"M9 3h6v4H9zM8 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2M9 12h6M9 16h4",
+  book:"M4 19.5V5a2 2 0 0 1 2-2h14v15H6.5A2.5 2.5 0 0 0 4 20.5 2.5 2.5 0 0 0 6.5 23H20v-5M8 7h8",
+  sparkle:"M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z",
+  dumbbell:"M6.5 6.5v11M17.5 6.5v11M3 9.5v5M21 9.5v5M6.5 12h11",
+  leaf:"M5 20c0-9 5.5-15 15-15 0 10-6 15-14 15M5 20l7-7",
+  play:"M7 4.5v15l12-7.5z",
+  check:"M5 12.5 10 17.5 19 7",
+  x:"M6 6l12 12M18 6 6 18",
+  plus:"M12 5v14M5 12h14",
+  search:"M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-4.3-4.3",
+  edit:"M4 20h4L19 9l-4-4L4 16zM14 6l4 4",
+  trash:"M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
+  copy:"M9 9h11v11H9zM5 15H4V4h11v1",
+  left:"m15 6-6 6 6 6",right:"m9 6 6 6-6 6",down:"m6 9 6 6 6-6",up:"m6 15 6-6 6 6",
+  logout:"M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4",
+  video:"M4 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM16 10l5-3v10l-5-3",
+  clock:"M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z",
+  calendar:"M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
+  target:"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  bolt:"M13 2 4 14h7l-1 8 9-12h-7z",
+  flame:"M12 3c1 4 5 5.5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-4 2.5-5 .3 2 1.5 3 2.5 3-1-3 0-6 0-8z",
+  alert:"M12 8v5M12 16h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",
+  refresh:"M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7",
+  send:"M5 12h14M13 6l6 6-6 6",
+  link:"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
+  chart:"M4 20V11M10 20V5M16 20v-6M2 20h20",
+  history:"M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 8v4l3 2",
+};
+const Icon=({name,size=20,color="currentColor",sw=1.9,fill="none",style})=>(
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,display:"block",...style}} aria-hidden="true"><path d={ICONS[name]}/></svg>
+);
+
+// Contexte d'interface : disposition (ordinateur / téléphone), confirmation, notification, lecteur vidéo
+const UI=createContext({wide:true,confirm:async()=>false,toast:()=>{},openVideo:()=>{}});
+const useUI=()=>useContext(UI);
+const WIDE_QUERY="(min-width: 900px)";
+function useWide(){
+  const [wide,setWide]=useState(()=>window.matchMedia?.(WIDE_QUERY).matches??true);
+  useEffect(()=>{
+    const m=window.matchMedia?.(WIDE_QUERY);
+    if(!m) return;
+    const on=e=>setWide(e.matches);
+    m.addEventListener("change",on);
+    return()=>m.removeEventListener("change",on);
+  },[]);
+  return wide;
+}
+
+const BTN={
+  gold:{background:C.goldGrad,color:G.bg,border:"1px solid transparent",boxShadow:`0 8px 24px ${G.gold}2e`},
+  ghost:{background:C.soft,color:G.white,border:`1px solid ${C.line2}`},
+  danger:{background:G.red+"14",color:G.red,border:`1px solid ${G.red}40`},
+  quiet:{background:"transparent",color:C.muted,border:"1px solid transparent"},
+};
+function Btn({variant="gold",size="md",icon,children,style,disabled,type="button",...p}){
+  const sm=size==="sm";
+  return(
+    <button type={type} disabled={disabled} style={{height:sm?34:44,padding:sm?"0 12px":"0 18px",borderRadius:sm?10:13,fontSize:sm?13:14,fontWeight:700,
+      display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7,cursor:disabled?"default":"pointer",opacity:disabled?.45:1,whiteSpace:"nowrap",
+      transition:"opacity .2s",...BTN[variant],...style}} {...p}>
+      {icon&&<Icon name={icon} size={sm?15:17}/>}{children}
+    </button>
+  );
+}
+function IconBtn({icon,label,variant="ghost",size=38,style,...p}){
+  return(
+    <button type="button" aria-label={label} title={label} style={{width:size,height:size,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",
+      cursor:"pointer",flexShrink:0,...BTN[variant],boxShadow:"none",...style}} {...p}>
+      <Icon name={icon} size={Math.round(size*.45)}/>
+    </button>
+  );
+}
+const Card=({children,style,onClick,...p})=>(
+  <div onClick={onClick} className={onClick?"hov":undefined} style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:18,padding:16,cursor:onClick?"pointer":undefined,...style}} {...p}>{children}</div>
+);
+const Chip=({children,gold,color,style})=>{
+  const c=color||(gold?G.goldLight:null);
+  return <span style={{display:"inline-flex",alignItems:"center",gap:5,height:24,padding:"0 9px",borderRadius:99,fontSize:11.5,fontWeight:700,
+    background:c?c+"1c":C.soft,color:c||"#bdbdbd",border:`1px solid ${c?c+"40":C.line}`,whiteSpace:"nowrap",...style}}>{children}</span>;
+};
+const inputStyle={width:"100%",height:44,background:"#121212",border:`1px solid ${C.line2}`,borderRadius:12,padding:"0 14px",color:G.white,fontSize:16,outline:"none",transition:"border-color .15s, box-shadow .15s"};
+const Field=({label,hint,children,style})=>(
+  <label style={{display:"block",marginBottom:14,...style}}>
+    <div style={{...eyebrow,fontSize:10.5,marginBottom:7}}>{label}</div>
+    {children}
+    {hint&&<div style={{fontSize:12,color:C.dim,marginTop:6,lineHeight:1.4}}>{hint}</div>}
+  </label>
+);
+const TextInput=({style,...p})=><input className="inp" style={{...inputStyle,...style}} {...p}/>;
+const TextArea=({style,...p})=><textarea className="inp" style={{...inputStyle,height:"auto",minHeight:84,padding:"11px 14px",lineHeight:1.5,resize:"vertical",...style}} {...p}/>;
+const Select=({children,style,...p})=>(
+  <div style={{position:"relative"}}>
+    <select className="inp" style={{...inputStyle,appearance:"none",WebkitAppearance:"none",paddingRight:36,cursor:"pointer",...style}} {...p}>{children}</select>
+    <Icon name="down" size={16} color={C.muted} style={{position:"absolute",right:12,top:"50%",marginTop:-8,pointerEvents:"none"}}/>
   </div>
 );
-const Av=({name,color=G.gold,size=40})=>(
-  <div style={{width:size,height:size,borderRadius:size*.28,background:color+"18",border:`1.5px solid ${color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:size*.38,color,flexShrink:0}}>
-    {name.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2)}
+const SearchBox=({value,onChange,placeholder="Rechercher…",style,autoFocus})=>(
+  <div style={{position:"relative",...style}}>
+    <Icon name="search" size={17} color={C.muted} style={{position:"absolute",left:13,top:"50%",marginTop:-8.5,pointerEvents:"none"}}/>
+    <input className="inp" type="search" autoFocus={autoFocus} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{...inputStyle,paddingLeft:40,paddingRight:38}}/>
+    {value&&<button type="button" aria-label="Effacer la recherche" onClick={()=>onChange("")} style={{position:"absolute",right:6,top:6,width:32,height:32,border:"none",background:"none",color:C.muted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Icon name="x" size={15}/></button>}
   </div>
 );
-const Modal=({onClose,title,children,width=520})=>(
-  <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
-    <div style={{background:G.bg2,borderRadius:16,padding:28,width,maxWidth:"90vw",border:`1px solid ${G.border}`,maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-        <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800,letterSpacing:-.5}}>{title}</div>
-        <button onClick={onClose} style={{background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,width:32,height:32,cursor:"pointer",color:G.grey,fontSize:16}}>✕</button>
+const Segmented=({options,value,onChange,style})=>(
+  <div className="noscroll" role="tablist" style={{display:"flex",gap:4,padding:4,background:"#0c0c0c",border:`1px solid ${C.line}`,borderRadius:14,overflowX:"auto",...style}}>
+    {options.map(([k,l,n])=>{
+      const a=k===value;
+      return(
+        <button key={k} type="button" role="tab" aria-selected={a} onClick={()=>onChange(k)} style={{flex:1,minWidth:"max-content",height:36,padding:"0 14px",borderRadius:10,border:"none",
+          background:a?"#1d1d1d":"transparent",color:a?G.goldLight:C.muted,fontWeight:700,fontSize:13,cursor:"pointer",boxShadow:a?"inset 0 0 0 1px #ffffff14":"none",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          {l}{n!=null&&<span style={{fontSize:11,color:a?G.gold:C.dim}}>{n}</span>}
+        </button>
+      );
+    })}
+  </div>
+);
+const FilterChips=({options,value,onChange})=>(
+  <div className="noscroll" style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:2}}>
+    {options.map(([k,l])=>{
+      const a=k===value;
+      return <button key={k} type="button" onClick={()=>onChange(k)} style={{flexShrink:0,height:32,padding:"0 13px",borderRadius:99,border:`1px solid ${a?G.gold+"77":C.line2}`,
+        background:a?G.gold+"1c":C.soft,color:a?G.goldLight:"#bbb",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>{l}</button>;
+    })}
+  </div>
+);
+const Avatar=({name,color=G.gold,size=40})=>(
+  <div style={{width:size,height:size,borderRadius:size*.32,background:color+"1f",border:`1px solid ${color}55`,color,display:"flex",alignItems:"center",justifyContent:"center",
+    fontFamily:G.fontD,fontWeight:800,fontSize:size*.4,flexShrink:0}}>{initials(name)}</div>
+);
+const ProgressBar=({value,max,color=G.goldLight})=>(
+  <div style={{height:6,borderRadius:99,background:"#ffffff10",overflow:"hidden"}}>
+    <div style={{width:`${max?Math.min(100,value/max*100):0}%`,height:"100%",borderRadius:99,background:color,transition:"width .4s ease"}}/>
+  </div>
+);
+const EmptyState=({icon="users",title,text,action})=>(
+  <div style={{textAlign:"center",padding:"56px 20px",color:C.muted}}>
+    <div style={{width:56,height:56,borderRadius:18,background:C.soft,border:`1px solid ${C.line}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",color:C.dim}}><Icon name={icon} size={24}/></div>
+    {title&&<div style={{fontWeight:700,color:G.white,fontSize:15,marginBottom:6}}>{title}</div>}
+    {text&&<div style={{fontSize:13,lineHeight:1.55,maxWidth:340,margin:"0 auto"}}>{text}</div>}
+    {action&&<div style={{marginTop:18}}>{action}</div>}
+  </div>
+);
+const SectionTitle=({children,action,style})=>(
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,margin:"26px 2px 12px",...style}}>
+    <div style={eyebrow}>{children}</div>
+    {action}
+  </div>
+);
+const BackLink=({onClick,label="Retour"})=>(
+  <button type="button" onClick={onClick} style={{display:"inline-flex",alignItems:"center",gap:4,background:"none",border:"none",color:G.goldLight,fontWeight:700,fontSize:14,cursor:"pointer",padding:"6px 0",marginBottom:10}}>
+    <Icon name="left" size={17}/>{label}
+  </button>
+);
+function PageHeader({title,sub,actions}){
+  return(
+    <div style={{display:"flex",alignItems:"flex-end",gap:12,flexWrap:"wrap",marginBottom:20}}>
+      <div style={{flex:1,minWidth:180}}>
+        <div style={{fontFamily:G.fontD,fontSize:34,fontWeight:800,letterSpacing:-1,lineHeight:1}}>{title}</div>
+        {sub&&<div style={{fontSize:13,color:C.muted,marginTop:7}}>{sub}</div>}
       </div>
-      {children}
+      {actions&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{actions}</div>}
     </div>
+  );
+}
+// Zone de contenu : marges adaptées à l'écran
+function Pad({children,max=1080}){
+  const {wide}=useUI();
+  return <div className="fu" style={{maxWidth:max,margin:"0 auto",padding:wide?"32px 36px 56px":"18px 16px 32px"}}>{children}</div>;
+}
+
+// Fenêtre : centrée sur ordinateur, feuille du bas sur téléphone.
+// Rendue dans <body> : les animations des pages (transform) fausseraient le positionnement fixe.
+function Modal({onClose,title,children,footer,width=540}){
+  const {wide}=useUI();
+  useEffect(()=>{
+    const k=e=>{if(e.key==="Escape")onClose?.();};
+    window.addEventListener("keydown",k);
+    return()=>window.removeEventListener("keydown",k);
+  },[onClose]);
+  return createPortal(
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:500,background:"#000000b3",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",
+      display:"flex",alignItems:wide?"center":"flex-end",justifyContent:"center",padding:wide?24:0,animation:"fadeIn .18s ease"}}>
+      <div role="dialog" aria-modal="true" aria-label={typeof title==="string"?title:undefined} onClick={e=>e.stopPropagation()}
+        style={{width:"100%",maxWidth:wide?width:"100%",maxHeight:wide?"88vh":"92dvh",display:"flex",flexDirection:"column",background:"#111",border:`1px solid ${C.line2}`,
+          borderRadius:wide?22:"24px 24px 0 0",boxShadow:"0 30px 80px #000c",animation:wide?"popIn .2s ease":"sheetUp .28s cubic-bezier(.2,.9,.3,1)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"18px 20px 10px",flexShrink:0}}>
+          <div style={{flex:1,minWidth:0,fontFamily:G.fontD,fontSize:24,fontWeight:800,letterSpacing:-.4,...ellipsis}}>{title}</div>
+          <IconBtn icon="x" label="Fermer" onClick={onClose} size={36}/>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:footer?"4px 20px 18px":"4px 20px calc(20px + env(safe-area-inset-bottom))"}}>{children}</div>
+        {footer&&<div style={{padding:"12px 20px calc(14px + env(safe-area-inset-bottom))",borderTop:`1px solid ${C.line}`,display:"flex",gap:10,flexShrink:0}}>{footer}</div>}
+      </div>
+    </div>,
+    document.body
+  );
+}
+function useConfirmDialog(){
+  const [st,setSt]=useState(null);
+  const ask=useCallback(o=>new Promise(resolve=>setSt({...o,resolve})),[]);
+  const close=v=>{st?.resolve(v);setSt(null);};
+  const node=st&&(
+    <Modal onClose={()=>close(false)} title={st.title} width={440}
+      footer={<>
+        <Btn variant="ghost" style={{flex:1}} onClick={()=>close(false)}>{st.cancel||"Annuler"}</Btn>
+        <Btn variant={st.danger?"danger":"gold"} style={{flex:1}} onClick={()=>close(true)}>{st.confirm||"Confirmer"}</Btn>
+      </>}>
+      {st.text&&<div style={{fontSize:14,color:C.muted,lineHeight:1.55}}>{st.text}</div>}
+    </Modal>
+  );
+  return [ask,node];
+}
+function useToast(){
+  const [msg,setMsg]=useState(null);
+  const timer=useRef(null);
+  const show=useCallback(m=>{setMsg(m);clearTimeout(timer.current);timer.current=setTimeout(()=>setMsg(null),2400);},[]);
+  const node=msg&&(
+    <div role="status" style={{position:"fixed",left:"50%",bottom:"calc(92px + env(safe-area-inset-bottom))",transform:"translateX(-50%)",zIndex:600,background:"#1b1b1b",
+      border:`1px solid ${C.line2}`,color:G.white,padding:"11px 18px",borderRadius:99,fontSize:13.5,fontWeight:600,boxShadow:"0 12px 40px #000a",animation:"fadeUp .2s ease",
+      display:"flex",alignItems:"center",gap:8,maxWidth:"calc(100vw - 32px)"}}>
+      <Icon name="check" size={16} color={G.green} sw={2.4}/>{msg}
+    </div>
+  );
+  return [show,node];
+}
+const VideoFrame=({url,title})=>(
+  <div style={{position:"relative",paddingBottom:"56.25%",borderRadius:14,overflow:"hidden",background:"#000"}}>
+    <iframe title={title} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={toEmbed(url)}
+      allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
   </div>
 );
-const Empty=({text,icon="○"})=>(
-  <div style={{textAlign:"center",padding:"80px 20px",color:G.greyDim}}>
-    <div style={{fontSize:40,marginBottom:14,opacity:.2}}>{icon}</div>
-    <div style={{fontSize:14}}>{text}</div>
+function VideoModal({ex,onClose}){
+  if(!ex) return null;
+  return(
+    <Modal onClose={onClose} title={ex.name} width={760}>
+      {ex.videoUrl?<VideoFrame url={ex.videoUrl} title={`Vidéo — ${ex.name}`}/>:(
+        <div style={{fontSize:14,color:C.muted,lineHeight:1.55}}>
+          Pas encore de vidéo pour cet exercice. Ajoute un lien dans la bibliothèque, ou <a href={videoSearchUrl(ex.name)} target="_blank" rel="noopener noreferrer" style={{color:G.goldLight}}>cherche une démo sur YouTube</a>.
+        </div>
+      )}
+      {ex.notes&&<div style={{fontSize:13,color:"#ccc",lineHeight:1.5,marginTop:14}}>💡 {ex.notes}</div>}
+    </Modal>
+  );
+}
+const VideoBtn=({ex,size=34})=>{
+  const {openVideo}=useUI();
+  const has=!!ex.videoUrl;
+  return(
+    <button type="button" aria-label={`Vidéo — ${ex.name}`} title={has?"Voir la vidéo":"Pas de vidéo"} onClick={e=>{e.stopPropagation();openVideo(ex);}}
+      style={{width:size,height:size,borderRadius:11,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",
+        color:has?G.goldLight:C.dim,background:has?G.gold+"14":"transparent",border:`1px solid ${has?G.gold+"55":C.line2}`}}>
+      <Icon name="video" size={15}/>
+    </button>
+  );
+};
+
+const Brand=()=>(
+  <div style={{display:"flex",alignItems:"center",gap:11}}>
+    <div style={{width:36,height:36,borderRadius:12,background:`radial-gradient(circle at 50% 35%,${G.gold}44,#121212 75%)`,border:`1px solid ${G.gold}55`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+      <Icon name="bolt" size={18} color={G.goldLight} fill={G.goldLight} sw={0}/>
+    </div>
+    <div>
+      <div style={{fontFamily:G.fontD,fontSize:21,fontWeight:800,letterSpacing:-.5,lineHeight:1}}>WANDY<span style={{color:G.goldLight}}> COACH</span></div>
+      <div style={{fontSize:9.5,color:C.dim,letterSpacing:2.2,textTransform:"uppercase",marginTop:4}}>Espace coach</div>
+    </div>
   </div>
 );
 
@@ -1968,1200 +2269,1414 @@ function CoachLogin({onLogin}){
     setBusy(false);
     if(r!=="ok")setErr(r);
   };
-  const field={width:"100%",background:G.bg3,border:`1.5px solid ${err?G.red:G.border}`,borderRadius:10,padding:"14px 16px",color:G.white,fontSize:15,outline:"none",marginBottom:12};
   return(
-    <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.font,color:G.white}}>
+    <div style={{minHeight:"100dvh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.font,color:G.white,padding:16}}>
       <style>{css}</style>
-      <form onSubmit={attempt} style={{width:380,padding:40,background:G.bg2,borderRadius:20,border:`1px solid ${G.border}`}} className="fu">
-        <div style={{textAlign:"center",marginBottom:36}}>
-          <div style={{width:64,height:64,borderRadius:18,background:`linear-gradient(135deg,${G.goldLight}20,${G.gold}40)`,border:`1.5px solid ${G.gold}55`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 18px",fontSize:28}}>⚡</div>
-          <div style={{fontFamily:G.fontD,fontSize:32,fontWeight:800,letterSpacing:-1}}>WANDY<span style={{color:G.goldLight}}> COACH</span></div>
-          <div style={{fontSize:11,color:G.grey,marginTop:4,letterSpacing:3,textTransform:"uppercase"}}>Espace Coach — Bureau</div>
+      <form onSubmit={attempt} className="fu" style={{width:"100%",maxWidth:400,padding:"34px 26px",background:"linear-gradient(180deg,#151515,#0e0e0e)",borderRadius:26,border:`1px solid ${C.line2}`,boxShadow:"0 30px 80px #000a"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:30}}><Brand/></div>
+        <Field label="E-mail"><TextInput type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr(null);}} autoComplete="username" autoFocus/></Field>
+        <Field label="Mot de passe"><TextInput type="password" value={password} onChange={e=>{setPassword(e.target.value);setErr(null);}} autoComplete="current-password"/></Field>
+        <div role="alert" style={{minHeight:20,color:G.red,fontSize:13,textAlign:"center",marginBottom:10}}>
+          {err&&(err==="notcoach"?"Ce compte n'a pas accès à l'espace coach":err==="network"?"Connexion impossible — vérifie ton réseau":"E-mail ou mot de passe incorrect")}
         </div>
-        <Label>E-mail</Label>
-        <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr(null);}} autoComplete="username" autoFocus style={field}/>
-        <Label>Mot de passe</Label>
-        <input type="password" value={password} onChange={e=>{setPassword(e.target.value);setErr(null);}} autoComplete="current-password" style={field}/>
-        {err&&<div style={{color:G.red,fontSize:12,textAlign:"center",marginBottom:12}}>
-          {err==="notcoach"?"Ce compte n'a pas accès à l'espace coach":err==="network"?"Connexion impossible — vérifie ton réseau":"E-mail ou mot de passe incorrect"}
-        </div>}
-        <Btn type="submit" disabled={!email.trim()||!password||busy} style={{width:"100%"}}>{busy?"Connexion…":"Accéder →"}</Btn>
+        <Btn type="submit" disabled={!email.trim()||!password||busy} style={{width:"100%",height:50}}>{busy?"Connexion…":"Accéder à mon espace"}</Btn>
       </form>
     </div>
   );
 }
 
-// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-function Sidebar({view,setView,onLogout,counts}){
-  const items=[
-    {key:"dashboard",icon:"◈",label:"Tableau de bord"},
-    {key:"clients",icon:"◉",label:"Clients",count:counts.clients},
-    {key:"programs",icon:"▦",label:"Programmes",count:counts.programs},
-    {key:"exercises",icon:"⊕",label:"Exercices",count:counts.exercises},
-    {key:"foods",icon:"◎",label:"Aliments",count:counts.foods},
-  ];
-  const isActive=v=>{
-    if(v==="clients"&&view==="program-from-client")return true;
-    return view===v;
-  };
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+const NAV=[["home","Accueil","home"],["clients","Clients","users"],["programs","Programmes","clipboard"],["library","Bibliothèque","book"],["ai","IA Coach","sparkle"]];
+function Sidebar({view,go,counts,onLogout}){
   return(
-    <div style={{width:220,flexShrink:0,background:"#0c0c0c",borderRight:`1px solid ${G.border}`,display:"flex",flexDirection:"column",height:"100vh",position:"sticky",top:0}}>
-      <div style={{padding:"24px 20px 20px",borderBottom:`1px solid ${G.border}`}}>
-        <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800,letterSpacing:-1}}>WANDY<span style={{color:G.goldLight}}> COACH</span></div>
-        <div style={{fontSize:10,color:G.grey,marginTop:3,letterSpacing:2,textTransform:"uppercase"}}>Espace Coach</div>
-      </div>
-      <nav style={{flex:1,padding:"14px 10px",display:"flex",flexDirection:"column",gap:3}}>
-        {items.map(({key,icon,label,count})=>{
-          const a=isActive(key);
+    <aside style={{width:240,flexShrink:0,height:"100dvh",position:"sticky",top:0,display:"flex",flexDirection:"column",background:"#0a0a0a",borderRight:`1px solid ${C.line}`,padding:"24px 14px 16px"}}>
+      <div style={{padding:"0 6px"}}><Brand/></div>
+      <nav style={{display:"flex",flexDirection:"column",gap:4,marginTop:30,flex:1}}>
+        {NAV.map(([k,l,ic])=>{
+          const a=view===k;
           return(
-            <button key={key} onClick={()=>setView(key)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,background:a?G.gold+"18":"transparent",border:a?`1px solid ${G.gold}33`:"1px solid transparent",color:a?G.goldLight:G.grey,cursor:"pointer",fontSize:13,fontWeight:a?700:500,textAlign:"left",transition:"all .15s",width:"100%"}}>
-              <span style={{fontSize:16}}>{icon}</span>
-              <span style={{flex:1}}>{label}</span>
-              {count!==undefined&&<span style={{background:a?G.goldLight+"22":G.bg3,color:a?G.goldLight:G.greyDim,borderRadius:99,fontSize:10,padding:"1px 7px",fontWeight:700}}>{count}</span>}
+            <button key={k} type="button" onClick={()=>go(k)} className={a?undefined:"hov"} aria-current={a?"page":undefined}
+              style={{display:"flex",alignItems:"center",gap:12,height:44,padding:"0 12px",borderRadius:12,border:"none",background:a?G.gold+"17":"transparent",
+                color:a?G.goldLight:"#a8a8a8",fontSize:14,fontWeight:a?700:600,cursor:"pointer",textAlign:"left",boxShadow:a?`inset 0 0 0 1px ${G.gold}33`:"none"}}>
+              <Icon name={ic} size={19}/><span style={{flex:1}}>{l}</span>
+              {counts[k]!=null&&<span style={{fontSize:11.5,fontWeight:700,color:a?G.gold:C.dim}}>{counts[k]}</span>}
             </button>
           );
         })}
       </nav>
-      <div style={{padding:"12px 10px",borderTop:`1px solid ${G.border}`}}>
-        <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,background:"transparent",border:"1px solid transparent",color:G.greyDim,cursor:"pointer",fontSize:12,fontWeight:500,width:"100%",textAlign:"left"}}
-          onMouseEnter={e=>{e.currentTarget.style.color=G.red;e.currentTarget.style.background="#E0525210";}}
-          onMouseLeave={e=>{e.currentTarget.style.color=G.greyDim;e.currentTarget.style.background="transparent";}}>
-          <span style={{fontSize:14}}>⎋</span> Déconnexion
-        </button>
-      </div>
-    </div>
+      <button type="button" onClick={onLogout} className="hov" style={{display:"flex",alignItems:"center",gap:12,height:42,padding:"0 12px",borderRadius:12,border:"none",background:"transparent",color:C.dim,fontSize:13,fontWeight:600,cursor:"pointer"}}>
+        <Icon name="logout" size={18}/>Déconnexion
+      </button>
+    </aside>
+  );
+}
+function BottomNav({view,go}){
+  return(
+    <nav style={{flexShrink:0,display:"flex",background:"#0b0b0bf2",backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",borderTop:`1px solid ${C.line}`,padding:"6px 4px calc(6px + env(safe-area-inset-bottom))"}}>
+      {NAV.map(([k,l,ic])=>{
+        const a=view===k;
+        return(
+          <button key={k} type="button" onClick={()=>go(k)} aria-current={a?"page":undefined} style={{flex:1,height:54,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,
+            border:"none",background:"none",color:a?G.goldLight:"#7a7a7a",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
+            <div style={{width:46,height:28,borderRadius:99,display:"flex",alignItems:"center",justifyContent:"center",background:a?G.gold+"1f":"transparent"}}><Icon name={ic} size={20}/></div>
+            {k==="library"?"Biblio":k==="programs"?"Progr.":l}
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
-// ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({clients,programs,exercises,onSelClient,onSelProgram}){
-  const totalSessions=clients.reduce((a,c)=>a+c.sessions,0);
+// ─── ACCUEIL ──────────────────────────────────────────────────────────────────
+function HomeView({data,go,onLogout}){
+  const {wide}=useUI();
+  const {clients,programs,exercises}=data;
+  const monday=mondayISO();
+  const allLogs=clients.flatMap(c=>doneLogsOf(c).map(l=>({log:l,client:c})));
+  const weekCount=allLogs.filter(x=>String(x.log.date)>=monday).length;
+  const recent=[...allLogs].sort((a,b)=>String(b.log.date).localeCompare(String(a.log.date))).slice(0,6);
+  const noVideo=exercises.filter(e=>!e.videoUrl).length;
+  const rank={noprog:0,inactive:1,new:2};
+  const followUps=clients.map(c=>({c,st:clientStatus(c)})).filter(x=>x.st.key!=="active").sort((a,b)=>rank[a.st.key]-rank[b.st.key]);
+  const today=new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+  const progName=id=>programs.find(p=>String(p.id)===String(id))?.name;
+
+  const kpis=[
+    {label:"Clients",value:clients.length,icon:"users",onClick:()=>go("clients")},
+    {label:"Séances cette semaine",value:weekCount,icon:"flame"},
+    {label:"Programmes",value:programs.length,icon:"clipboard",onClick:()=>go("programs")},
+    {label:"Exercices sans vidéo",value:noVideo,icon:"video",warn:noVideo>0,onClick:()=>go("library",{noVideo:true})},
+  ];
+
   return(
-    <div style={{padding:36,maxWidth:960,overflowY:"auto"}} className="fu">
-      <div style={{marginBottom:32}}>
-        <div style={{fontSize:12,color:G.gold,fontWeight:600,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Bienvenue</div>
-        <div style={{fontFamily:G.fontD,fontSize:36,fontWeight:800,letterSpacing:-1}}>TABLEAU DE BORD</div>
+    <Pad>
+      <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:22}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{...eyebrow,color:G.gold}}>{today}</div>
+          <div style={{fontFamily:G.fontD,fontSize:wide?40:34,fontWeight:800,letterSpacing:-1,lineHeight:1.05,marginTop:6}}>Bonjour coach</div>
+        </div>
+        {!wide&&<IconBtn icon="logout" label="Déconnexion" onClick={onLogout}/>}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:36}}>
-        {[[clients.length,"Clients actifs","◉"],[programs.length,"Programmes","▦"],[exercises.length,"Exercices","⊕"],[totalSessions,"Séances totales","◎"]].map(([v,l,ic])=>(
-          <div key={l} style={{background:G.bg2,borderRadius:14,padding:20,border:`1px solid ${G.border}`}}>
-            <div style={{fontSize:20,color:G.gold,marginBottom:10}}>{ic}</div>
-            <div style={{fontFamily:G.fontD,fontSize:40,fontWeight:800,color:G.goldLight,lineHeight:1}}>{v}</div>
-            <div style={{fontSize:11,color:G.grey,letterSpacing:1,textTransform:"uppercase",marginTop:5}}>{l}</div>
-          </div>
+
+      <div style={{display:"grid",gridTemplateColumns:wide?"repeat(4,1fr)":"1fr 1fr",gap:10}}>
+        {kpis.map(k=>(
+          <Card key={k.label} onClick={k.onClick} style={{padding:16}}>
+            <div style={{width:34,height:34,borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",background:(k.warn?ORANGE:G.gold)+"18",color:k.warn?ORANGE:G.goldLight,marginBottom:14}}><Icon name={k.icon} size={17}/></div>
+            <div style={{fontFamily:G.fontD,fontSize:34,fontWeight:800,lineHeight:1,color:k.warn?ORANGE:G.white}}>{k.value}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:6,lineHeight:1.3}}>{k.label}</div>
+          </Card>
         ))}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:28}}>
+
+      <div style={wide?{display:"flex",gap:8,marginTop:14}:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+        <Btn icon="plus" style={wide?undefined:{gridColumn:"1 / -1"}} onClick={()=>go("clients",{newClient:true})}>Nouveau client</Btn>
+        <Btn variant="ghost" icon="clipboard" onClick={()=>go("programs",{mode:"new"})}>{wide?"Nouveau programme":"Programme"}</Btn>
+        <Btn variant="ghost" icon="sparkle" onClick={()=>go("ai")}>{wide?"Créer avec l'IA":"IA Coach"}</Btn>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:wide?"1fr 1fr":"1fr",gap:wide?24:0}}>
         <div>
-          <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:14}}>Clients récents</div>
-          {clients.length===0&&<Empty text="Aucun client" icon="◉"/>}
-          {clients.slice(0,5).map(c=>(
-            <div key={c.id} onClick={()=>onSelClient(c)} style={{background:G.bg2,borderRadius:12,padding:"12px 16px",marginBottom:8,border:`1px solid ${G.border}`,borderLeft:`3px solid ${c.color}`,cursor:"pointer",display:"flex",alignItems:"center",gap:12,transition:"background .15s"}}
-              onMouseEnter={e=>e.currentTarget.style.background=G.bg3} onMouseLeave={e=>e.currentTarget.style.background=G.bg2}>
-              <Av name={c.name} color={c.color} size={36}/>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:700,fontSize:13}}>{c.name}</div>
-                <div style={{fontSize:11,color:G.grey,marginTop:2}}>{c.goal} · {c.sessions} séances</div>
+          <SectionTitle>À suivre</SectionTitle>
+          {followUps.length===0?(
+            <Card style={{color:C.muted,fontSize:14,display:"flex",alignItems:"center",gap:10}}><Icon name="check" size={18} color={G.green}/>Tous tes clients sont actifs cette semaine.</Card>
+          ):followUps.slice(0,6).map(({c,st})=>(
+            <Card key={c.id} onClick={()=>go("clients",{clientId:c.id})} style={{display:"flex",alignItems:"center",gap:12,padding:12,marginBottom:8}}>
+              <Avatar name={c.name} color={c.color} size={38}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:14,...ellipsis}}>{c.name}</div>
+                <div style={{fontSize:12,color:st.color,marginTop:2}}>{st.label}</div>
               </div>
-              <div style={{color:G.greyDim,fontSize:16}}>›</div>
-            </div>
+              <Icon name="right" size={17} color={C.dim}/>
+            </Card>
           ))}
         </div>
         <div>
-          <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:14}}>Programmes récents</div>
-          {programs.length===0&&<Empty text="Aucun programme" icon="▦"/>}
-          {programs.slice(0,5).map(p=>(
-            <div key={p.id} onClick={()=>onSelProgram(p)} style={{background:G.bg2,borderRadius:12,padding:"12px 16px",marginBottom:8,border:`1px solid ${G.border}`,cursor:"pointer",transition:"background .15s"}}
-              onMouseEnter={e=>e.currentTarget.style.background=G.bg3} onMouseLeave={e=>e.currentTarget.style.background=G.bg2}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div>
-                  <div style={{fontWeight:700,fontSize:13,marginBottom:5}}>{p.name}</div>
-                  <div style={{display:"flex",gap:5}}>{[p.level,`${p.weeks.length} sem.`].filter(Boolean).map(t=><Tag key={t} text={t} color={G.grey}/>)}</div>
-                </div>
-                <div style={{color:G.greyDim,fontSize:16}}>›</div>
+          <SectionTitle>Activité récente</SectionTitle>
+          {recent.length===0?(
+            <Card style={{color:C.muted,fontSize:14}}>Les séances terminées par tes clients apparaîtront ici.</Card>
+          ):recent.map(({log,client},i)=>(
+            <Card key={`${client.id}-${log.id||i}`} onClick={()=>go("clients",{clientId:client.id,tab:"history"})} style={{display:"flex",alignItems:"center",gap:12,padding:12,marginBottom:8}}>
+              <div style={{width:38,height:38,borderRadius:12,background:G.green+"18",color:G.green,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name="check" size={18} sw={2.4}/></div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:14,...ellipsis}}>{firstName(client.name)} · {log.dayLabel||"Séance"}</div>
+                <div style={{fontSize:12,color:C.muted,marginTop:2,...ellipsis}}>{fmtRel(log.date)}{progName(log.programId)?` · ${progName(log.programId)}`:""}{log.duration?` · ${fmtDuration(log.duration)}`:""}</div>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       </div>
-    </div>
+    </Pad>
   );
 }
 
-// ─── MEAL PLAN EDITOR ─────────────────────────────────────────────────────────
-function MealPlanEditor({mealPlan,onSave,onLiveChange,foods=FOODS_DB}){
-  const initForm=()=>MEAL_SLOTS.map(s=>{
-    const ex=(mealPlan?.meals||[]).find(m=>m.id===s.id);
-    return{id:s.id,label:s.label,icon:s.icon,items:ex?.items||[],note:ex?.note||""};
+// ─── CLIENTS ──────────────────────────────────────────────────────────────────
+function ClientsView({data,nav,go}){
+  const {wide}=useUI();
+  const {clients,programs}=data;
+  const [showNew,setShowNew]=useState(!!nav.newClient);
+  const sel=clients.find(c=>String(c.id)===String(nav.clientId));
+  const program=sel&&nav.programId!=null?programs.find(p=>String(p.id)===String(nav.programId)):null;
+  const open=c=>go("clients",{clientId:c.id});
+
+  const list=<ClientList clients={clients} selId={sel?.id} onOpen={open} onNew={()=>setShowNew(true)}/>;
+  const detail=sel&&(program
+    ?<ProgramDetail key={`${sel.id}-${program.id}`} data={data} program={program} client={sel} go={go} onBack={()=>go("clients",{clientId:sel.id})} backLabel={firstName(sel.name)}/>
+    :<ClientDetail key={sel.id} data={data} client={sel} go={go} initialTab={nav.tab}/>);
+  const modal=showNew&&<NewClientModal data={data} onClose={()=>setShowNew(false)} onCreated={c=>{setShowNew(false);open(c);}}/>;
+
+  if(wide) return(
+    <div style={{display:"flex",height:"100dvh"}}>
+      <div style={{width:350,flexShrink:0,borderRight:`1px solid ${C.line}`,overflowY:"auto",padding:"30px 18px"}}>{list}</div>
+      <div style={{flex:1,minWidth:0,overflowY:"auto"}}>
+        {detail||<EmptyState icon="users" title="Sélectionne un client" text="Son programme, son suivi, ses performances et sa nutrition s'affichent ici."/>}
+      </div>
+      {modal}
+    </div>
+  );
+  return <>{detail||<Pad>{list}</Pad>}{modal}</>;
+}
+
+function ClientList({clients,selId,onOpen,onNew}){
+  const [search,setSearch]=useState("");
+  const [filter,setFilter]=useState("all");
+  const withSt=clients.map(c=>({c,st:clientStatus(c)}));
+  const count=k=>withSt.filter(x=>k==="all"||(k==="todo"?x.st.key!=="active":x.st.key==="active")).length;
+  const shown=withSt
+    .filter(({c,st})=>matches(search,c.name,c.goal,c.code)&&(filter==="all"||(filter==="todo"?st.key!=="active":st.key==="active")))
+    .sort((a,b)=>a.c.name.localeCompare(b.c.name,"fr"));
+  return(
+    <>
+      <PageHeader title="Clients" sub={`${clients.length} client${clients.length>1?"s":""}`} actions={<Btn size="sm" icon="plus" onClick={onNew}>Nouveau</Btn>}/>
+      <SearchBox value={search} onChange={setSearch} placeholder="Nom, objectif ou code…"/>
+      <Segmented style={{margin:"10px 0 14px"}} value={filter} onChange={setFilter}
+        options={[["all","Tous",count("all")],["active","Actifs",count("active")],["todo","À relancer",count("todo")]]}/>
+      {shown.length===0&&<EmptyState icon="users" title={clients.length?"Aucun résultat":"Aucun client"} text={clients.length?"Essaie une autre recherche.":"Crée ton premier client pour lui donner un code d'accès."}/>}
+      {shown.map(({c,st})=>{
+        const a=String(c.id)===String(selId);
+        return(
+          <button key={c.id} type="button" onClick={()=>onOpen(c)} className={a?undefined:"hov"}
+            style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 12px",marginBottom:6,borderRadius:14,textAlign:"left",cursor:"pointer",color:G.white,
+              background:a?G.gold+"12":"transparent",border:`1px solid ${a?G.gold+"44":"transparent"}`}}>
+            <Avatar name={c.name} color={c.color} size={40}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:14.5,...ellipsis}}>{c.name}</div>
+              <div style={{fontSize:12,color:C.muted,marginTop:2,...ellipsis}}>{c.goal||"Objectif à définir"}</div>
+            </div>
+            <span title={st.label} style={{width:9,height:9,borderRadius:99,background:st.color,flexShrink:0,boxShadow:`0 0 0 3px ${st.color}22`}}/>
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+function NewClientModal({data,onClose,onCreated}){
+  const {clients,setClients,mealTemplate}=data;
+  const {toast}=useUI();
+  const [name,setName]=useState("");
+  const [goal,setGoal]=useState("");
+  const code=name.trim()?genCode(name,clients):"";
+  const create=()=>{
+    if(!name.trim())return;
+    const nc={id:Date.now(),name:name.trim(),code,goal:goal.trim()||"Objectif à définir",
+      since:new Date().toLocaleDateString("fr-FR",{month:"short",year:"numeric"}),sessions:0,
+      color:PALETTE[clients.length%PALETTE.length],programs:[],sessionLogs:[],tests:{...EMPTY_TESTS},
+      mealPlan:mealTemplate?{meals:clone(mealTemplate)}:emptyMealPlan(),
+      nutrition:{calories:2000,proteins:150,carbs:220,fats:70,notes:""}};
+    setClients(p=>[...p,nc]);
+    toast(`${firstName(nc.name)} créé · code ${code}`);
+    onCreated(nc);
+  };
+  return(
+    <Modal onClose={onClose} title="Nouveau client" width={460}
+      footer={<><Btn variant="ghost" style={{flex:1}} onClick={onClose}>Annuler</Btn><Btn style={{flex:2}} disabled={!name.trim()} onClick={create}>Créer le client</Btn></>}>
+      <Field label="Nom complet"><TextInput value={name} onChange={e=>setName(e.target.value)} placeholder="Marie Dupont" autoFocus onKeyDown={e=>e.key==="Enter"&&create()}/></Field>
+      <Field label="Objectif"><TextInput value={goal} onChange={e=>setGoal(e.target.value)} placeholder="Perte de poids, force, prépa concours…"/></Field>
+      {code&&(
+        <div style={{background:G.gold+"10",border:`1px solid ${G.gold}33`,borderRadius:14,padding:14}}>
+          <div style={{fontSize:12,color:C.muted}}>Code d'accès à transmettre</div>
+          <div style={{fontFamily:"ui-monospace,Menlo,monospace",fontSize:24,fontWeight:700,color:G.goldLight,letterSpacing:3,marginTop:4}}>{code}</div>
+          {mealTemplate&&<div style={{fontSize:12,color:C.muted,marginTop:8}}>Ton plan alimentaire modèle sera appliqué automatiquement.</div>}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function ClientDetail({data,client:c,go,initialTab}){
+  const {setClients,programs}=data;
+  const {wide,toast}=useUI();
+  const [tab,setTab]=useState(initialTab||"programs");
+  const [editing,setEditing]=useState(false);
+  const upd=useCallback(fn=>setClients(p=>p.map(x=>x.id===c.id?fn(x):x)),[setClients,c.id]);
+  const logs=c.sessionLogs||[];
+  const done=doneLogsOf(c);
+  const last=lastLogOf(c);
+  const thisWeek=done.filter(l=>String(l.date)>=mondayISO()).length;
+  const st=clientStatus(c);
+  const assigned=programs.filter(p=>(c.programs||[]).includes(p.id));
+  const copyCode=async()=>{
+    try{await navigator.clipboard.writeText(c.code);toast("Code copié");}
+    catch{toast(`Code : ${c.code}`);}
+  };
+
+  return(
+    <Pad max={980}>
+      {!wide&&<BackLink onClick={()=>go("clients")} label="Clients"/>}
+      <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+        <Avatar name={c.name} color={c.color} size={wide?64:56}/>
+        <div style={{flex:1,minWidth:180}}>
+          <div style={{fontFamily:G.fontD,fontSize:wide?34:28,fontWeight:800,letterSpacing:-.8,lineHeight:1.05}}>{c.name}</div>
+          <div style={{fontSize:13,color:C.muted,marginTop:5}}>{c.goal||"Objectif à définir"}{c.since?` · depuis ${c.since}`:""}</div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <button type="button" onClick={copyCode} title="Copier le code d'accès" className="hov"
+            style={{height:38,display:"inline-flex",alignItems:"center",gap:8,padding:"0 12px",borderRadius:12,border:`1px solid ${G.gold}44`,background:G.gold+"10",color:G.goldLight,cursor:"pointer",fontFamily:"ui-monospace,Menlo,monospace",fontWeight:700,letterSpacing:1.5,fontSize:14}}>
+            {c.code}<Icon name="copy" size={15}/>
+          </button>
+          <IconBtn icon="edit" label="Modifier le profil" onClick={()=>setEditing(true)}/>
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,margin:"20px 0 18px"}}>
+        {[[done.length,"Séances faites"],[thisWeek,"Cette semaine"],[last?fmtRel(last.date):"—","Dernière séance"]].map(([v,l])=>(
+          <Card key={l} style={{padding:"12px 14px"}}>
+            <div style={{fontFamily:G.fontD,fontSize:typeof v==="number"?28:19,fontWeight:800,lineHeight:1.1,...ellipsis}}>{v}</div>
+            <div style={{fontSize:11.5,color:C.muted,marginTop:4}}>{l}</div>
+          </Card>
+        ))}
+      </div>
+      {st.key!=="active"&&<div style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:st.color,margin:"-6px 2px 16px"}}><Icon name="alert" size={16}/>{st.label}</div>}
+
+      <Segmented value={tab} onChange={setTab} style={{marginBottom:18}}
+        options={[["programs","Programmes",assigned.length],["history","Suivi",logs.length],["perfs","Perfs"],["nutrition","Nutrition"]]}/>
+
+      {tab==="programs"&&<ClientProgramsTab data={data} client={c} upd={upd} go={go}/>}
+      {tab==="history"&&<ClientHistoryTab data={data} client={c} upd={upd}/>}
+      {tab==="perfs"&&<ClientPerfsTab client={c} upd={upd}/>}
+      {tab==="nutrition"&&<ClientNutritionTab data={data} client={c} upd={upd}/>}
+
+      {editing&&<EditClientModal data={data} client={c} upd={upd} onClose={()=>setEditing(false)} go={go}/>}
+    </Pad>
+  );
+}
+
+function EditClientModal({data,client:c,upd,onClose,go}){
+  const {clients,setClients}=data;
+  const {confirm,toast}=useUI();
+  const [form,setForm]=useState({name:c.name,goal:c.goal||"",color:c.color||G.gold});
+  const save=()=>{if(!form.name.trim())return;upd(x=>({...x,name:form.name.trim(),goal:form.goal.trim(),color:form.color}));onClose();};
+  const newCode=async()=>{
+    const ok=await confirm({title:"Générer un nouveau code ?",text:`L'ancien code (${c.code}) ne fonctionnera plus et ${firstName(c.name)} sera déconnecté. Tu devras lui transmettre le nouveau code.`,confirm:"Générer",danger:true});
+    if(!ok)return;
+    const code=genCode(c.name,clients);
+    upd(x=>({...x,code}));
+    toast(`Nouveau code : ${code}`);
+  };
+  const remove=async()=>{
+    const ok=await confirm({title:`Supprimer ${c.name} ?`,text:"Sa fiche, son historique de séances et son plan alimentaire seront définitivement supprimés. Son code ne fonctionnera plus.",confirm:"Supprimer",danger:true});
+    if(!ok)return;
+    setClients(p=>p.filter(x=>x.id!==c.id));
+    onClose();
+    go("clients");
+  };
+  return(
+    <Modal onClose={onClose} title="Profil du client" width={480}
+      footer={<><Btn variant="ghost" style={{flex:1}} onClick={onClose}>Annuler</Btn><Btn style={{flex:2}} disabled={!form.name.trim()} onClick={save}>Enregistrer</Btn></>}>
+      <Field label="Nom complet"><TextInput value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))}/></Field>
+      <Field label="Objectif"><TextInput value={form.goal} onChange={e=>setForm(p=>({...p,goal:e.target.value}))}/></Field>
+      <Field label="Couleur">
+        <div style={{display:"flex",gap:10}}>
+          {PALETTE.map(col=>(
+            <button key={col} type="button" aria-label={`Couleur ${col}`} onClick={()=>setForm(p=>({...p,color:col}))}
+              style={{width:34,height:34,borderRadius:11,background:col,cursor:"pointer",border:form.color===col?"3px solid #fff":"3px solid transparent"}}/>
+          ))}
+        </div>
+      </Field>
+      <div style={{...eyebrow,margin:"22px 0 10px"}}>Accès</div>
+      <Card style={{display:"flex",alignItems:"center",gap:12,padding:14}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,color:C.muted}}>Code actuel</div>
+          <div style={{fontFamily:"ui-monospace,Menlo,monospace",fontSize:18,fontWeight:700,color:G.goldLight,letterSpacing:2,marginTop:2}}>{c.code}</div>
+        </div>
+        <Btn size="sm" variant="ghost" icon="refresh" onClick={newCode}>Nouveau code</Btn>
+      </Card>
+      <Btn variant="danger" icon="trash" style={{width:"100%",marginTop:22}} onClick={remove}>Supprimer ce client</Btn>
+    </Modal>
+  );
+}
+
+function ClientProgramsTab({data,client:c,upd,go}){
+  const {programs,setPrograms}=data;
+  const {confirm,toast}=useUI();
+  const [picker,setPicker]=useState(false);
+  const logs=c.sessionLogs||[];
+  const assigned=programs.filter(p=>(c.programs||[]).includes(p.id));
+  const assign=p=>{upd(x=>({...x,programs:[...(x.programs||[]),p.id]}));setPicker(false);toast(`${p.name} assigné`);};
+  const unassign=async p=>{
+    const ok=await confirm({title:"Retirer ce programme ?",text:`${p.name} ne sera plus visible par ${firstName(c.name)}. L'historique de ses séances est conservé.`,confirm:"Retirer",danger:true});
+    if(ok) upd(x=>({...x,programs:(x.programs||[]).filter(id=>id!==p.id)}));
+  };
+  const personalize=p=>{
+    const copy={...clone(p),id:Date.now(),name:`${p.name} (${firstName(c.name)})`,_copy:true};
+    delete copy._v;
+    setPrograms(prev=>[...prev,copy]);
+    upd(x=>({...x,programs:[...(x.programs||[]).filter(id=>id!==p.id),copy.id]}));
+    toast("Copie personnelle créée");
+    go("programs",{programId:copy.id,mode:"edit"});
+  };
+  return(
+    <>
+      {assigned.length===0&&<EmptyState icon="clipboard" title="Aucun programme assigné" text={`Assigne un programme pour que ${firstName(c.name)} voie ses séances.`}/>}
+      {assigned.map(p=>{
+        const pp=progProgress(p,logs);
+        const nx=nextSessionOf(p,logs);
+        return(
+          <Card key={p.id} style={{marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:16}}>{p.name}</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                  {p._copy&&<Chip gold>Version perso</Chip>}
+                  {p.level&&<Chip>{p.level}</Chip>}
+                  <Chip>{(p.weeks||[]).length} sem.</Chip>
+                </div>
+              </div>
+              <IconBtn icon="x" label="Retirer le programme" variant="quiet" size={34} onClick={()=>unassign(p)}/>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:C.muted,margin:"14px 0 7px"}}>
+              <span>{nx?`Prochaine : S${nx.wi+1} · ${nx.day.label}`:"Programme terminé 🎉"}</span><span>{pp.done}/{pp.total}</span>
+            </div>
+            <ProgressBar value={pp.done} max={pp.total} color={nx?G.goldLight:G.green}/>
+            <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}>
+              <Btn size="sm" variant="ghost" icon="chart" onClick={()=>go("clients",{clientId:c.id,programId:p.id})}>Séances et résultats</Btn>
+              {!p._copy&&<Btn size="sm" variant="quiet" icon="edit" onClick={()=>personalize(p)}>Personnaliser</Btn>}
+              {p._copy&&<Btn size="sm" variant="quiet" icon="edit" onClick={()=>go("programs",{programId:p.id,mode:"edit"})}>Modifier</Btn>}
+            </div>
+          </Card>
+        );
+      })}
+      <Btn variant="ghost" icon="plus" style={{width:"100%",marginTop:4,borderStyle:"dashed"}} onClick={()=>setPicker(true)}>Assigner un programme</Btn>
+      {picker&&<ProgramPickerModal programs={programs.filter(p=>!(c.programs||[]).includes(p.id))} onPick={assign} onClose={()=>setPicker(false)}/>}
+    </>
+  );
+}
+
+function ProgramPickerModal({programs,onPick,onClose}){
+  const {wide}=useUI();
+  const [search,setSearch]=useState("");
+  const shown=programs.filter(p=>matches(search,p.name,p.category,p.level));
+  return(
+    <Modal onClose={onClose} title="Assigner un programme" width={560}>
+      <SearchBox value={search} onChange={setSearch} placeholder="Nom, catégorie, niveau…" style={{marginBottom:12}} autoFocus={wide}/>
+      {shown.length===0&&<EmptyState icon="clipboard" title="Aucun programme" text="Tous tes programmes sont déjà assignés, ou aucun ne correspond."/>}
+      {shown.map(p=>(
+        <button key={p.id} type="button" onClick={()=>onPick(p)} className="hov"
+          style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"12px 14px",marginBottom:8,borderRadius:14,border:`1px solid ${C.line}`,background:C.soft,color:G.white,textAlign:"left",cursor:"pointer"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14.5,...ellipsis}}>{p.name}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:3}}>{[p.category,p.level,`${(p.weeks||[]).length} sem.`,`${p.weeks?.[0]?.days?.length||0} j/sem`].filter(Boolean).join(" · ")}</div>
+          </div>
+          <Icon name="plus" size={18} color={G.goldLight}/>
+        </button>
+      ))}
+    </Modal>
+  );
+}
+
+function ClientHistoryTab({data,client:c,upd}){
+  const {programs}=data;
+  const {confirm}=useUI();
+  const [adding,setAdding]=useState(false);
+  const logs=[...(c.sessionLogs||[])].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const removeLog=async log=>{
+    const ok=await confirm({title:"Supprimer cette séance ?",text:`${log.dayLabel||"Séance"} du ${fmtDate(log.date)} sera retirée de l'historique.`,confirm:"Supprimer",danger:true});
+    if(ok) upd(x=>({...x,sessions:Math.max(0,(Number(x.sessions)||0)-(log.completed?1:0)),sessionLogs:(x.sessionLogs||[]).filter(l=>l!==log&&(log.id==null||l.id!==log.id))}));
+  };
+  return(
+    <>
+      <Btn variant="ghost" icon="plus" style={{width:"100%",marginBottom:14}} onClick={()=>setAdding(true)}>Ajouter une séance manuellement</Btn>
+      {logs.length===0&&<EmptyState icon="history" title="Aucune séance" text={`Les séances terminées par ${firstName(c.name)} dans son application apparaîtront ici.`}/>}
+      {logs.map((log,i)=><LogCard key={log.id||i} log={log} programs={programs} onDelete={()=>removeLog(log)}/>)}
+      {adding&&<ManualLogModal data={data} client={c} upd={upd} onClose={()=>setAdding(false)}/>}
+    </>
+  );
+}
+
+function LogCard({log,programs,onDelete}){
+  const [open,setOpen]=useState(false);
+  const prog=programs.find(p=>String(p.id)===String(log.programId));
+  const sets=(log.exercises||[]).reduce((a,e)=>a+(e.sets||[]).length,0);
+  return(
+    <Card style={{padding:0,marginBottom:8,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center"}}>
+        <button type="button" onClick={()=>setOpen(!open)} aria-expanded={open} style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:12,padding:14,background:"none",border:"none",color:G.white,textAlign:"left",cursor:"pointer"}}>
+          <div style={{width:38,height:38,borderRadius:12,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:(log.completed?G.green:G.red)+"18",color:log.completed?G.green:G.red}}>
+            <Icon name={log.completed?"check":"x"} size={18} sw={2.4}/>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14.5,...ellipsis}}>{log.dayLabel||"Séance"}{prog?<span style={{color:C.muted,fontWeight:600}}> · {prog.name}</span>:null}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:3,...ellipsis}}>{fmtDate(log.date)}{log.weekLabel?` · ${log.weekLabel}`:""}{log.duration?` · ${fmtDuration(log.duration)}`:""}{sets?` · ${sets} séries`:""}</div>
+          </div>
+          <Icon name="down" size={17} color={C.muted} style={{transform:open?"rotate(180deg)":"none",transition:"transform .2s"}}/>
+        </button>
+      </div>
+      {open&&(
+        <div style={{padding:"0 14px 14px",animation:"fadeIn .2s ease"}}>
+          {log.notes&&<div style={{fontSize:13,color:"#ccc",lineHeight:1.5,padding:"10px 12px",background:"#0b0b0b",borderRadius:12,marginBottom:12,borderLeft:`3px solid ${G.gold}`}}>« {log.notes} »</div>}
+          {(log.exercises||[]).map((ex,i)=>(
+            <div key={i} style={{marginBottom:12}}>
+              <div style={{fontWeight:700,fontSize:13.5,color:G.goldLight,marginBottom:7}}>{ex.name}{ex.sensation?` ${ex.sensation}`:""}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {(ex.sets||[]).map((s,j)=>(
+                  <span key={j} style={{fontSize:12.5,fontWeight:700,padding:"6px 10px",borderRadius:10,background:"#0b0b0b",border:`1px solid ${C.line}`,color:s.load?G.white:C.muted}}>
+                    {s.load||"—"} × {s.reps}{isTimed(s.reps)?"":""}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+          {!(log.exercises||[]).length&&!log.notes&&<div style={{fontSize:13,color:C.muted,marginBottom:10}}>Aucun détail enregistré.</div>}
+          {onDelete&&<Btn size="sm" variant="quiet" icon="trash" style={{color:G.red,paddingLeft:0}} onClick={onDelete}>Supprimer cette séance</Btn>}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ManualLogModal({data,client:c,upd,onClose}){
+  const {programs,exercises}=data;
+  const assigned=programs.filter(p=>(c.programs||[]).includes(p.id));
+  const [f,setF]=useState({date:todayISO(),programId:assigned[0]?String(assigned[0].id):"",weekIdx:"",dayIdx:"",completed:true,notes:""});
+  const prog=programs.find(p=>String(p.id)===f.programId);
+  const week=prog?.weeks?.[Number(f.weekIdx)];
+  const day=f.dayIdx!==""?week?.days?.[Number(f.dayIdx)]:null;
+  const save=()=>{
+    const exEntries=(day?.exercises||[]).map(pe=>({exId:pe.exId,name:exercises.find(e=>e.id===pe.exId)?.name||"",
+      sets:Array.from({length:Number(pe.sets)||1},()=>({reps:pe.reps,load:pe.targetLoad||""}))}));
+    const log={id:uid(),date:f.date,programId:prog?prog.id:"",weekIdx:f.weekIdx===""?"":Number(f.weekIdx),dayIdx:f.dayIdx===""?"":Number(f.dayIdx),
+      dayLabel:day?.label||"Séance",weekLabel:week?.label||"",completed:f.completed,notes:f.notes,exercises:exEntries,manual:true};
+    upd(x=>({...x,sessions:(Number(x.sessions)||0)+(f.completed?1:0),sessionLogs:[log,...(x.sessionLogs||[])]}));
+    onClose();
+  };
+  return(
+    <Modal onClose={onClose} title="Ajouter une séance" width={480}
+      footer={<><Btn variant="ghost" style={{flex:1}} onClick={onClose}>Annuler</Btn><Btn style={{flex:2}} onClick={save}>Enregistrer</Btn></>}>
+      <Field label="Date"><TextInput type="date" value={f.date} onChange={e=>setF(p=>({...p,date:e.target.value}))}/></Field>
+      <Field label="Programme">
+        <Select value={f.programId} onChange={e=>setF(p=>({...p,programId:e.target.value,weekIdx:"",dayIdx:""}))}>
+          <option value="">Séance libre (hors programme)</option>
+          {assigned.map(p=><option key={p.id} value={String(p.id)}>{p.name}</option>)}
+        </Select>
+      </Field>
+      {prog&&(
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Field label="Semaine">
+            <Select value={f.weekIdx} onChange={e=>setF(p=>({...p,weekIdx:e.target.value,dayIdx:""}))}>
+              <option value="">—</option>
+              {prog.weeks.map((w,i)=><option key={i} value={i}>S{i+1}</option>)}
+            </Select>
+          </Field>
+          <Field label="Séance">
+            <Select value={f.dayIdx} disabled={!week} onChange={e=>setF(p=>({...p,dayIdx:e.target.value}))}>
+              <option value="">—</option>
+              {(week?.days||[]).map((d,i)=><option key={i} value={i}>{d.label}</option>)}
+            </Select>
+          </Field>
+        </div>
+      )}
+      <Field label="Statut">
+        <Segmented value={f.completed?"done":"missed"} onChange={v=>setF(p=>({...p,completed:v==="done"}))} options={[["done","Faite"],["missed","Manquée"]]}/>
+      </Field>
+      <Field label="Notes"><TextArea value={f.notes} onChange={e=>setF(p=>({...p,notes:e.target.value}))} placeholder="Ressenti, charges, remarques…"/></Field>
+    </Modal>
+  );
+}
+
+const PERF_SECTIONS=[
+  {label:"Cardio",fields:[["fcmax","FCmax","bpm"],["vma","VMA","km/h"]]},
+  {label:"Force (1RM estimé)",fields:[["rm_squat","Squat","kg"],["rm_bench","Développé couché","kg"],["rm_sdt","Soulevé de terre","kg"]]},
+  {label:"Tests au poids du corps",fields:[["tractions_max","Tractions max","reps"],["pompes_max","Pompes max","reps"],["gainage_max","Gainage planche","sec"]]},
+];
+function ClientPerfsTab({client:c,upd}){
+  const {wide,toast}=useUI();
+  const [editing,setEditing]=useState(false);
+  const [form,setForm]=useState({...EMPTY_TESTS,...(c.tests||{})});
+  const t=c.tests||{};
+  const start=()=>{setForm({...EMPTY_TESTS,...(c.tests||{})});setEditing(true);};
+  const save=()=>{upd(x=>({...x,tests:form}));setEditing(false);toast("Performances enregistrées");};
+  return(
+    <>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:4}}>
+        <div style={{fontSize:13,color:C.muted,lineHeight:1.5}}>Les charges en % des programmes sont calculées à partir de ces valeurs.</div>
+        {editing
+          ?<div style={{display:"flex",gap:8}}><Btn size="sm" variant="ghost" onClick={()=>setEditing(false)}>Annuler</Btn><Btn size="sm" icon="check" onClick={save}>Enregistrer</Btn></div>
+          :<Btn size="sm" variant="ghost" icon="edit" onClick={start}>Modifier</Btn>}
+      </div>
+      {PERF_SECTIONS.map(sec=>(
+        <div key={sec.label}>
+          <SectionTitle>{sec.label}</SectionTitle>
+          <div style={{display:"grid",gridTemplateColumns:wide?"repeat(3,1fr)":"1fr 1fr",gap:10}}>
+            {sec.fields.map(([k,label,unit])=>(
+              <Card key={k} style={{padding:"12px 14px"}}>
+                <div style={{fontSize:11.5,color:C.muted,marginBottom:8}}>{label}</div>
+                {editing?(
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <TextInput type="number" inputMode="decimal" value={form[k]} placeholder="—" onChange={e=>setForm(p=>({...p,[k]:e.target.value}))} style={{height:38,textAlign:"center",fontWeight:700}}/>
+                    <span style={{fontSize:12,color:C.muted}}>{unit}</span>
+                  </div>
+                ):(
+                  <div style={{display:"flex",alignItems:"baseline",gap:5}}>
+                    <span style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,color:t[k]?G.goldLight:C.dim,lineHeight:1}}>{t[k]||"—"}</span>
+                    {t[k]&&<span style={{fontSize:12,color:C.muted}}>{unit}</span>}
+                  </div>
+                )}
+              </Card>
+            ))}
+          </div>
+        </div>
+      ))}
+      <SectionTitle>Notes</SectionTitle>
+      {editing
+        ?<TextArea value={form.notes||""} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="Conditions des tests, dates, observations…"/>
+        :<Card style={{fontSize:14,color:t.notes?"#ddd":C.dim,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{t.notes||"Aucune note"}</Card>}
+    </>
+  );
+}
+
+function ClientNutritionTab({data,client:c,upd}){
+  const {foods,mealTemplate,setMealTemplate}=data;
+  const {toast}=useUI();
+  const [live,setLive]=useState(null);
+  const [notes,setNotes]=useState(c.nutrition?.notes||"");
+  const stored=(c.mealPlan?.meals||[]).flatMap(m=>m.items||[]);
+  const src=live||(stored.length?calcMacros(stored,foods):null);
+  const n=c.nutrition||{};
+  const kcal=src?rnd(src.kcal):n.calories||0;
+  const macros=[["Protéines",src?rnd1(src.protein):n.proteins||0,G.goldLight,300],["Glucides",src?rnd1(src.carbs):n.carbs||0,G.gold,500],["Lipides",src?rnd1(src.fat):n.fats||0,"#a08a4c",150]];
+  const notesDirty=notes!==(n.notes||"");
+  const saveTemplate=meals=>{
+    setDoc(doc(db,"settings","mealTemplate"),{meals})
+      .then(()=>{setMealTemplate(meals);toast("Modèle enregistré : il sera appliqué aux nouveaux clients");})
+      .catch(()=>toast("Impossible d'enregistrer le modèle"));
+  };
+  return(
+    <>
+      <Card>
+        <div style={{display:"flex",alignItems:"center",gap:18,flexWrap:"wrap"}}>
+          <div style={{minWidth:120}}>
+            <div style={{fontFamily:G.fontD,fontSize:46,fontWeight:800,color:G.goldLight,lineHeight:1}}>{kcal}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:4}}>kcal / jour{live?" · aperçu":""}</div>
+          </div>
+          <div style={{flex:1,minWidth:200}}>
+            {macros.map(([l,v,col,max])=>(
+              <div key={l} style={{marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:12.5,marginBottom:5}}><span style={{color:C.muted}}>{l}</span><span style={{fontWeight:700}}>{v} g</span></div>
+                <ProgressBar value={v} max={max} color={col}/>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
+      <SectionTitle>Notes, allergies, préférences</SectionTitle>
+      <TextArea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Sans gluten, shake après l'entraînement…"/>
+      {notesDirty&&<Btn size="sm" icon="check" style={{marginTop:8}} onClick={()=>{upd(x=>({...x,nutrition:{...(x.nutrition||{}),notes}}));toast("Notes enregistrées");}}>Enregistrer les notes</Btn>}
+      <SectionTitle>Plan alimentaire</SectionTitle>
+      <MealPlanEditor key={c.id} foods={foods} mealPlan={c.mealPlan} template={mealTemplate} onSaveTemplate={saveTemplate} onLiveChange={setLive}
+        onSave={(mp,totals)=>{
+          setLive(null);
+          upd(x=>({...x,mealPlan:mp,...(totals.kcal>0?{nutrition:{...(x.nutrition||{}),calories:rnd(totals.kcal),proteins:rnd1(totals.protein),carbs:rnd1(totals.carbs),fats:rnd1(totals.fat)}}:{})}));
+          toast("Plan alimentaire enregistré");
+        }}/>
+    </>
+  );
+}
+
+function MealPlanEditor({mealPlan,foods,onSave,onLiveChange,template,onSaveTemplate}){
+  const {wide}=useUI();
+  const fromMeals=meals=>MEAL_SLOTS.map(s=>{
+    const m=(meals||[]).find(x=>x.id===s.id);
+    return {id:s.id,label:s.label,icon:s.icon,items:clone(m?.items||[]),note:m?.note||""};
   });
   const [editing,setEditing]=useState(false);
-  const [form,setForm]=useState(initForm);
-  const [pickerMeal,setPickerMeal]=useState(null);
+  const [form,setForm]=useState(()=>fromMeals(mealPlan?.meals));
+  const [picker,setPicker]=useState(null);
   const [search,setSearch]=useState("");
-  const [templateSaved,setTemplateSaved]=useState(false);
-  const [firestoreTemplate,setFirestoreTemplate]=useState(null);
-
-  useEffect(()=>{
-    getDoc(doc(db,"settings","mealTemplate"))
-      .then(snap=>{if(snap.exists())setFirestoreTemplate(snap.data().meals||null);})
-      .catch(()=>{});
-  },[]);
-
-  useEffect(()=>{
-    if(editing&&onLiveChange) onLiveChange(calcMacros(form.flatMap(m=>m.items),foods));
-  },[form,editing]); // eslint-disable-line
-
-  const saveAsTemplate=()=>{
-    const meals=form.map(({icon,...rest})=>rest);
-    setDoc(doc(db,"settings","mealTemplate"),{meals})
-      .then(()=>{setFirestoreTemplate(meals);setTemplateSaved(true);setTimeout(()=>setTemplateSaved(false),2500);})
-      .catch(()=>{});
-  };
-
-  const applyTemplate=(thenEdit=false)=>{
-    const t=firestoreTemplate;
-    if(!t)return;
-    setForm(MEAL_SLOTS.map(s=>{
-      const tm=t.find(m=>m.id===s.id);
-      return{id:s.id,label:s.label,icon:s.icon,items:tm?.items||[]};
-    }));
-    if(thenEdit)setEditing(true);
-  };
-
-  const save=()=>{
-    const meals=form.map(({icon,...rest})=>rest);
-    const totals=calcMacros(form.flatMap(m=>m.items),foods);
-    onSave({meals},totals);
-    if(onLiveChange) onLiveChange(null);
-    setEditing(false);
-  };
-  const cancel=()=>{setForm(initForm());if(onLiveChange)onLiveChange(null);setEditing(false);};
-
-  const addItem=(mealId,foodId)=>{
-    const food=foods.find(f=>f.id===foodId);
-    const defQty=food.unit==="g"?100:1;
-    setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:[...m.items,{foodId,qty:defQty}]}));
-    setPickerMeal(null);setSearch("");
-  };
-  const removeItem=(mealId,idx)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:m.items.filter((_,i)=>i!==idx)}));
-  const updateQty=(mealId,idx,val)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,items:m.items.map((it,i)=>i!==idx?it:{...it,qty:parseFloat(val)||0})}));
-  const updateNote=(mealId,val)=>setForm(f=>f.map(m=>m.id!==mealId?m:{...m,note:val}));
-
-  const filteredFoods=foods.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
-  const totalMacros=calcMacros(form.flatMap(m=>m.items),foods);
+  const stripped=()=>form.map(({icon,...rest})=>rest); // eslint-disable-line no-unused-vars
+  const totals=calcMacros(form.flatMap(m=>m.items),foods);
   const hasPlan=form.some(m=>m.items.length>0);
+
+  useEffect(()=>{if(editing&&onLiveChange)onLiveChange(totals);},[form,editing]); // eslint-disable-line
+
+  const startEdit=(useTemplate=false)=>{setForm(useTemplate&&template?fromMeals(template):fromMeals(mealPlan?.meals));setEditing(true);};
+  const cancel=()=>{setForm(fromMeals(mealPlan?.meals));onLiveChange?.(null);setEditing(false);};
+  const save=()=>{onSave({meals:stripped()},totals);onLiveChange?.(null);setEditing(false);};
+  const setMeal=(id,fn)=>setForm(f=>f.map(m=>m.id===id?fn(m):m));
+  const addItem=foodId=>{
+    const food=foods.find(x=>x.id===foodId);
+    setMeal(picker,m=>({...m,items:[...m.items,{foodId,qty:food?.unit==="g"?100:1}]}));
+    setPicker(null);setSearch("");
+  };
+
+  if(!editing) return(
+    <Card>
+      {!hasPlan?(
+        <EmptyState icon="leaf" title="Pas encore de plan alimentaire" text="Compose les repas : les calories et les macros sont calculées automatiquement."
+          action={<div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
+            {template&&<Btn icon="copy" onClick={()=>startEdit(true)}>Partir du modèle</Btn>}
+            <Btn variant={template?"ghost":"gold"} icon="plus" onClick={()=>startEdit(false)}>Créer le plan</Btn>
+          </div>}/>
+      ):(
+        <>
+          {form.filter(m=>m.items.length).map(m=>(
+            <div key={m.id} style={{paddingBottom:12,marginBottom:12,borderBottom:`1px solid ${C.line}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                <div style={{fontSize:12,color:G.gold,fontWeight:700,letterSpacing:.6,textTransform:"uppercase"}}>{m.icon} {m.label}</div>
+                <div style={{fontSize:12,color:C.muted}}>{rnd(calcMacros(m.items,foods).kcal)} kcal</div>
+              </div>
+              {m.items.map((it,i)=>{
+                const food=foods.find(x=>x.id===it.foodId);
+                return food?<div key={i} style={{fontSize:14,marginBottom:3}}>{food.name} <span style={{color:C.muted}}>— {it.qty} {food.unit==="g"?"g":"port."}</span></div>:null;
+              })}
+              {m.note&&<div style={{fontSize:12.5,color:C.muted,marginTop:6,whiteSpace:"pre-wrap"}}>{m.note}</div>}
+            </div>
+          ))}
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <Btn size="sm" icon="edit" onClick={()=>startEdit(false)}>Modifier le plan</Btn>
+            <Btn size="sm" variant="ghost" icon="copy" onClick={()=>onSaveTemplate(stripped())}>Définir comme modèle</Btn>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+
+  const shownFoods=foods.filter(x=>matches(search,x.name));
+  return(
+    <>
+      <Card style={{position:"sticky",top:0,zIndex:5,display:"flex",justifyContent:"space-around",padding:"12px 8px",marginBottom:12,background:"#141414"}}>
+        {[[rnd(totals.kcal),"kcal"],[rnd1(totals.protein)+"g","Prot."],[rnd1(totals.carbs)+"g","Gluc."],[rnd1(totals.fat)+"g","Lip."]].map(([v,l])=>(
+          <div key={l} style={{textAlign:"center"}}>
+            <div style={{fontFamily:G.fontD,fontSize:21,fontWeight:800,color:G.goldLight,lineHeight:1}}>{v}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:3}}>{l}</div>
+          </div>
+        ))}
+      </Card>
+      {template&&<Btn size="sm" variant="ghost" icon="copy" style={{marginBottom:12}} onClick={()=>setForm(fromMeals(template))}>Remplacer par le modèle</Btn>}
+      {form.map(m=>(
+        <Card key={m.id} style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:13,color:G.goldLight,fontWeight:700}}>{m.icon} {m.label}</div>
+            {m.items.length>0&&<div style={{fontSize:12,color:C.muted}}>{rnd(calcMacros(m.items,foods).kcal)} kcal</div>}
+          </div>
+          {m.items.map((it,i)=>{
+            const food=foods.find(x=>x.id===it.foodId);
+            if(!food) return null;
+            const im=calcMacros([it],foods);
+            return(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:"#0b0b0b",borderRadius:12,padding:"8px 10px"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13.5,fontWeight:600,...ellipsis}}>{food.name}</div>
+                  <div style={{fontSize:11.5,color:C.muted,marginTop:2}}>{rnd(im.kcal)} kcal · P {rnd1(im.protein)} · G {rnd1(im.carbs)} · L {rnd1(im.fat)}</div>
+                </div>
+                <input className="inp" type="number" inputMode="decimal" min="0" value={it.qty} aria-label="Quantité"
+                  onChange={e=>setMeal(m.id,x=>({...x,items:x.items.map((y,j)=>j===i?{...y,qty:parseFloat(e.target.value)||0}:y)}))}
+                  style={{...inputStyle,width:70,height:36,padding:"0 6px",textAlign:"center",fontWeight:700,color:G.goldLight}}/>
+                <span style={{fontSize:11.5,color:C.muted,width:30}}>{food.unit==="g"?"g":"port."}</span>
+                <IconBtn icon="x" label="Retirer" variant="quiet" size={32} onClick={()=>setMeal(m.id,x=>({...x,items:x.items.filter((_,j)=>j!==i)}))}/>
+              </div>
+            );
+          })}
+          <Btn size="sm" variant="quiet" icon="plus" style={{color:G.goldLight,paddingLeft:2}} onClick={()=>{setPicker(m.id);setSearch("");}}>Ajouter un aliment</Btn>
+          <TextArea value={m.note} onChange={e=>setMeal(m.id,x=>({...x,note:e.target.value}))} placeholder="Note pour ce repas (préparation, timing…)" style={{minHeight:56,marginTop:6,fontSize:14}}/>
+        </Card>
+      ))}
+      <div style={{display:"flex",gap:10,position:"sticky",bottom:0,padding:"10px 0",background:`linear-gradient(0deg,${G.bg} 70%,transparent)`}}>
+        <Btn variant="ghost" style={{flex:1}} onClick={cancel}>Annuler</Btn>
+        <Btn icon="check" style={{flex:2}} onClick={save}>Enregistrer le plan</Btn>
+      </div>
+      {picker&&(
+        <Modal onClose={()=>setPicker(null)} title="Ajouter un aliment" width={560}>
+          <SearchBox value={search} onChange={setSearch} placeholder="Rechercher un aliment…" style={{marginBottom:12}} autoFocus={wide}/>
+          {shownFoods.map(food=>(
+            <button key={food.id} type="button" onClick={()=>addItem(food.id)} className="hov"
+              style={{width:"100%",textAlign:"left",padding:"11px 13px",marginBottom:6,borderRadius:12,border:`1px solid ${C.line}`,background:C.soft,color:G.white,cursor:"pointer"}}>
+              <div style={{fontWeight:600,fontSize:14}}>{food.name}</div>
+              <div style={{fontSize:12,color:C.muted,marginTop:3}}>{food.kcal} kcal · P {food.protein} · G {food.carbs} · L {food.fat} <span style={{color:G.gold}}>/ {food.unit==="g"?"100 g":"portion"}</span></div>
+            </button>
+          ))}
+          {shownFoods.length===0&&<EmptyState icon="leaf" title="Aucun aliment trouvé" text="Ajoute-le dans Bibliothèque → Aliments."/>}
+        </Modal>
+      )}
+    </>
+  );
+}
+
+// ─── PROGRAMMES ───────────────────────────────────────────────────────────────
+const blankProgram=()=>({name:"",category:"",level:"Intermédiaire",weeks:[{label:"Semaine 1",days:[{label:"Séance A",exercises:[]}]}]});
+function ProgramsView({data,nav,go}){
+  const {wide,toast}=useUI();
+  const {programs,setPrograms}=data;
+  const sel=programs.find(p=>String(p.id)===String(nav.programId));
+  const mode=nav.mode||"detail";
+  let right=null;
+  if(mode==="new"){
+    right=<ProgramEditor key="new" data={data} init={blankProgram()} title="Nouveau programme"
+      onSave={form=>{const np={...form,id:Date.now()};setPrograms(p=>[...p,np]);toast("Programme créé");go("programs",{programId:np.id});}}
+      onCancel={()=>go("programs")}/>;
+  }else if(sel&&mode==="edit"){
+    right=<ProgramEditor key={`edit-${sel.id}`} data={data} init={clone(sel)} title="Modifier le programme"
+      onSave={form=>{setPrograms(p=>p.map(x=>x.id===form.id?form:x));toast("Programme enregistré");go("programs",{programId:form.id});}}
+      onCancel={()=>go("programs",{programId:sel.id})}/>;
+  }else if(sel){
+    right=<ProgramDetail key={sel.id} data={data} program={sel} go={go} onBack={wide?null:()=>go("programs")} backLabel="Programmes"/>;
+  }
+  const list=<ProgramList data={data} selId={sel?.id} onOpen={p=>go("programs",{programId:p.id})} onNew={()=>go("programs",{mode:"new"})}/>;
+  if(wide) return(
+    <div style={{display:"flex",height:"100dvh"}}>
+      <div style={{width:350,flexShrink:0,borderRight:`1px solid ${C.line}`,overflowY:"auto",padding:"30px 18px"}}>{list}</div>
+      <div style={{flex:1,minWidth:0,overflowY:"auto"}}>
+        {right||<EmptyState icon="clipboard" title="Sélectionne un programme" text="Ou crée-en un nouveau, à la main ou avec l'IA Coach."/>}
+      </div>
+    </div>
+  );
+  return right||<Pad>{list}</Pad>;
+}
+
+function ProgramList({data,selId,onOpen,onNew}){
+  const {programs,clients}=data;
+  const [search,setSearch]=useState("");
+  const [level,setLevel]=useState("all");
+  const levels=[...new Set(programs.map(p=>p.level).filter(Boolean))];
+  const nClients=p=>clients.filter(c=>(c.programs||[]).includes(p.id)).length;
+  const shown=programs.filter(p=>matches(search,p.name,p.category)&&(level==="all"||p.level===level)).sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  return(
+    <>
+      <PageHeader title="Programmes" sub={`${programs.length} programme${programs.length>1?"s":""}`} actions={<Btn size="sm" icon="plus" onClick={onNew}>Nouveau</Btn>}/>
+      <SearchBox value={search} onChange={setSearch} placeholder="Nom ou catégorie…"/>
+      {levels.length>1&&<div style={{margin:"10px 0 4px"}}><FilterChips value={level} onChange={setLevel} options={[["all","Tous"],...levels.map(l=>[l,l])]}/></div>}
+      <div style={{height:10}}/>
+      {shown.length===0&&<EmptyState icon="clipboard" title={programs.length?"Aucun résultat":"Aucun programme"} text={programs.length?"Essaie une autre recherche.":"Crée ton premier programme."}/>}
+      {shown.map(p=>{
+        const a=String(p.id)===String(selId);
+        const n=nClients(p);
+        return(
+          <button key={p.id} type="button" onClick={()=>onOpen(p)} className={a?undefined:"hov"}
+            style={{width:"100%",display:"block",padding:"12px 14px",marginBottom:6,borderRadius:14,textAlign:"left",cursor:"pointer",color:G.white,
+              background:a?G.gold+"12":"transparent",border:`1px solid ${a?G.gold+"44":"transparent"}`}}>
+            <div style={{fontWeight:700,fontSize:14.5,...ellipsis}}>{p.name}</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:7}}>
+              {p.level&&<Chip>{p.level}</Chip>}
+              <Chip>{(p.weeks||[]).length} sem. · {p.weeks?.[0]?.days?.length||0} j</Chip>
+              {n>0&&<Chip gold><Icon name="users" size={12}/>{n}</Chip>}
+              {p._copy&&<Chip>Perso</Chip>}
+            </div>
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+function ProgramDetail({data,program,client,go,onBack,backLabel}){
+  const {wide,confirm,toast}=useUI();
+  const {setPrograms,clients,setClients,exercises}=data;
+  const logs=client?.sessionLogs||[];
+  const first=client?nextSessionOf(program,logs):null;
+  const [wi,setWi]=useState(first?.wi||0);
+  const [di,setDi]=useState(first?.di||0);
+  const week=program.weeks?.[wi];
+  const day=week?.days?.[di];
+  const dayLog=client?findDoneLog(logs,program.id,wi,di):null;
+  const users=clients.filter(c=>(c.programs||[]).includes(program.id));
+
+  const duplicate=()=>{
+    const copy={...clone(program),id:Date.now(),name:`${program.name} (copie)`};
+    delete copy._v;
+    setPrograms(p=>[...p,copy]);
+    toast("Programme dupliqué");
+    go("programs",{programId:copy.id,mode:"edit"});
+  };
+  const remove=async()=>{
+    const ok=await confirm({title:"Supprimer ce programme ?",danger:true,confirm:"Supprimer",
+      text:users.length?`Il est assigné à ${users.map(u=>firstName(u.name)).join(", ")} : il sera retiré de leur application. L'historique des séances est conservé.`:"Cette action est définitive."});
+    if(!ok)return;
+    setPrograms(p=>p.filter(x=>x.id!==program.id));
+    if(users.length) setClients(cs=>cs.map(c=>(c.programs||[]).includes(program.id)?{...c,programs:c.programs.filter(id=>id!==program.id)}:c));
+    go("programs");
+  };
+
+  return(
+    <Pad max={980}>
+      {onBack&&<BackLink onClick={onBack} label={backLabel}/>}
+      <div style={{display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:200}}>
+          {client&&<div style={{...eyebrow,color:G.gold,marginBottom:6}}>Suivi de {firstName(client.name)}</div>}
+          <div style={{fontFamily:G.fontD,fontSize:wide?34:28,fontWeight:800,letterSpacing:-.8,lineHeight:1.05}}>{program.name}</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+            {program.category&&<Chip>{program.category}</Chip>}
+            {program.level&&<Chip>{program.level}</Chip>}
+            <Chip>{(program.weeks||[]).length} semaine{(program.weeks||[]).length>1?"s":""}</Chip>
+            {client&&(()=>{const pp=progProgress(program,logs);return <Chip color={G.green}>{pp.done}/{pp.total} séances faites</Chip>;})()}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <Btn size="sm" icon="edit" onClick={()=>go("programs",{programId:program.id,mode:"edit"})}>Modifier</Btn>
+          {!client&&<IconBtn icon="copy" label="Dupliquer" onClick={duplicate}/>}
+          {!client&&<IconBtn icon="trash" label="Supprimer" variant="danger" onClick={remove}/>}
+        </div>
+      </div>
+
+      {!client&&users.length>0&&(
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:16}}>
+          <span style={{fontSize:12.5,color:C.muted}}>Assigné à</span>
+          {users.map(u=>(
+            <button key={u.id} type="button" onClick={()=>go("clients",{clientId:u.id})} className="hov"
+              style={{display:"inline-flex",alignItems:"center",gap:7,height:32,padding:"0 10px 0 4px",borderRadius:99,border:`1px solid ${C.line2}`,background:C.soft,color:G.white,cursor:"pointer",fontSize:13,fontWeight:600}}>
+              <Avatar name={u.name} color={u.color} size={24}/>{firstName(u.name)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="noscroll" style={{display:"flex",gap:8,overflowX:"auto",margin:"22px 0 12px",paddingBottom:2}}>
+        {(program.weeks||[]).map((w,i)=>{
+          const a=i===wi;
+          const complete=client&&(w.days||[]).length>0&&(w.days||[]).every((_,j)=>findDoneLog(logs,program.id,i,j));
+          return(
+            <button key={i} type="button" onClick={()=>{setWi(i);setDi(0);}} title={w.label}
+              style={{flexShrink:0,minWidth:56,height:52,borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,
+                background:a?C.goldGrad:C.soft,color:a?G.bg:G.white,border:`1px solid ${a?"transparent":C.line}`}}>
+              <span style={{fontSize:9.5,fontWeight:700,opacity:.7,letterSpacing:1}}>SEM.</span>
+              <span style={{fontFamily:G.fontD,fontSize:18,fontWeight:800,lineHeight:1}}>{complete?<Icon name="check" size={16} sw={2.6}/>:i+1}</span>
+            </button>
+          );
+        })}
+      </div>
+      {week&&<div style={{fontSize:13,color:C.muted,margin:"0 2px 12px"}}>{week.label}</div>}
+      {week&&(
+        <Segmented value={di} onChange={setDi} style={{marginBottom:16}}
+          options={(week.days||[]).map((d,j)=>[j,`${client&&findDoneLog(logs,program.id,wi,j)?"✓ ":""}${d.label}`,(d.exercises||[]).length])}/>
+      )}
+
+      {dayLog&&(
+        <Card style={{display:"flex",alignItems:"center",gap:12,marginBottom:12,borderColor:G.green+"44",padding:14}}>
+          <Icon name="check" size={20} color={G.green} sw={2.4}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14,color:G.green}}>Séance faite {fmtRel(dayLog.date)}{dayLog.duration?` · ${fmtDuration(dayLog.duration)}`:""}</div>
+            {dayLog.notes&&<div style={{fontSize:13,color:"#ccc",marginTop:3}}>« {dayLog.notes} »</div>}
+          </div>
+        </Card>
+      )}
+
+      {(!day||!(day.exercises||[]).length)&&<EmptyState icon="dumbbell" title="Séance vide" text="Ajoute des exercices en modifiant le programme."/>}
+      <div style={{display:"grid",gridTemplateColumns:wide?"1fr 1fr":"1fr",gap:10}}>
+        {(day?.exercises||[]).map((pe,i)=>{
+          const ex=exercises.find(e=>e.id===pe.exId);
+          const comp=computeLoad(pe,client?.tests);
+          const ref=LOAD_REFS.find(r=>r.id===pe.loadRef&&r.id!=="none");
+          const res=dayLog?.exercises?.find(e=>e.exId===pe.exId);
+          return(
+            <Card key={i} style={{padding:14,borderColor:res?G.green+"33":C.line}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                <div style={{width:30,height:30,borderRadius:10,background:G.gold+"18",color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:15,flexShrink:0}}>{i+1}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:15}}>{ex?.name||"Exercice supprimé"}</div>
+                  <div style={{fontSize:13,color:"#c8c8c8",marginTop:4}}>{pe.sets} × {pe.reps}{pe.rest?<span style={{color:C.muted}}> · repos {pe.rest}</span>:null}</div>
+                  {pe.targetLoad&&<div style={{fontSize:12.5,color:G.goldLight,marginTop:4}}>🎯 {comp?`${comp.value} ${comp.unit} (${comp.pct}% ${comp.label.replace("% ","")})`:`${pe.targetLoad}${ref?` · ${ref.label}`:""}`}</div>}
+                  {pe.note&&<div style={{fontSize:12.5,color:"#bbb",marginTop:6,lineHeight:1.45}}>📝 {pe.note}</div>}
+                </div>
+                {ex&&<VideoBtn ex={ex}/>}
+              </div>
+              {res&&(
+                <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${C.line}`}}>
+                  <div style={{fontSize:11,color:G.green,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:7}}>Réalisé {res.sensation||""}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {(res.sets||[]).map((s,j)=><span key={j} style={{fontSize:12.5,fontWeight:700,padding:"5px 9px",borderRadius:9,background:"#0b0b0b",border:`1px solid ${C.line}`,color:s.load?G.white:C.muted}}>{s.load||"—"} × {s.reps}</span>)}
+                  </div>
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+    </Pad>
+  );
+}
+
+const LEVELS=["Débutant","Intermédiaire","Avancé","Tous niveaux"];
+function ProgramEditor({data,init,title,onSave,onCancel}){
+  const {exercises}=data;
+  const {wide,confirm}=useUI();
+  const [form,setForm]=useState(init);
+  const [wi,setWi]=useState(0);
+  const [di,setDi]=useState(0);
+  const [picker,setPicker]=useState(false);
+  const [openNotes,setOpenNotes]=useState({});
+  const initial=useRef(JSON.stringify(init));
+  const week=form.weeks[wi];
+  const day=week?.days[di];
+  const total=exCount(form);
+
+  const setWeeks=fn=>setForm(p=>({...p,weeks:fn(p.weeks)}));
+  const setDay=fn=>setWeeks(ws=>ws.map((w,i)=>i!==wi?w:{...w,days:w.days.map((d,j)=>j!==di?d:fn(d))}));
+  const addWeek=()=>{setWeeks(ws=>[...ws,{label:`Semaine ${ws.length+1}`,days:[{label:"Séance A",exercises:[]}]}]);setWi(form.weeks.length);setDi(0);};
+  const duplicateWeek=()=>{const copy=clone(week);copy.label=`Semaine ${form.weeks.length+1}`;setWeeks(ws=>[...ws.slice(0,wi+1),copy,...ws.slice(wi+1)]);setWi(wi+1);setDi(0);};
+  const removeWeek=async()=>{
+    if(form.weeks.length<=1)return;
+    if(!(await confirm({title:`Supprimer ${week.label} ?`,text:"Toutes ses séances seront retirées du programme.",confirm:"Supprimer",danger:true})))return;
+    setWeeks(ws=>ws.filter((_,i)=>i!==wi));setWi(Math.max(0,wi-1));setDi(0);
+  };
+  const addDay=()=>{const letters="ABCDEFG";setWeeks(ws=>ws.map((w,i)=>i!==wi?w:{...w,days:[...w.days,{label:`Séance ${letters[w.days.length]||w.days.length+1}`,exercises:[]}]}));setDi(week.days.length);};
+  const removeDay=async()=>{
+    if(week.days.length<=1)return;
+    if(day.exercises.length&&!(await confirm({title:`Supprimer ${day.label} ?`,text:`${day.exercises.length} exercice(s) seront retirés.`,confirm:"Supprimer",danger:true})))return;
+    setWeeks(ws=>ws.map((w,i)=>i!==wi?w:{...w,days:w.days.filter((_,j)=>j!==di)}));setDi(Math.max(0,di-1));
+  };
+  const toggleEx=ex=>setDay(d=>({...d,exercises:d.exercises.some(e=>e.exId===ex.id)?d.exercises.filter(e=>e.exId!==ex.id):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:"",loadRef:"none",note:""}]}));
+  const updEx=(i,field,val)=>setDay(d=>({...d,exercises:d.exercises.map((e,j)=>j===i?{...e,[field]:val}:e)}));
+  const moveEx=(from,to)=>setDay(d=>{const a=[...d.exercises];const [it]=a.splice(from,1);a.splice(to,0,it);return {...d,exercises:a};});
+  const removeEx=i=>setDay(d=>({...d,exercises:d.exercises.filter((_,j)=>j!==i)}));
+  const cancel=async()=>{
+    if(JSON.stringify(form)!==initial.current&&!(await confirm({title:"Abandonner les modifications ?",text:"Les changements non enregistrés seront perdus.",confirm:"Abandonner",danger:true})))return;
+    onCancel();
+  };
+  const canSave=!!form.name.trim()&&total>0;
 
   return(
     <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-        <div style={{fontWeight:700,fontSize:14}}>Plan alimentaire</div>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          {!editing&&hasPlan&&(
-            <BtnSm variant="ghost" onClick={saveAsTemplate}>
-              {templateSaved?"✓ Sauvegardé":"💾 Modèle"}
-            </BtnSm>
-          )}
-          {editing&&(
-            <BtnSm variant="ghost" onClick={()=>applyTemplate(false)}
-              style={!firestoreTemplate?{opacity:0.35,cursor:"default",pointerEvents:"none"}:{}}>
-              📋 Coller le template
-            </BtnSm>
-          )}
-          <BtnSm variant={editing?"ghost":"gold"} onClick={()=>editing?cancel():setEditing(true)}>{editing?"Annuler":"✏️ Modifier"}</BtnSm>
+      <div style={{position:"sticky",top:0,zIndex:20,background:"#080808ee",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderBottom:`1px solid ${C.line}`}}>
+        <div style={{maxWidth:980,margin:"0 auto",padding:wide?"16px 36px":"12px 16px",display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontFamily:G.fontD,fontSize:wide?26:22,fontWeight:800,letterSpacing:-.5,...ellipsis}}>{title}</div>
+            <div style={{fontSize:12,color:canSave?C.muted:ORANGE,marginTop:2}}>{!form.name.trim()?"Donne un nom au programme":total===0?"Ajoute au moins un exercice":`${form.weeks.length} sem. · ${total} exercices`}</div>
+          </div>
+          <Btn variant="ghost" size="sm" onClick={cancel}>Annuler</Btn>
+          <Btn size="sm" icon="check" disabled={!canSave} onClick={()=>onSave({...form,name:form.name.trim()})}>Enregistrer</Btn>
         </div>
       </div>
 
-      {editing?(
-        <>
-          {totalMacros.kcal>0&&(
-            <div style={{display:"flex",justifyContent:"space-around",background:G.bg3,borderRadius:10,padding:"10px 0",marginBottom:16,border:`1px solid ${G.border}`}}>
-              {[[rnd(totalMacros.kcal),"kcal",G.goldLight],[rnd1(totalMacros.protein)+"g","Prot.",G.goldLight],[rnd1(totalMacros.carbs)+"g","Gluc.",G.gold],[rnd1(totalMacros.fat)+"g","Lip.","#C9A84C"]].map(([v,l,c])=>(
-                <div key={l} style={{textAlign:"center"}}>
-                  <div style={{fontFamily:G.fontD,fontSize:20,fontWeight:800,color:c,lineHeight:1}}>{v}</div>
-                  <div style={{fontSize:10,color:G.grey,letterSpacing:.5,marginTop:3}}>{l}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {form.map(meal=>{
-            const mMacros=calcMacros(meal.items,foods);
+      <Pad max={980}>
+        <div style={{display:"grid",gridTemplateColumns:wide?"2fr 1fr 1fr":"1fr",gap:wide?12:0}}>
+          <Field label="Nom du programme"><TextInput value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Full body 3 j/sem"/></Field>
+          <Field label="Catégorie"><TextInput value={form.category||""} onChange={e=>setForm(p=>({...p,category:e.target.value}))} placeholder="Force, hypertrophie…"/></Field>
+          <Field label="Niveau"><Select value={form.level||"Intermédiaire"} onChange={e=>setForm(p=>({...p,level:e.target.value}))}>{LEVELS.map(l=><option key={l}>{l}</option>)}</Select></Field>
+        </div>
+
+        <SectionTitle style={{marginTop:10}}>Semaines</SectionTitle>
+        <div className="noscroll" style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
+          {form.weeks.map((w,i)=>{
+            const a=i===wi;
+            const n=w.days.reduce((s,d)=>s+d.exercises.length,0);
             return(
-              <div key={meal.id} style={{marginBottom:18}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                  <div style={{fontSize:12,color:G.gold,fontWeight:700}}>{meal.icon} {meal.label}</div>
-                  {meal.items.length>0&&<div style={{fontSize:11,color:G.grey}}>{rnd(mMacros.kcal)} kcal</div>}
-                </div>
-                {meal.items.map((item,idx)=>{
-                  const food=foods.find(f=>f.id===item.foodId);
-                  if(!food)return null;
-                  const im=calcMacros([item],foods);
-                  return(
-                    <div key={idx} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:G.bg3,borderRadius:8,padding:"8px 10px"}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:G.white,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{food.name}</div>
-                        <div style={{fontSize:11,color:G.grey,marginTop:2}}>{rnd(im.kcal)} kcal · P {rnd1(im.protein)}g · G {rnd1(im.carbs)}g · L {rnd1(im.fat)}g</div>
-                      </div>
-                      <input type="number" value={item.qty} min="0" onChange={e=>updateQty(meal.id,idx,e.target.value)}
-                        style={{width:56,background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"5px 6px",color:G.goldLight,fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
-                      <div style={{fontSize:11,color:G.grey,flexShrink:0}}>{food.unit==="g"?"g":"port."}</div>
-                      <button onClick={()=>removeItem(meal.id,idx)}
-                        style={{background:"none",border:"none",color:G.red,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 2px",flexShrink:0}}>×</button>
-                    </div>
-                  );
-                })}
-                <button onClick={()=>{setPickerMeal(meal.id);setSearch("");}}
-                  style={{width:"100%",background:"transparent",border:`1px dashed ${G.border}`,borderRadius:8,padding:"7px 0",color:G.grey,fontSize:12,cursor:"pointer",marginTop:meal.items.length?4:0}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=G.gold;e.currentTarget.style.color=G.gold;}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.grey;}}>
-                  + Ajouter un aliment
-                </button>
-                <textarea value={meal.note||""} onChange={e=>updateNote(meal.id,e.target.value)}
-                  placeholder="Note pour ce repas (préparation, timing, conseils…)"
-                  rows={2}
-                  style={{width:"100%",marginTop:8,background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,
-                    padding:"8px 10px",color:G.white,fontSize:12,fontFamily:G.font,resize:"vertical",
-                    outline:"none",boxSizing:"border-box",lineHeight:1.5}}
-                  onFocus={e=>e.currentTarget.style.borderColor=G.gold}
-                  onBlur={e=>e.currentTarget.style.borderColor=G.border}/>
-              </div>
-            );
-          })}
-          <Btn onClick={save} style={{width:"100%"}}>✓ Enregistrer le plan alimentaire</Btn>
-        </>
-      ):(
-        !hasPlan?(
-          <div style={{textAlign:"center",padding:"16px 0"}}>
-            <div style={{color:G.greyDim,fontSize:13,marginBottom:firestoreTemplate?14:0}}>Aucun plan alimentaire renseigné</div>
-            {firestoreTemplate&&(
-              <button onClick={()=>applyTemplate(true)}
-                style={{background:`linear-gradient(135deg,${G.gold}22,${G.gold}11)`,border:`1px solid ${G.gold}55`,
-                  borderRadius:10,padding:"12px 20px",color:G.goldLight,fontFamily:G.font,fontWeight:700,
-                  fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:8}}>
-                📋 Pré-remplir avec le modèle
+              <button key={i} type="button" onClick={()=>{setWi(i);setDi(0);}} style={{flexShrink:0,height:40,padding:"0 14px",borderRadius:12,cursor:"pointer",fontWeight:700,fontSize:13,
+                background:a?C.goldGrad:C.soft,color:a?G.bg:G.white,border:`1px solid ${a?"transparent":C.line2}`}}>
+                S{i+1}<span style={{opacity:.6,fontSize:11,marginLeft:5}}>{n}</span>
               </button>
-            )}
-          </div>
-        ):(
-          form.filter(m=>m.items.length>0).map(meal=>{
-            const mMacros=calcMacros(meal.items,foods);
-            return(
-              <div key={meal.id} style={{marginBottom:12,paddingBottom:12,borderBottom:`1px solid ${G.border}`}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                  <div style={{fontSize:11,color:G.gold,fontWeight:700,letterSpacing:.5,textTransform:"uppercase"}}>{meal.icon} {meal.label}</div>
-                  <div style={{fontSize:11,color:G.grey}}>{rnd(mMacros.kcal)} kcal</div>
-                </div>
-                {meal.items.map((item,idx)=>{
-                  const food=foods.find(f=>f.id===item.foodId);
-                  if(!food)return null;
-                  return(
-                    <div key={idx} style={{fontSize:13,color:G.white,marginBottom:3}}>
-                      {food.name} <span style={{color:G.grey}}>— {item.qty} {food.unit==="g"?"g":"port."}</span>
-                    </div>
-                  );
-                })}
-                {meal.note&&<div style={{marginTop:8,padding:"7px 10px",background:G.bg3,borderRadius:8,
-                  borderLeft:`3px solid ${G.gold}55`,fontSize:12,color:G.grey,lineHeight:1.5,whiteSpace:"pre-wrap"}}>
-                  {meal.note}
-                </div>}
-              </div>
-            );
-          })
-        )
-      )}
-
-      {pickerMeal&&(
-        <Modal onClose={()=>{setPickerMeal(null);setSearch("");}} title="Ajouter un aliment">
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un aliment..."
-            style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 12px",color:G.white,fontSize:14,outline:"none",marginBottom:12}}
-            onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border}/>
-          {filteredFoods.map(food=>(
-            <div key={food.id} onClick={()=>addItem(pickerMeal,food.id)}
-              style={{padding:"10px 12px",marginBottom:6,background:G.bg3,borderRadius:8,cursor:"pointer",border:`1px solid ${G.border}`}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=G.gold}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=G.border}>
-              <div style={{fontWeight:600,fontSize:13,color:G.white,marginBottom:2}}>{food.name}</div>
-              <div style={{fontSize:11,color:G.grey}}>
-                {food.kcal} kcal · {food.protein}g prot · {food.carbs}g gluc · {food.fat}g lip
-                <span style={{color:G.gold,marginLeft:6}}>/ {food.unit==="g"?"100g":"1 portion"}</span>
-              </div>
-            </div>
-          ))}
-          {filteredFoods.length===0&&<div style={{textAlign:"center",color:G.greyDim,padding:20}}>Aucun aliment trouvé</div>}
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-// ─── CLIENT DETAIL PANEL ──────────────────────────────────────────────────────
-function ClientDetailPanel({client,clients,setClients,programs,setPrograms,onViewProgram,onDelete,foods=FOODS_DB}){
-  const [tab,setTab]=useState("program");
-  const [editNut,setEditNut]=useState(false);
-  const [nutForm,setNutForm]=useState({...client.nutrition});
-  const [liveNut,setLiveNut]=useState(null);
-  const [editName,setEditName]=useState(false);
-  const [nameVal,setNameVal]=useState(client.name);
-  const [editTests,setEditTests]=useState(false);
-  const [testsForm,setTestsForm]=useState({...EMPTY_TESTS,...(client.tests||{})});
-
-  const cur=clients.find(c=>c.id===client.id)||client;
-  const upd=fn=>setClients(p=>p.map(c=>c.id===cur.id?fn(c):c));
-  const toggleProg=pid=>upd(c=>({...c,programs:c.programs.includes(pid)?c.programs.filter(x=>x!==pid):[...c.programs,pid]}));
-  const saveNut=()=>{upd(c=>({...c,nutrition:nutForm}));setEditNut(false);};
-  const saveName=()=>{upd(c=>({...c,name:nameVal}));setEditName(false);};
-  const saveTests=()=>{upd(c=>({...c,tests:testsForm}));setEditTests(false);};
-  const copyAndEdit=p=>{
-    const copy={...JSON.parse(JSON.stringify(p)),id:Date.now(),name:`${p.name} (${cur.name.split(" ")[0]})`,_copy:true};
-    setPrograms(prev=>[...prev,copy]);
-    upd(c=>({...c,programs:[...c.programs.filter(x=>x!==p.id),copy.id]}));
-    onViewProgram(copy,cur);
-  };
-
-  const assigned=programs.filter(p=>cur.programs.includes(p.id));
-  const unassigned=programs.filter(p=>!cur.programs.includes(p.id));
-
-  return(
-    <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
-      {/* Header */}
-      <div style={{padding:"20px 24px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:14}}>
-          <Av name={cur.name} color={cur.color} size={50}/>
-          <div style={{flex:1}}>
-            {editName?(
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <input value={nameVal} onChange={e=>setNameVal(e.target.value)} autoFocus
-                  style={{background:G.bg3,border:`1px solid ${G.gold}`,borderRadius:6,padding:"6px 10px",color:G.white,fontSize:18,fontWeight:700,outline:"none",flex:1}}/>
-                <BtnSm onClick={saveName}>✓</BtnSm>
-                <BtnSm variant="ghost" onClick={()=>setEditName(false)}>✕</BtnSm>
-              </div>
-            ):(
-              <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800,letterSpacing:-.5}}>{cur.name}</div>
-            )}
-            <div style={{fontSize:12,color:G.grey,marginTop:3}}>{cur.goal} · {cur.sessions} séances</div>
-            <div style={{display:"inline-block",marginTop:5,background:G.bg3,border:`1px solid ${G.border}`,borderRadius:4,padding:"2px 8px",fontSize:11,color:G.gold,fontFamily:"monospace",letterSpacing:2}}>{cur.code}</div>
-          </div>
-          <div style={{display:"flex",gap:6,flexShrink:0}}>
-            <BtnSm variant="ghost" onClick={()=>{setNameVal(cur.name);setEditName(true);}}>✏️</BtnSm>
-            <BtnSm variant="danger" onClick={()=>confirm(`Supprimer ${cur.name} ?`)&&onDelete(cur.id)}>🗑</BtnSm>
-          </div>
-        </div>
-      </div>
-      {/* Tabs */}
-      <div style={{display:"flex",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-        {[["program","Programme"],["perfs","Performances"],["nutrition","Nutrition"],["suivi","Historique"]].map(([k,l])=>(
-          <button key={k} onClick={()=>setTab(k)} style={{padding:"10px 20px",background:"none",border:"none",borderBottom:tab===k?`2px solid ${G.goldLight}`:"2px solid transparent",color:tab===k?G.goldLight:G.grey,cursor:"pointer",fontSize:13,fontWeight:tab===k?700:500,marginBottom:-1}}>
-            {l}
-          </button>
-        ))}
-      </div>
-      {/* Content */}
-      <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
-        {tab==="program"&&(
-          <>
-            {assigned.length===0&&<Empty text="Aucun programme assigné" icon="▦"/>}
-            {assigned.map(p=>(
-              <div key={p.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${G.border}`}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                  <div style={{fontWeight:700}}>{p.name}{p._copy&&<span style={{fontSize:10,color:G.gold,marginLeft:8,fontWeight:400}}>copie perso</span>}</div>
-                  <div style={{display:"flex",gap:6}}>
-                    <BtnSm onClick={()=>copyAndEdit(p)}>✏️ Personnaliser</BtnSm>
-                    <BtnSm variant="danger" onClick={()=>toggleProg(p.id)}>Retirer</BtnSm>
-                  </div>
-                </div>
-                <div style={{fontSize:12,color:G.grey,marginBottom:10}}>{p.weeks.length} semaine{p.weeks.length>1?"s":""} · {p.weeks[0]?.days.length||0} jours/sem</div>
-                <BtnSm onClick={()=>onViewProgram(p,cur)}>Voir séances & résultats →</BtnSm>
-              </div>
-            ))}
-            {/* Section "Assigner un programme" */}
-            {unassigned.length>0&&(
-              <>
-                <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",margin:"20px 0 10px"}}>Assigner un programme</div>
-                {unassigned.map(p=>(
-                  <div key={p.id} style={{background:G.bg2,borderRadius:10,padding:"12px 14px",marginBottom:8,border:`1px solid ${G.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div><div style={{fontWeight:600,fontSize:13}}>{p.name}</div><div style={{fontSize:11,color:G.grey,marginTop:2}}>{p.category} · {p.level}</div></div>
-                    <BtnSm onClick={()=>toggleProg(p.id)}>+ Assigner</BtnSm>
-                  </div>
-                ))}
-              </>
-            )}
-          </>
-        )}
-        {tab==="perfs"&&(()=>{
-          const t=cur.tests||{};
-          const tf=k=>v=>setTestsForm(p=>({...p,[k]:v}));
-          const SECTIONS=[
-            {label:"❤️ Cardio",fields:[["fcmax","FCmax","bpm"],["vma","VMA","km/h"]]},
-            {label:"🏋️ Force (1RM estimé)",fields:[["rm_squat","Squat","kg"],["rm_bench","Développé couché","kg"],["rm_sdt","Soulevé de terre","kg"]]},
-            {label:"💪 Tests corps",fields:[["tractions_max","Tractions max","reps"],["pompes_max","Pompes max","reps"],["gainage_max","Gainage planche","sec"]]},
-          ];
-          return(
-            <div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-                <div style={{fontFamily:G.fontD,fontSize:18,fontWeight:800,letterSpacing:.5,color:G.goldLight}}>Performances & Tests</div>
-                <div style={{display:"flex",gap:6}}>
-                  {editTests?(
-                    <>
-                      <BtnSm variant="ghost" onClick={()=>{setTestsForm({...EMPTY_TESTS,...(cur.tests||{})});setEditTests(false);}}>Annuler</BtnSm>
-                      <BtnSm onClick={saveTests}>✓ Enregistrer</BtnSm>
-                    </>
-                  ):(
-                    <BtnSm variant="ghost" onClick={()=>{setTestsForm({...EMPTY_TESTS,...(cur.tests||{})});setEditTests(true);}}>✏️ Modifier</BtnSm>
-                  )}
-                </div>
-              </div>
-              {SECTIONS.map(sec=>(
-                <div key={sec.label} style={{marginBottom:20}}>
-                  <div style={{fontSize:11,color:G.gold,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>{sec.label}</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-                    {sec.fields.map(([key,label,unit])=>(
-                      <div key={key} style={{background:G.bg2,borderRadius:10,padding:"12px 14px",border:`1px solid ${G.border}`}}>
-                        <div style={{fontSize:10,color:G.grey,letterSpacing:.8,textTransform:"uppercase",marginBottom:6}}>{label}</div>
-                        {editTests?(
-                          <div style={{display:"flex",alignItems:"center",gap:6}}>
-                            <input type="number" value={testsForm[key]} placeholder="—"
-                              onChange={e=>tf(key)(e.target.value)}
-                              style={{flex:1,background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"6px 8px",color:G.white,fontSize:15,fontWeight:700,outline:"none",textAlign:"center"}}/>
-                            <span style={{fontSize:11,color:G.grey,flexShrink:0}}>{unit}</span>
-                          </div>
-                        ):(
-                          <div style={{display:"flex",alignItems:"baseline",gap:5}}>
-                            <span style={{fontFamily:G.fontD,fontSize:24,fontWeight:800,color:t[key]?G.goldLight:G.greyDim}}>{t[key]||"—"}</span>
-                            {t[key]&&<span style={{fontSize:11,color:G.grey}}>{unit}</span>}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <div style={{marginBottom:20}}>
-                <div style={{fontSize:11,color:G.gold,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>📝 Notes</div>
-                {editTests?(
-                  <textarea value={testsForm.notes||""} onChange={e=>tf("notes")(e.target.value)} rows={3} placeholder="Observations, conditions du test, date..."
-                    style={{width:"100%",background:G.bg2,border:`1px solid ${G.border}`,borderRadius:10,padding:12,color:G.white,fontSize:13,outline:"none",resize:"vertical",fontFamily:G.font}}/>
-                ):(
-                  <div style={{background:G.bg2,borderRadius:10,padding:12,border:`1px solid ${G.border}`,fontSize:13,color:t.notes?G.white:G.greyDim,minHeight:48}}>
-                    {t.notes||"Aucune note"}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })()}
-        {tab==="nutrition"&&(()=>{
-          const storedItems=(cur.mealPlan?.meals||[]).flatMap(m=>m.items||[]);
-          const storedCalc=storedItems.length>0?calcMacros(storedItems,foods):null;
-          const src=liveNut||storedCalc;
-          const cal=src?rnd(src.kcal):cur.nutrition?.calories||0;
-          const prot=src?rnd1(src.protein):cur.nutrition?.proteins||0;
-          const gluc=src?rnd1(src.carbs):cur.nutrition?.carbs||0;
-          const lip=src?rnd1(src.fat):cur.nutrition?.fats||0;
-          return(
-            <>
-              <div style={{background:G.bg2,borderRadius:12,padding:20,border:`1px solid ${G.border}`,marginBottom:12}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:liveNut?6:18}}>
-                  <div>
-                    <div style={{fontWeight:700}}>Objectifs nutritionnels</div>
-                    {liveNut&&<div style={{fontSize:10,color:G.gold,marginTop:3}}>● Aperçu en temps réel</div>}
-                  </div>
-                  <BtnSm variant={editNut?"ghost":"gold"} onClick={()=>{setNutForm({...cur.nutrition});setEditNut(!editNut);}}>{editNut?"Annuler":"Notes"}</BtnSm>
-                </div>
-                {editNut&&(
-                  <>
-                    <Txa label="Notes / Allergies / Préférences" value={nutForm.notes||""} placeholder="Allergies, préférences..." onChange={e=>setNutForm(p=>({...p,notes:e.target.value}))}/>
-                    <Btn onClick={saveNut} style={{width:"100%",marginTop:4}}>Enregistrer les notes</Btn>
-                  </>
-                )}
-                <div style={{textAlign:"center",padding:"12px 0 20px"}}>
-                  <div style={{fontFamily:G.fontD,fontSize:52,fontWeight:800,color:G.goldLight,lineHeight:1,transition:"all .3s"}}>{cal}</div>
-                  <div style={{fontSize:11,color:G.grey,letterSpacing:2,textTransform:"uppercase",marginTop:4}}>kcal / jour</div>
-                </div>
-                <MacroBar label="Protéines" value={prot} max={300} color={G.goldLight}/>
-                <MacroBar label="Glucides" value={gluc} max={500} color={G.gold}/>
-                <MacroBar label="Lipides" value={lip} max={150} color="#C9A84C66"/>
-                {cur.nutrition?.notes&&<div style={{marginTop:14,padding:12,background:G.bg3,borderRadius:8,fontSize:13,color:G.grey,fontStyle:"italic",borderLeft:`3px solid ${G.gold}44`}}>📝 {cur.nutrition.notes}</div>}
-              </div>
-              <div style={{background:G.bg2,borderRadius:12,padding:20,border:`1px solid ${G.border}`}}>
-                <MealPlanEditor
-                  foods={foods}
-                  mealPlan={cur.mealPlan}
-                  onLiveChange={setLiveNut}
-                  onSave={(mp,totals)=>{
-                    setLiveNut(null);
-                    upd(c=>({...c,mealPlan:mp,...(totals.kcal>0?{nutrition:{...c.nutrition,calories:rnd(totals.kcal),proteins:rnd1(totals.protein),carbs:rnd1(totals.carbs),fats:rnd1(totals.fat)}}:{})}));
-                  }}/>
-              </div>
-            </>
-          );
-        })()}
-        {tab==="suivi"&&(
-          <>
-            <div style={{fontSize:11,color:G.grey,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:14}}>
-              {cur.sessionLogs?.length||0} séance{cur.sessionLogs?.length!==1?"s":""} enregistrée{cur.sessionLogs?.length!==1?"s":""}
-            </div>
-            {(!cur.sessionLogs||cur.sessionLogs.length===0)&&<Empty text="Aucune séance enregistrée" icon="◎"/>}
-            {cur.sessionLogs?.map(log=>{
-              const prog=programs.find(p=>p.id===log.programId);
-              return(
-                <div key={log.id} style={{background:G.bg2,borderRadius:12,padding:16,marginBottom:10,border:`1px solid ${log.completed?G.green+"44":G.border}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                    <div>
-                      <div style={{fontWeight:700,fontSize:13}}>{log.dayLabel||"Séance"}</div>
-                      <div style={{fontSize:11,color:G.grey,marginTop:3}}>{log.date} · {prog?.name||"Programme"}</div>
-                      {log.notes&&<div style={{fontSize:12,color:G.grey,marginTop:4,fontStyle:"italic"}}>"{log.notes}"</div>}
-                    </div>
-                    {log.completed&&<span style={{color:G.green,fontSize:11,fontWeight:700,background:G.green+"15",border:`1px solid ${G.green}33`,borderRadius:4,padding:"2px 8px"}}>✓ Complétée</span>}
-                  </div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                    {log.exercises?.slice(0,5).map((ex,ei)=>(
-                      <div key={ei} style={{background:G.bg3,borderRadius:6,padding:"4px 10px",fontSize:11,color:G.grey,border:`1px solid ${G.border}`}}>
-                        {ex.name}{ex.sensation?` ${ex.sensation}`:""}
-                      </div>
-                    ))}
-                    {(log.exercises?.length||0)>5&&<div style={{background:G.bg3,borderRadius:6,padding:"4px 10px",fontSize:11,color:G.greyDim}}>+{log.exercises.length-5}</div>}
-                  </div>
-                </div>
-              );
-            })}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── FOODS MANAGER ────────────────────────────────────────────────────────────
-const EMPTY_FOOD=()=>({id:"",name:"",unit:"g",kcal:0,protein:0,carbs:0,fat:0});
-function FoodsManager({foods,setFoods}){
-  const [editing,setEditing]=useState(null);
-  const [form,setForm]=useState(EMPTY_FOOD());
-  const [search,setSearch]=useState("");
-  const [confirmDel,setConfirmDel]=useState(null);
-
-  const openNew=()=>{setForm(EMPTY_FOOD());setEditing("new");};
-  const openEdit=f=>{setForm({...f});setEditing(f);};
-  const f=k=>v=>setForm(p=>({...p,[k]:v}));
-
-  const save=()=>{
-    const entry={
-      ...form,
-      id:editing==="new"?(form.name.toLowerCase().replace(/[^a-z0-9]/g,"_").slice(0,30)+"_"+Date.now()):form.id,
-      kcal:parseFloat(form.kcal)||0,
-      protein:parseFloat(form.protein)||0,
-      carbs:parseFloat(form.carbs)||0,
-      fat:parseFloat(form.fat)||0,
-    };
-    if(!entry.name.trim())return;
-    if(editing==="new") setFoods(p=>[...p,entry]);
-    else setFoods(p=>p.map(x=>x.id===entry.id?entry:x));
-    setEditing(null);
-  };
-  const del=id=>{setFoods(p=>p.filter(x=>x.id!==id));setConfirmDel(null);};
-
-  const filtered=foods.filter(f=>f.name.toLowerCase().includes(search.toLowerCase()));
-
-  return(
-    <div style={{height:"100%",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <div style={{padding:"20px 24px",borderBottom:`1px solid ${G.border}`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800,letterSpacing:-.5}}>ALIMENTS</div>
-        <Btn onClick={openNew} style={{padding:"8px 18px"}}>+ Ajouter un aliment</Btn>
-      </div>
-      <div style={{padding:"16px 24px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un aliment..."
-          style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 14px",color:G.white,fontSize:14,outline:"none"}}
-          onFocus={e=>e.target.style.borderColor=G.gold} onBlur={e=>e.target.style.borderColor=G.border}/>
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"16px 24px"}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:10}}>
-          {filtered.map(food=>(
-            <div key={food.id} style={{background:G.bg2,borderRadius:12,padding:"14px 16px",border:`1px solid ${G.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:600,fontSize:14,color:G.white,marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{food.name}</div>
-                <div style={{fontSize:12,color:G.grey}}>
-                  {food.kcal} kcal · P {food.protein}g · G {food.carbs}g · L {food.fat}g
-                  <span style={{color:G.gold,marginLeft:8}}>/ {food.unit==="g"?"100g":"portion"}</span>
-                </div>
-              </div>
-              <div style={{display:"flex",gap:6,flexShrink:0}}>
-                <BtnSm onClick={()=>openEdit(food)}>✏️</BtnSm>
-                <BtnSm variant="ghost" onClick={()=>setConfirmDel(food.id)} style={{color:G.red,borderColor:G.red+"44"}}>🗑</BtnSm>
-              </div>
-            </div>
-          ))}
-        </div>
-        {filtered.length===0&&<div style={{textAlign:"center",color:G.greyDim,padding:"48px 0",fontSize:14}}>Aucun aliment trouvé</div>}
-      </div>
-
-      {editing&&(
-        <Modal onClose={()=>setEditing(null)} title={editing==="new"?"Nouvel aliment":"Modifier l'aliment"}>
-          <Inp label="Nom de l'aliment" value={form.name} onChange={e=>f("name")(e.target.value)} placeholder="Ex: Riz basmati cuit"/>
-          <div style={{marginBottom:14}}>
-            <Label>Type de mesure</Label>
-            <div style={{display:"flex",gap:8}}>
-              {[["g","Par 100g"],["portion","Par portion"]].map(([val,label])=>(
-                <button key={val} onClick={()=>f("unit")(val)}
-                  style={{flex:1,padding:"10px 0",borderRadius:8,border:`1px solid ${form.unit===val?G.gold:G.border}`,background:form.unit===val?G.gold+"22":"transparent",color:form.unit===val?G.goldLight:G.grey,fontWeight:700,fontSize:13,cursor:"pointer"}}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <Inp label={`Calories (kcal/${form.unit==="g"?"100g":"portion"})`} type="number" value={form.kcal} onChange={e=>f("kcal")(e.target.value)}/>
-            <Inp label={`Protéines (g)`} type="number" value={form.protein} onChange={e=>f("protein")(e.target.value)}/>
-            <Inp label={`Glucides (g)`} type="number" value={form.carbs} onChange={e=>f("carbs")(e.target.value)}/>
-            <Inp label={`Lipides (g)`} type="number" value={form.fat} onChange={e=>f("fat")(e.target.value)}/>
-          </div>
-          {form.name.trim()&&(
-            <div style={{marginBottom:14,padding:12,background:G.bg3,borderRadius:8,fontSize:12,color:G.grey}}>
-              Aperçu : <span style={{color:G.goldLight,fontWeight:700}}>{form.kcal} kcal</span> · P {form.protein}g · G {form.carbs}g · L {form.fat}g / {form.unit==="g"?"100g":"portion"}
-            </div>
-          )}
-          <Btn onClick={save} style={{width:"100%"}}>{editing==="new"?"Ajouter l'aliment":"Enregistrer les modifications"}</Btn>
-        </Modal>
-      )}
-
-      {confirmDel&&(
-        <Modal onClose={()=>setConfirmDel(null)} title="Supprimer l'aliment">
-          <div style={{color:G.grey,fontSize:14,marginBottom:20}}>
-            Supprimer <strong style={{color:G.white}}>{foods.find(f=>f.id===confirmDel)?.name}</strong> ?
-            <br/><span style={{fontSize:12}}>Les plans alimentaires utilisant cet aliment ne s'afficheront plus correctement.</span>
-          </div>
-          <div style={{display:"flex",gap:10}}>
-            <Btn onClick={()=>del(confirmDel)} style={{background:G.red+"22",borderColor:G.red,color:G.red,flex:1}}>Supprimer</Btn>
-            <BtnSm onClick={()=>setConfirmDel(null)}>Annuler</BtnSm>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-// ─── CLIENTS VIEW ─────────────────────────────────────────────────────────────
-function ClientsView({clients,setClients,programs,setPrograms,onViewProgram,initialClient,foods=FOODS_DB}){
-  const [sel,setSel]=useState(initialClient||null);
-  const [showNew,setShowNew]=useState(false);
-  const [search,setSearch]=useState("");
-  const [newForm,setNewForm]=useState({name:"",goal:"",calories:2000,proteins:150,carbs:220,fats:70,notes:""});
-
-  useEffect(()=>{ if(initialClient) setSel(initialClient); },[initialClient?.id]); // eslint-disable-line
-
-  const filtered=clients.filter(c=>!search||c.name.toLowerCase().includes(search.toLowerCase())||c.goal.toLowerCase().includes(search.toLowerCase()));
-  const selClient=sel?(clients.find(c=>c.id===sel.id)||sel):null;
-
-  const createClient=()=>{
-    if(!newForm.name)return;
-    const nc={id:Date.now(),name:newForm.name,code:genCode(newForm.name,clients),goal:newForm.goal||"Objectif à définir",
-      since:new Date().toLocaleDateString("fr-FR",{month:"short",year:"numeric"}),sessions:0,
-      color:["#E8C547","#C9A84C","#52C07A","#5285C0","#C05252","#9B59B6"][clients.length%6],
-      programs:[],sessionLogs:[],
-      nutrition:{calories:newForm.calories,proteins:newForm.proteins,carbs:newForm.carbs,fats:newForm.fats,notes:newForm.notes}};
-    setClients(p=>[...p,nc]);
-    setSel(nc);
-    setShowNew(false);
-    setNewForm({name:"",goal:"",calories:2000,proteins:150,carbs:220,fats:70,notes:""});
-  };
-  const deleteClient=id=>{setClients(p=>p.filter(c=>c.id!==id));setSel(null);};
-
-  return(
-    <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
-      {/* Left list */}
-      <div style={{width:290,borderRight:`1px solid ${G.border}`,display:"flex",flexDirection:"column",flexShrink:0}}>
-        <div style={{padding:"20px 14px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <div style={{fontFamily:G.fontD,fontSize:20,fontWeight:800,letterSpacing:-.5}}>CLIENTS <span style={{fontSize:13,color:G.grey,fontFamily:G.font,fontWeight:400}}>({clients.length})</span></div>
-            <BtnSm onClick={()=>setShowNew(true)}>+ Nouveau</BtnSm>
-          </div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..."
-            style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 12px",color:G.white,fontSize:13,outline:"none"}}/>
-        </div>
-        <div style={{flex:1,overflowY:"auto",padding:"6px 8px"}}>
-          {filtered.length===0&&<Empty text="Aucun client" icon="◉"/>}
-          {filtered.map(c=>(
-            <div key={c.id} onClick={()=>setSel(c)}
-              style={{borderRadius:10,padding:"11px 12px",marginBottom:4,border:`1px solid ${selClient?.id===c.id?G.gold+"44":G.border}`,borderLeft:`3px solid ${c.color}`,background:selClient?.id===c.id?G.gold+"0a":G.bg2,cursor:"pointer",display:"flex",alignItems:"center",gap:10,transition:"background .1s"}}
-              onMouseEnter={e=>{if(selClient?.id!==c.id)e.currentTarget.style.background=G.bg3;}}
-              onMouseLeave={e=>{if(selClient?.id!==c.id)e.currentTarget.style.background=G.bg2;}}>
-              <Av name={c.name} color={c.color} size={32}/>
-              <div style={{flex:1,overflow:"hidden"}}>
-                <div style={{fontWeight:700,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</div>
-                <div style={{fontSize:11,color:G.grey,marginTop:1}}>{c.sessions} séances</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      {/* Right detail */}
-      <div style={{flex:1,overflow:"hidden",background:G.bg}}>
-        {selClient?(
-          <ClientDetailPanel key={selClient.id} client={selClient} clients={clients} setClients={setClients}
-            programs={programs} setPrograms={setPrograms} onViewProgram={onViewProgram} onDelete={deleteClient} foods={foods}/>
-        ):(
-          <Empty text="Sélectionne un client pour voir son profil" icon="◉"/>
-        )}
-      </div>
-      {/* New client modal */}
-      {showNew&&(
-        <Modal onClose={()=>setShowNew(false)} title="Nouveau client">
-          <Inp label="Nom complet" placeholder="Marie Dupont" value={newForm.name} onChange={e=>setNewForm(p=>({...p,name:e.target.value}))}/>
-          <Inp label="Objectif" placeholder="Perte de poids, prise de masse..." value={newForm.goal} onChange={e=>setNewForm(p=>({...p,goal:e.target.value}))}/>
-          <div style={{fontSize:12,color:G.grey,fontWeight:600,letterSpacing:.8,textTransform:"uppercase",margin:"4px 0 12px"}}>Nutrition de départ</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            {[["Calories (kcal)","calories"],["Protéines (g)","proteins"],["Glucides (g)","carbs"],["Lipides (g)","fats"]].map(([l,k])=>(
-              <Inp key={k} label={l} type="number" value={newForm[k]} onChange={e=>setNewForm(p=>({...p,[k]:Number(e.target.value)}))}/>
-            ))}
-          </div>
-          <Txa label="Notes nutrition" placeholder="Allergies, préférences..." value={newForm.notes} onChange={e=>setNewForm(p=>({...p,notes:e.target.value}))}/>
-          <div style={{display:"flex",gap:10,marginTop:4}}>
-            <Btn variant="ghost" onClick={()=>setShowNew(false)} style={{flex:1}}>Annuler</Btn>
-            <Btn onClick={createClient} disabled={!newForm.name} style={{flex:2}}>Créer le client</Btn>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-// ─── PROGRAM DETAIL (desktop) ─────────────────────────────────────────────────
-function ProgramDetailView({program,programs,exercises,onEdit,client,onBack}){
-  const [weekIdx,setWeekIdx]=useState(0);
-  const [dayIdx,setDayIdx]=useState(0);
-  const [playing,setPlaying]=useState(null);
-  const cur=programs.find(p=>p.id===program.id)||program;
-  const week=cur.weeks[weekIdx];
-  const day=week?.days[dayIdx];
-  const dayLog=client?.sessionLogs?.find(l=>l.programId===cur.id&&l.weekIdx===weekIdx&&l.dayIdx===dayIdx&&l.completed);
-  return(
-    <div style={{height:"100%",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <div style={{padding:"20px 24px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-          <div>
-            {onBack&&<button onClick={onBack} style={{background:"none",border:"none",color:G.gold,cursor:"pointer",fontSize:12,fontWeight:600,padding:"0 0 8px",display:"flex",alignItems:"center",gap:5}}>← {client?client.name.split(" ")[0]:"Retour"}</button>}
-            <div style={{fontFamily:G.fontD,fontSize:26,fontWeight:800,letterSpacing:-.5}}>{cur.name}</div>
-            <div style={{display:"flex",gap:6,marginTop:6}}>
-              {[cur.category,cur.level,`${cur.weeks.length} semaine${cur.weeks.length>1?"s":""}`].filter(Boolean).map(t=><Tag key={t} text={t} color={G.grey}/>)}
-              {client&&<Tag text={`Séances: ${client.sessions}`} color={G.green}/>}
-            </div>
-          </div>
-          {onEdit&&<BtnSm onClick={()=>onEdit(cur)}>✏️ Modifier</BtnSm>}
-        </div>
-      </div>
-      <div style={{padding:"12px 24px 0",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-        <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:10}}>
-          {cur.weeks.map((w,i)=>(
-            <button key={i} onClick={()=>{setWeekIdx(i);setDayIdx(0);setPlaying(null);}}
-              style={{flexShrink:0,padding:"7px 14px",background:weekIdx===i?G.goldLight+"22":G.bg3,color:weekIdx===i?G.goldLight:G.grey,border:`1px solid ${weekIdx===i?G.goldLight+"55":G.border}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-              {w.label}
-            </button>
-          ))}
-        </div>
-        {week&&(
-          <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:10}}>
-            {week.days.map((d,i)=>{
-              const done=client?.sessionLogs?.some(l=>l.programId===cur.id&&l.weekIdx===weekIdx&&l.dayIdx===i&&l.completed);
-              return(
-                <button key={i} onClick={()=>{setDayIdx(i);setPlaying(null);}}
-                  style={{flexShrink:0,padding:"6px 14px",background:dayIdx===i?G.bg4:G.bg3,color:dayIdx===i?G.white:done?G.green:G.grey,border:`1px solid ${dayIdx===i?G.border+"88":done?G.green+"55":G.border}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                  {done&&<span style={{marginRight:4}}>✓</span>}{d.label} <span style={{fontSize:10,opacity:.5}}>({d.exercises.length})</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
-        {dayLog&&(
-          <div style={{background:G.green+"15",border:`1px solid ${G.green}44`,borderRadius:10,padding:"10px 14px",marginBottom:18,display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:20}}>✓</span>
-            <div>
-              <div style={{fontSize:12,fontWeight:700,color:G.green}}>Séance complétée</div>
-              <div style={{fontSize:11,color:G.grey,marginTop:2}}>{dayLog.date}{dayLog.notes?` · "${dayLog.notes}"`:""}</div>
-            </div>
-          </div>
-        )}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-          {day?.exercises.map((pe,i)=>{
-            const ex=exercises.find(e=>e.id===pe.exId);
-            if(!ex)return null;
-            const key=`${weekIdx}-${dayIdx}-${i}`;
-            const clientEx=dayLog?.exercises?.find(e=>e.exId===pe.exId);
-            return(
-              <div key={i} style={{background:G.bg2,borderRadius:12,padding:16,border:`1px solid ${clientEx?G.green+"44":G.border}`}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700,fontSize:14}}><span style={{color:G.gold,fontFamily:G.fontD,marginRight:6}}>{i+1}.</span>{ex.name}</div>
-                    <div style={{fontSize:12,color:G.grey,marginTop:4}}>{pe.sets} séries × {pe.reps} — repos {pe.rest}</div>
-                    {pe.targetLoad&&(()=>{
-                      const comp=computeLoad(pe,client?.tests);
-                      return(
-                        <div style={{fontSize:12,color:G.goldLight,marginTop:3}}>
-                          🎯{" "}
-                          {comp
-                            ?<><span style={{color:G.white,fontWeight:700}}>{comp.value} {comp.unit}</span><span style={{color:G.grey,marginLeft:5}}>({comp.pct}% — {comp.label.replace("% ","")})</span></>
-                            :<span>{pe.targetLoad}{pe.loadRef&&pe.loadRef!=="none"&&<span style={{color:G.grey,marginLeft:4}}>— {LOAD_REFS.find(r=>r.id===pe.loadRef)?.label}</span>}</span>
-                          }
-                        </div>
-                      );
-                    })()}
-                    {(pe.note||ex.notes)&&<div style={{fontSize:11,color:G.gold+"88",marginTop:4}}>📝 {pe.note||ex.notes}</div>}
-                    <div style={{marginTop:6}}><Tag text={ex.muscle} color={G.grey}/></div>
-                  </div>
-                  {ex.videoUrl&&<BtnSm variant="ghost" onClick={()=>setPlaying(playing===key?null:key)}>{playing===key?"▼":"▶"}</BtnSm>}
-                </div>
-                {playing===key&&ex.videoUrl&&(
-                  <div style={{position:"relative",paddingBottom:"56.25%",borderRadius:8,overflow:"hidden",background:"#000",marginTop:10}}>
-                    <iframe style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={ex.videoUrl} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
-                  </div>
-                )}
-                {clientEx&&(
-                  <div style={{marginTop:10,background:G.bg3,borderRadius:8,padding:10,border:`1px solid ${G.green}33`}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                      <div style={{fontSize:10,color:G.green,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Résultats client</div>
-                      {clientEx.sensation&&<span style={{fontSize:18}}>{clientEx.sensation}</span>}
-                    </div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                      {clientEx.sets.map((s,si)=>(
-                        <div key={si} style={{background:G.bg4,borderRadius:6,padding:"5px 10px",border:`1px solid ${G.border}`,textAlign:"center",minWidth:54}}>
-                          <div style={{fontSize:10,color:G.grey,marginBottom:2}}>S{si+1}</div>
-                          <div style={{fontSize:13,fontWeight:800,color:s.load?G.goldLight:G.greyDim}}>{s.load||"—"}</div>
-                          <div style={{fontSize:10,color:G.grey}}>{s.reps}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
             );
           })}
+          <button type="button" onClick={addWeek} style={{flexShrink:0,height:40,padding:"0 14px",borderRadius:12,cursor:"pointer",fontWeight:700,fontSize:13,background:"transparent",color:G.goldLight,border:`1px dashed ${G.gold}66`,display:"flex",alignItems:"center",gap:6}}>
+            <Icon name="plus" size={15}/>Semaine
+          </button>
         </div>
-        {(!day||day.exercises.length===0)&&<Empty text="Aucun exercice dans cette séance" icon="▦"/>}
-      </div>
-    </div>
-  );
-}
 
-// ─── PROGRAM FORM (new / edit) ────────────────────────────────────────────────
-function ProgramForm({init,exercises,onSave,onCancel,title}){
-  const [form,setForm]=useState(init);
-  const [weekIdx,setWeekIdx]=useState(0);
-  const [dayIdx,setDayIdx]=useState(0);
-  const [picker,setPicker]=useState(false);
-  const [filter,setFilter]=useState("Tous");
-  const week=form.weeks[weekIdx];
-  const day=week?.days[dayIdx];
-  const filtered=exercises.filter(e=>filter==="Tous"||e.muscle===filter);
-  const addWeek=()=>{if(form.weeks.length>=12)return;const n=form.weeks.length+1;setForm(p=>({...p,weeks:[...p.weeks,{label:`Semaine ${n}`,days:[{label:"Séance A",exercises:[]}]}]}));setWeekIdx(form.weeks.length);setDayIdx(0);};
-  const removeWeek=wi=>{if(form.weeks.length<=1)return;setForm(p=>({...p,weeks:p.weeks.filter((_,i)=>i!==wi)}));setWeekIdx(Math.max(0,weekIdx-(wi<=weekIdx?1:0)));setDayIdx(0);};
-  const duplicateWeek=()=>{if(form.weeks.length>=12)return;const copy=JSON.parse(JSON.stringify(form.weeks[weekIdx]));copy.label=copy.label+" (copie)";const nw=[...form.weeks];nw.splice(weekIdx+1,0,copy);setForm(p=>({...p,weeks:nw}));setWeekIdx(weekIdx+1);setDayIdx(0);};
-  const addDay=()=>{if(week.days.length>=7)return;const labels=["A","B","C","D","E","F","G"];const nd={label:`Séance ${labels[week.days.length]||week.days.length+1}`,exercises:[]};setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:[...w.days,nd]})}));setDayIdx(week.days.length);};
-  const removeDay=di=>{if(week.days.length<=1)return;setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.filter((_,j)=>j!==di)})}));setDayIdx(Math.max(0,dayIdx-(di<=dayIdx?1:0)));};
-  const updateLabel=(type,idx,val)=>{if(type==="week")setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==idx?w:{...w,label:val})}));else setForm(p=>({...p,weeks:p.weeks.map((w,i)=>i!==weekIdx?w:{...w,days:w.days.map((d,j)=>j!==idx?d:{...d,label:val})})}));};
-  const toggleEx=ex=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.find(e=>e.exId===ex.id)?d.exercises.filter(e=>e.exId!==ex.id):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:"",loadRef:"none",note:""}]})})}));};
-  const updateExField=(exId,field,val)=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:d.exercises.map(e=>e.exId===exId?{...e,[field]:val}:e)})})}));};
-  const moveEx=(from,to)=>{setForm(p=>({...p,weeks:p.weeks.map((w,wi)=>wi!==weekIdx?w:{...w,days:w.days.map((d,di)=>di!==dayIdx?d:{...d,exercises:(()=>{const a=[...d.exercises];const[item]=a.splice(from,1);a.splice(to,0,item);return a;})()})})}));};
-  const totalEx=form.weeks.reduce((a,w)=>a+w.days.reduce((b,d)=>b+d.exercises.length,0),0);
-  return(
-    <div style={{height:"100%",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <div style={{padding:"20px 24px",borderBottom:`1px solid ${G.border}`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontFamily:G.fontD,fontSize:22,fontWeight:800,letterSpacing:-.5}}>{title}</div>
-        <div style={{display:"flex",gap:10}}>
-          <Btn variant="ghost" onClick={onCancel} style={{padding:"8px 16px"}}>Annuler</Btn>
-          <Btn onClick={()=>onSave(form)} disabled={!form.name||totalEx===0} style={{padding:"8px 20px"}}>✓ Enregistrer</Btn>
-        </div>
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
-        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:14,marginBottom:8}}>
-          <Inp label="Nom du programme" placeholder="Full Body 3j/sem" value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))}/>
-          <Inp label="Catégorie" placeholder="Force, PPL..." value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))}/>
-          <div style={{marginBottom:14}}>
-            <Label>Niveau</Label>
-            <select value={form.level} onChange={e=>setForm(p=>({...p,level:e.target.value}))}
-              style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 14px",color:G.white,fontSize:13,outline:"none"}}>
-              {["Débutant","Intermédiaire","Avancé","Tous niveaux"].map(l=><option key={l}>{l}</option>)}
-            </select>
-          </div>
-        </div>
-        {/* Week tabs */}
-        <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,marginBottom:16,alignItems:"center"}}>
-          {form.weeks.map((w,i)=>(
-            <button key={i} onClick={()=>{setWeekIdx(i);setDayIdx(0);}}
-              style={{flexShrink:0,padding:"7px 14px",background:weekIdx===i?G.goldLight+"22":G.bg3,color:weekIdx===i?G.goldLight:G.grey,border:`1px solid ${weekIdx===i?G.goldLight+"55":G.border}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-              S{i+1} <span style={{fontSize:10,opacity:.6}}>({w.days.reduce((a,d)=>a+d.exercises.length,0)})</span>
-            </button>
-          ))}
-          {form.weeks.length<12&&<BtnSm variant="ghost" onClick={addWeek}>+ Semaine</BtnSm>}
-        </div>
-        {/* Week editor */}
-        <div style={{background:G.bg2,borderRadius:14,padding:20,border:`1px solid ${G.border}`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <input value={week?.label||""} onChange={e=>updateLabel("week",weekIdx,e.target.value)}
-              style={{background:"transparent",border:"none",color:G.goldLight,fontSize:16,fontWeight:800,outline:"none",fontFamily:G.fontD,letterSpacing:.5,flex:1}}/>
-            <div style={{display:"flex",gap:8}}>
-              {form.weeks.length>1&&<BtnSm variant="danger" onClick={()=>removeWeek(weekIdx)}>✕ Supprimer</BtnSm>}
-              {form.weeks.length<12&&<BtnSm variant="ghost" onClick={duplicateWeek}>⧉ Dupliquer</BtnSm>}
-              {week&&week.days.length<7&&<BtnSm onClick={addDay}>+ Jour</BtnSm>}
+        {week&&(
+          <Card style={{marginTop:12,padding:wide?18:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <input className="inp" value={week.label} aria-label="Nom de la semaine" onChange={e=>setWeeks(ws=>ws.map((w,i)=>i===wi?{...w,label:e.target.value}:w))}
+                style={{...inputStyle,flex:1,minWidth:160,fontFamily:G.fontD,fontSize:19,fontWeight:800,color:G.goldLight,background:"transparent",border:"1px solid transparent",padding:"0 6px"}}/>
+              <Btn size="sm" variant="ghost" icon="copy" onClick={duplicateWeek}>Dupliquer</Btn>
+              {form.weeks.length>1&&<IconBtn icon="trash" label="Supprimer la semaine" variant="quiet" size={34} onClick={removeWeek}/>}
             </div>
-          </div>
-          {week&&(
-            <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-              {week.days.map((d,i)=>(
-                <button key={i} onClick={()=>setDayIdx(i)}
-                  style={{padding:"6px 14px",background:dayIdx===i?G.bg4:G.bg3,color:dayIdx===i?G.white:G.grey,border:`1px solid ${dayIdx===i?G.border+"88":G.border}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                  {d.label} <span style={{fontSize:10,opacity:.6}}>({d.exercises.length})</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {day&&(
-            <>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                <input value={day.label} onChange={e=>updateLabel("day",dayIdx,e.target.value)}
-                  style={{background:"transparent",border:"none",color:G.white,fontSize:14,fontWeight:700,outline:"none",flex:1}}/>
-                <div style={{display:"flex",gap:8}}>
-                  {week.days.length>1&&<BtnSm variant="danger" onClick={()=>removeDay(dayIdx)}>✕</BtnSm>}
-                  <BtnSm onClick={()=>{setFilter("Tous");setPicker(true);}}>+ Exercices</BtnSm>
-                </div>
-              </div>
-              {day.exercises.length===0&&<div style={{textAlign:"center",padding:"24px 0",color:G.greyDim,fontSize:13}}>Aucun exercice — cliquer sur "+ Exercices"</div>}
-              {day.exercises.map((pe,i)=>{
-                const ex=exercises.find(e=>e.id===pe.exId);
+
+            <div className="noscroll" style={{display:"flex",gap:6,overflowX:"auto",margin:"12px 0 14px",paddingBottom:2}}>
+              {week.days.map((d,j)=>{
+                const a=j===di;
                 return(
-                  <div key={pe.exId} style={{background:G.bg3,borderRadius:10,padding:14,marginBottom:8,border:`1px solid ${G.border}`}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                      <div style={{fontWeight:700,fontSize:13}}>{i+1}. {ex?.name}</div>
-                      <div style={{display:"flex",gap:4}}>
-                        {i>0&&<BtnSm variant="ghost" onClick={()=>moveEx(i,i-1)}>▲</BtnSm>}
-                        {i<day.exercises.length-1&&<BtnSm variant="ghost" onClick={()=>moveEx(i,i+1)}>▼</BtnSm>}
-                        <BtnSm variant="danger" onClick={()=>toggleEx(ex)}>✕</BtnSm>
-                      </div>
-                    </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:8}}>
-                      {[["Séries","sets","number"],["Reps","reps","text"],["Repos","rest","text"],["Charge (valeur)","targetLoad","text"]].map(([l,k,t])=>(
-                        <div key={k}>
-                          <div style={{fontSize:10,color:G.grey,letterSpacing:.8,textTransform:"uppercase",marginBottom:3}}>{l}</div>
-                          <input type={t} value={pe[k]} placeholder={k==="targetLoad"?"%  ou texte libre":""}
-                            onChange={e=>updateExField(pe.exId,k,t==="number"?Number(e.target.value):e.target.value)}
-                            style={{width:"100%",background:G.bg4,border:`1px solid ${G.border}`,borderRadius:6,padding:"6px 8px",color:G.white,fontSize:12,outline:"none"}}/>
-                        </div>
-                      ))}
-                    </div>
-                    <div>
-                      <div style={{fontSize:10,color:G.grey,letterSpacing:.8,textTransform:"uppercase",marginBottom:3}}>Référence (pour calcul auto)</div>
-                      <select value={pe.loadRef||"none"} onChange={e=>updateExField(pe.exId,"loadRef",e.target.value)}
-                        style={{width:"100%",background:G.bg4,border:`1px solid ${pe.loadRef&&pe.loadRef!=="none"?G.gold+"66":G.border}`,borderRadius:6,padding:"6px 8px",color:pe.loadRef&&pe.loadRef!=="none"?G.goldLight:G.grey,fontSize:12,outline:"none",cursor:"pointer"}}>
-                        {LOAD_REFS.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}
-                      </select>
-                    </div>
-                    <div style={{marginTop:8}}>
-                      <div style={{fontSize:10,color:G.grey,letterSpacing:.8,textTransform:"uppercase",marginBottom:3}}>Note de séance</div>
-                      <textarea value={pe.note||""} onChange={e=>updateExField(pe.exId,"note",e.target.value)}
-                        placeholder="Instructions, coaching cues, consignes..."
-                        rows={2}
-                        style={{width:"100%",background:G.bg4,border:`1px solid ${pe.note?G.gold+"44":G.border}`,borderRadius:6,padding:"6px 8px",color:G.white,fontSize:12,outline:"none",resize:"vertical",fontFamily:G.font,lineHeight:1.4}}/>
-                    </div>
-                  </div>
+                  <button key={j} type="button" onClick={()=>setDi(j)} style={{flexShrink:0,height:36,padding:"0 13px",borderRadius:11,cursor:"pointer",fontWeight:700,fontSize:13,
+                    background:a?"#232323":"transparent",color:a?G.white:C.muted,border:`1px solid ${a?C.line2:C.line}`}}>
+                    {d.label}<span style={{opacity:.55,fontSize:11,marginLeft:5}}>{d.exercises.length}</span>
+                  </button>
                 );
               })}
-            </>
-          )}
-        </div>
-      </div>
-      {picker&&(
-        <Modal onClose={()=>setPicker(false)} title={`Exercices — ${day?.label||""}`} width={560}>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
-            {MUSCLES.map(m=>(
-              <button key={m} onClick={()=>setFilter(m)}
-                style={{padding:"5px 12px",background:filter===m?G.goldLight+"22":G.bg3,color:filter===m?G.goldLight:G.grey,border:`1px solid ${filter===m?G.goldLight+"44":G.border}`,borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                {m}
-              </button>
-            ))}
-          </div>
-          <div style={{maxHeight:420,overflowY:"auto"}}>
-            {filtered.map(ex=>{
-              const sel2=!!day?.exercises.find(e=>e.exId===ex.id);
-              return(
-                <div key={ex.id} onClick={()=>toggleEx(ex)}
-                  style={{background:sel2?G.goldLight+"0d":G.bg3,borderRadius:10,padding:"10px 14px",marginBottom:8,border:`1px solid ${sel2?G.goldLight+"55":G.border}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div>
-                    <div style={{fontWeight:600,fontSize:13}}>{ex.name}</div>
-                    <div style={{fontSize:11,color:G.grey,marginTop:2}}>{ex.muscle} · {ex.equipment}</div>
-                  </div>
-                  <div style={{width:20,height:20,borderRadius:5,border:`1.5px solid ${sel2?G.goldLight:G.greyDim}`,background:sel2?G.goldLight:"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:G.bg,fontSize:12,fontWeight:800}}>{sel2?"✓":""}</div>
+              {week.days.length<7&&<button type="button" onClick={addDay} style={{flexShrink:0,height:36,padding:"0 12px",borderRadius:11,cursor:"pointer",fontWeight:700,fontSize:13,background:"transparent",color:G.goldLight,border:`1px dashed ${G.gold}55`,display:"flex",alignItems:"center",gap:5}}><Icon name="plus" size={14}/>Séance</button>}
+            </div>
+
+            {day&&(
+              <>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                  <input className="inp" value={day.label} aria-label="Nom de la séance" onChange={e=>setDay(d=>({...d,label:e.target.value}))}
+                    style={{...inputStyle,flex:1,height:40,fontWeight:700,fontSize:15}}/>
+                  {week.days.length>1&&<IconBtn icon="trash" label="Supprimer la séance" variant="quiet" size={36} onClick={removeDay}/>}
                 </div>
-              );
-            })}
-          </div>
-        </Modal>
-      )}
+                {day.exercises.map((pe,i)=>{
+                  const ex=exercises.find(e=>e.id===pe.exId);
+                  const showNote=openNotes[`${wi}-${di}-${i}`]||!!pe.note;
+                  return(
+                    <div key={`${pe.exId}-${i}`} style={{background:"#0b0b0b",border:`1px solid ${C.line}`,borderRadius:14,padding:12,marginBottom:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                        <div style={{width:26,height:26,borderRadius:8,background:G.gold+"18",color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:13,flexShrink:0}}>{i+1}</div>
+                        <div style={{flex:1,minWidth:0,fontWeight:700,fontSize:14,...ellipsis}}>{ex?.name||"Exercice supprimé"}</div>
+                        {ex&&<VideoBtn ex={ex} size={30}/>}
+                        <IconBtn icon="up" label="Monter" variant="quiet" size={30} disabled={i===0} style={{opacity:i===0?.3:1}} onClick={()=>i>0&&moveEx(i,i-1)}/>
+                        <IconBtn icon="down" label="Descendre" variant="quiet" size={30} disabled={i===day.exercises.length-1} style={{opacity:i===day.exercises.length-1?.3:1}} onClick={()=>i<day.exercises.length-1&&moveEx(i,i+1)}/>
+                        <IconBtn icon="x" label="Retirer" variant="quiet" size={30} onClick={()=>removeEx(i)}/>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:wide?"repeat(4,1fr) 1.3fr":"1fr 1fr",gap:8}}>
+                        {[["Séries","sets","number"],["Reps / durée","reps","text"],["Repos","rest","text"],["Charge","targetLoad","text"]].map(([l,k,t])=>(
+                          <label key={k} style={{display:"block"}}>
+                            <div style={{fontSize:10.5,color:C.muted,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",marginBottom:4}}>{l}</div>
+                            <input className="inp" type={t} inputMode={t==="number"?"numeric":undefined} value={pe[k]??""} placeholder={k==="targetLoad"?"60kg ou %":""}
+                              onChange={e=>updEx(i,k,t==="number"?Number(e.target.value):e.target.value)} style={{...inputStyle,height:38,fontSize:15,padding:"0 10px"}}/>
+                          </label>
+                        ))}
+                        <label style={{display:"block",gridColumn:wide?"auto":"1 / -1"}}>
+                          <div style={{fontSize:10.5,color:C.muted,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",marginBottom:4}}>% calculé sur</div>
+                          <Select value={pe.loadRef||"none"} onChange={e=>updEx(i,"loadRef",e.target.value)} style={{height:38,fontSize:14,color:pe.loadRef&&pe.loadRef!=="none"?G.goldLight:C.muted}}>
+                            {LOAD_REFS.map(r=><option key={r.id} value={r.id}>{r.id==="none"?"Charge fixe":r.label}</option>)}
+                          </Select>
+                        </label>
+                      </div>
+                      {showNote
+                        ?<TextArea value={pe.note||""} onChange={e=>updEx(i,"note",e.target.value)} placeholder="Consignes pour le client (tempo, placement…)" style={{minHeight:52,marginTop:8,fontSize:14}}/>
+                        :<Btn size="sm" variant="quiet" icon="plus" style={{marginTop:6,paddingLeft:2,color:C.muted}} onClick={()=>setOpenNotes(o=>({...o,[`${wi}-${di}-${i}`]:true}))}>Consigne</Btn>}
+                    </div>
+                  );
+                })}
+                <Btn variant="ghost" icon="plus" style={{width:"100%",borderStyle:"dashed",marginTop:4}} onClick={()=>setPicker(true)}>Ajouter des exercices</Btn>
+              </>
+            )}
+          </Card>
+        )}
+      </Pad>
+      {picker&&day&&<ExercisePickerModal exercises={exercises} selected={day.exercises.map(e=>e.exId)} title={`Exercices — ${day.label}`} onToggle={toggleEx} onClose={()=>setPicker(false)}/>}
     </div>
   );
 }
 
-// ─── PROGRAMS VIEW ────────────────────────────────────────────────────────────
-function ProgramsView({programs,setPrograms,exercises,initialProgram}){
-  const [sel,setSel]=useState(initialProgram||null);
-  const [subView,setSubView]=useState(initialProgram?"detail":"empty");
+function ExercisePickerModal({exercises,selected,title,onToggle,onClose}){
+  const {wide}=useUI();
   const [search,setSearch]=useState("");
+  const [muscle,setMuscle]=useState("Tous");
+  const shown=exercises.filter(e=>(muscle==="Tous"||e.muscle===muscle)&&matches(search,e.name,e.muscle,e.equipment));
+  return(
+    <Modal onClose={onClose} title={title} width={620}
+      footer={<Btn icon="check" style={{flex:1}} onClick={onClose}>Terminé · {selected.length} exercice{selected.length>1?"s":""}</Btn>}>
+      <SearchBox value={search} onChange={setSearch} placeholder="Squat, tirage, haltères…" style={{marginBottom:10}} autoFocus={wide}/>
+      <div style={{marginBottom:12}}><FilterChips value={muscle} onChange={setMuscle} options={MUSCLES.map(m=>[m,m])}/></div>
+      {shown.length===0&&<EmptyState icon="dumbbell" title="Aucun exercice" text="Crée-le dans Bibliothèque → Exercices."/>}
+      {shown.map(ex=>{
+        const on=selected.includes(ex.id);
+        return(
+          <button key={ex.id} type="button" onClick={()=>onToggle(ex)} className={on?undefined:"hov"}
+            style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"10px 12px",marginBottom:6,borderRadius:12,textAlign:"left",cursor:"pointer",color:G.white,
+              background:on?G.gold+"12":C.soft,border:`1px solid ${on?G.gold+"66":C.line}`}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:600,fontSize:14,...ellipsis}}>{ex.name}</div>
+              <div style={{fontSize:12,color:C.muted,marginTop:2}}>{ex.muscle} · {ex.equipment}{ex.videoUrl?"":" · sans vidéo"}</div>
+            </div>
+            <div style={{width:24,height:24,borderRadius:8,border:`1.5px solid ${on?G.goldLight:C.dim}`,background:on?G.goldLight:"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:G.bg,flexShrink:0}}>
+              {on&&<Icon name="check" size={15} sw={3}/>}
+            </div>
+          </button>
+        );
+      })}
+    </Modal>
+  );
+}
 
-  useEffect(()=>{
-    if(initialProgram){setSel(initialProgram);setSubView("detail");}
-  },[initialProgram?.id]); // eslint-disable-line
+// ─── BIBLIOTHÈQUE ─────────────────────────────────────────────────────────────
+function LibraryView({data,nav}){
+  const [tab,setTab]=useState(nav.libTab||"exercises");
+  return(
+    <Pad>
+      <PageHeader title="Bibliothèque" sub="Exercices et aliments utilisés dans les programmes et les plans."/>
+      <Segmented value={tab} onChange={setTab} style={{marginBottom:16,maxWidth:420}}
+        options={[["exercises","Exercices",data.exercises.length],["foods","Aliments",data.foods.length]]}/>
+      {tab==="exercises"?<ExercisesPanel data={data} initialNoVideo={!!nav.noVideo}/>:<FoodsPanel data={data}/>}
+    </Pad>
+  );
+}
 
-  const filtered=programs.filter(p=>!search||p.name.toLowerCase().includes(search.toLowerCase())||p.category?.toLowerCase().includes(search.toLowerCase()));
-  const cur=sel?(programs.find(p=>p.id===sel.id)||sel):null;
+function ExercisesPanel({data,initialNoVideo}){
+  const {exercises,setExercises,programs}=data;
+  const {wide,toast}=useUI();
+  const [search,setSearch]=useState("");
+  const [muscle,setMuscle]=useState("Tous");
+  const [noVideo,setNoVideo]=useState(initialNoVideo);
+  const [editing,setEditing]=useState(null); // exercice | "new"
+  const missing=exercises.filter(e=>!e.videoUrl).length;
+  const shown=exercises
+    .filter(e=>(muscle==="Tous"||e.muscle===muscle)&&(!noVideo||!e.videoUrl)&&matches(search,e.name,e.muscle,e.equipment))
+    .sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  const save=ex=>{
+    if(editing==="new") setExercises(p=>[...p,{...ex,id:Date.now()}]);
+    else setExercises(p=>p.map(x=>x.id===ex.id?ex:x));
+    toast(editing==="new"?"Exercice créé":"Exercice enregistré");
+    setEditing(null);
+  };
+  const remove=ex=>{setExercises(p=>p.filter(x=>x.id!==ex.id));setEditing(null);toast("Exercice supprimé");};
+  return(
+    <>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:10}}>
+        <SearchBox value={search} onChange={setSearch} placeholder="Rechercher un exercice…" style={{flex:1,minWidth:220}}/>
+        <Btn icon="plus" onClick={()=>setEditing("new")}>Nouvel exercice</Btn>
+      </div>
+      <div style={{marginBottom:10}}><FilterChips value={muscle} onChange={setMuscle} options={MUSCLES.map(m=>[m,m])}/></div>
+      {missing>0&&(
+        <button type="button" onClick={()=>setNoVideo(!noVideo)} style={{display:"inline-flex",alignItems:"center",gap:7,height:32,padding:"0 12px",borderRadius:99,cursor:"pointer",fontWeight:700,fontSize:12.5,marginBottom:14,
+          border:`1px solid ${noVideo?ORANGE:ORANGE+"55"}`,background:noVideo?ORANGE+"22":"transparent",color:ORANGE}}>
+          <Icon name="video" size={14}/>{noVideo?"Afficher tout":`${missing} sans vidéo`}
+        </button>
+      )}
+      <div style={{fontSize:12.5,color:C.muted,margin:"0 2px 10px"}}>{shown.length} exercice{shown.length>1?"s":""}</div>
+      {shown.length===0&&<EmptyState icon="dumbbell" title="Aucun exercice" text="Modifie les filtres ou crée un nouvel exercice."/>}
+      <div style={{display:"grid",gridTemplateColumns:wide?"repeat(auto-fill,minmax(260px,1fr))":"1fr",gap:8}}>
+        {shown.map(ex=>(
+          <Card key={ex.id} onClick={()=>setEditing(ex)} style={{display:"flex",alignItems:"center",gap:12,padding:12}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:14.5,...ellipsis}}>{ex.name}</div>
+              <div style={{fontSize:12,color:C.muted,marginTop:3,...ellipsis}}>{ex.muscle} · {ex.equipment}</div>
+            </div>
+            {ex.videoUrl?<VideoBtn ex={ex}/>:<Chip color={ORANGE}>Sans vidéo</Chip>}
+          </Card>
+        ))}
+      </div>
+      {editing&&<ExerciseModal init={editing==="new"?null:editing} usage={editing==="new"?0:programs.filter(p=>usesExercise(p,editing.id)).length}
+        onSave={save} onDelete={remove} onClose={()=>setEditing(null)}/>}
+    </>
+  );
+}
 
-  const deleteProgram=pid=>{
-    if(confirm("Supprimer ce programme ?"))setPrograms(p=>p.filter(x=>x.id!==pid));
-    if(sel?.id===pid){setSel(null);setSubView("empty");}
+function ExerciseModal({init,usage,onSave,onDelete,onClose}){
+  const {confirm}=useUI();
+  const [f,setF]=useState(init?{...init}:{name:"",muscle:"Jambes",equipment:"Barre",videoUrl:"",notes:""});
+  const embedOk=!!ytId(f.videoUrl);
+  const save=()=>{if(!f.name.trim())return;onSave({...f,name:f.name.trim(),videoUrl:normalizeVideo(f.videoUrl)});};
+  const remove=async()=>{
+    const ok=await confirm({title:`Supprimer ${init.name} ?`,danger:true,confirm:"Supprimer",
+      text:usage?`Il est utilisé dans ${usage} programme(s) : il y apparaîtra comme « Exercice supprimé ».`:"Cette action est définitive."});
+    if(ok) onDelete(init);
   };
   return(
-    <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
-      <div style={{width:290,borderRight:`1px solid ${G.border}`,display:"flex",flexDirection:"column",flexShrink:0}}>
-        <div style={{padding:"20px 14px",borderBottom:`1px solid ${G.border}`,flexShrink:0}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <div style={{fontFamily:G.fontD,fontSize:20,fontWeight:800,letterSpacing:-.5}}>PROGRAMMES <span style={{fontSize:13,color:G.grey,fontFamily:G.font,fontWeight:400}}>({programs.length})</span></div>
-            <BtnSm onClick={()=>{setSel(null);setSubView("new");}}>+ Nouveau</BtnSm>
-          </div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..."
-            style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"8px 12px",color:G.white,fontSize:13,outline:"none"}}/>
-        </div>
-        <div style={{flex:1,overflowY:"auto",padding:"6px 8px"}}>
-          {filtered.length===0&&<Empty text="Aucun programme" icon="▦"/>}
-          {filtered.map(p=>(
-            <div key={p.id} onClick={()=>{setSel(p);setSubView("detail");}}
-              style={{borderRadius:10,padding:"11px 12px",marginBottom:4,border:`1px solid ${cur?.id===p.id?G.gold+"44":G.border}`,background:cur?.id===p.id?G.gold+"0a":G.bg2,cursor:"pointer",transition:"background .1s"}}
-              onMouseEnter={e=>{if(cur?.id!==p.id)e.currentTarget.style.background=G.bg3;}}
-              onMouseLeave={e=>{if(cur?.id!==p.id)e.currentTarget.style.background=G.bg2;}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                <div style={{flex:1,overflow:"hidden"}}>
-                  <div style={{fontWeight:700,fontSize:13,marginBottom:5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
-                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{[p.category,p.level].filter(Boolean).map(t=><Tag key={t} text={t} color={G.grey}/>)}</div>
-                </div>
-                <div style={{display:"flex",gap:4,marginLeft:6,flexShrink:0}} onClick={e=>e.stopPropagation()}>
-                  <BtnSm variant="ghost" onClick={()=>{setSel(p);setSubView("edit");}}>✏️</BtnSm>
-                  <BtnSm variant="danger" onClick={()=>deleteProgram(p.id)}>✕</BtnSm>
-                </div>
+    <Modal onClose={onClose} title={init?"Modifier l'exercice":"Nouvel exercice"} width={600}
+      footer={<>
+        {init&&<IconBtn icon="trash" label="Supprimer l'exercice" variant="danger" size={44} onClick={remove}/>}
+        <Btn variant="ghost" style={{flex:1}} onClick={onClose}>Annuler</Btn>
+        <Btn style={{flex:2}} disabled={!f.name.trim()} onClick={save}>Enregistrer</Btn>
+      </>}>
+      <Field label="Nom"><TextInput value={f.name} onChange={e=>setF(p=>({...p,name:e.target.value}))} placeholder="Squat barre" autoFocus={!init}/></Field>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Field label="Muscle"><Select value={f.muscle} onChange={e=>setF(p=>({...p,muscle:e.target.value}))}>{MUSCLES.filter(m=>m!=="Tous").map(m=><option key={m}>{m}</option>)}</Select></Field>
+        <Field label="Équipement"><Select value={f.equipment} onChange={e=>setF(p=>({...p,equipment:e.target.value}))}>{EQUIPS.map(m=><option key={m}>{m}</option>)}</Select></Field>
+      </div>
+      <Field label="Vidéo YouTube" hint={<>Colle n'importe quel lien YouTube (vidéo, youtu.be, shorts). {f.name.trim()&&<a href={videoSearchUrl(f.name)} target="_blank" rel="noopener noreferrer" style={{color:G.goldLight}}>Chercher « {f.name.trim()} » sur YouTube</a>}</>}>
+        <TextInput value={f.videoUrl||""} onChange={e=>setF(p=>({...p,videoUrl:e.target.value}))} placeholder="https://youtu.be/…" inputMode="url"/>
+      </Field>
+      {f.videoUrl&&(embedOk
+        ?<div style={{marginBottom:14}}><VideoFrame url={f.videoUrl} title={`Aperçu — ${f.name}`}/></div>
+        :<div style={{fontSize:12.5,color:ORANGE,margin:"-6px 0 14px"}}>Lien non reconnu comme une vidéo YouTube : il sera enregistré tel quel.</div>)}
+      <Field label="Conseils techniques"><TextArea value={f.notes||""} onChange={e=>setF(p=>({...p,notes:e.target.value}))} placeholder="Dos droit, genoux alignés…"/></Field>
+      {init&&usage>0&&<div style={{fontSize:12.5,color:C.muted}}>Utilisé dans {usage} programme{usage>1?"s":""}.</div>}
+    </Modal>
+  );
+}
+
+const EMPTY_FOOD=()=>({id:"",name:"",unit:"g",kcal:0,protein:0,carbs:0,fat:0});
+function FoodsPanel({data}){
+  const {foods,setFoods}=data;
+  const {wide,toast}=useUI();
+  const [search,setSearch]=useState("");
+  const [editing,setEditing]=useState(null);
+  const shown=foods.filter(x=>matches(search,x.name)).sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  const save=entry=>{
+    if(editing==="new") setFoods(p=>[...p,entry]);
+    else setFoods(p=>p.map(x=>x.id===entry.id?entry:x));
+    toast(editing==="new"?"Aliment ajouté":"Aliment enregistré");
+    setEditing(null);
+  };
+  const remove=food=>{setFoods(p=>p.filter(x=>x.id!==food.id));setEditing(null);toast("Aliment supprimé");};
+  return(
+    <>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
+        <SearchBox value={search} onChange={setSearch} placeholder="Rechercher un aliment…" style={{flex:1,minWidth:220}}/>
+        <Btn icon="plus" onClick={()=>setEditing("new")}>Nouvel aliment</Btn>
+      </div>
+      {shown.length===0&&<EmptyState icon="leaf" title="Aucun aliment" text="Ajoute les aliments que tu utilises dans tes plans."/>}
+      <div style={{display:"grid",gridTemplateColumns:wide?"repeat(auto-fill,minmax(320px,1fr))":"1fr",gap:8}}>
+        {shown.map(food=>(
+          <Card key={food.id} onClick={()=>setEditing(food)} style={{padding:12}}>
+            <div style={{fontWeight:700,fontSize:14,...ellipsis}}>{food.name}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:4}}>{food.kcal} kcal · P {food.protein} · G {food.carbs} · L {food.fat} <span style={{color:G.gold}}>/ {food.unit==="g"?"100 g":"portion"}</span></div>
+          </Card>
+        ))}
+      </div>
+      {editing&&<FoodModal init={editing==="new"?null:editing} onSave={save} onDelete={remove} onClose={()=>setEditing(null)}/>}
+    </>
+  );
+}
+
+function FoodModal({init,onSave,onDelete,onClose}){
+  const {confirm}=useUI();
+  const [f,setF]=useState(init?{...init}:EMPTY_FOOD());
+  const per=f.unit==="g"?"100 g":"portion";
+  const save=()=>{
+    if(!f.name.trim())return;
+    onSave({...f,name:f.name.trim(),id:init?f.id:`${norm(f.name).replace(/[^a-z0-9]/g,"_").slice(0,30)}_${Date.now()}`,
+      kcal:parseFloat(f.kcal)||0,protein:parseFloat(f.protein)||0,carbs:parseFloat(f.carbs)||0,fat:parseFloat(f.fat)||0});
+  };
+  const remove=async()=>{
+    if(await confirm({title:`Supprimer ${init.name} ?`,text:"Les plans alimentaires qui l'utilisent ne l'afficheront plus.",confirm:"Supprimer",danger:true})) onDelete(init);
+  };
+  return(
+    <Modal onClose={onClose} title={init?"Modifier l'aliment":"Nouvel aliment"} width={500}
+      footer={<>
+        {init&&<IconBtn icon="trash" label="Supprimer l'aliment" variant="danger" size={44} onClick={remove}/>}
+        <Btn variant="ghost" style={{flex:1}} onClick={onClose}>Annuler</Btn>
+        <Btn style={{flex:2}} disabled={!f.name.trim()} onClick={save}>Enregistrer</Btn>
+      </>}>
+      <Field label="Nom"><TextInput value={f.name} onChange={e=>setF(p=>({...p,name:e.target.value}))} placeholder="Riz basmati cuit" autoFocus={!init}/></Field>
+      <Field label="Valeurs pour"><Segmented value={f.unit} onChange={v=>setF(p=>({...p,unit:v}))} options={[["g","100 g"],["portion","1 portion"]]}/></Field>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        {[["kcal",`Calories (kcal / ${per})`],["protein","Protéines (g)"],["carbs","Glucides (g)"],["fat","Lipides (g)"]].map(([k,l])=>(
+          <Field key={k} label={l}><TextInput type="number" inputMode="decimal" value={f[k]} onChange={e=>setF(p=>({...p,[k]:e.target.value}))}/></Field>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+// ─── IA COACH ─────────────────────────────────────────────────────────────────
+const AI_EXAMPLES=["Crée un PPL 6 jours sur 4 semaines pour un intermédiaire","Full body débutant 3 j/sem avec progression sur 8 semaines","Programme de force 6 semaines axé squat et développé couché"];
+function AIView({data,go}){
+  const {wide}=useUI();
+  const {exercises,setPrograms}=data;
+  const [messages,setMessages]=useState([]);
+  const [input,setInput]=useState("");
+  const [loading,setLoading]=useState(false);
+  const bottomRef=useRef(null);
+  const scrollBottom=()=>setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth",block:"end"}),80);
+
+  const SYSTEM=`Tu es un assistant coach sportif expert intégré dans l'application Wandy Coach.
+Tu peux créer des programmes d'entraînement complets. Quand l'utilisateur te demande de créer un programme, tu dois OBLIGATOIREMENT répondre avec un JSON valide dans un bloc \`\`\`json ... \`\`\` en plus de ton message texte.
+
+La liste des exercices disponibles dans l'app (utilise leurs IDs exacts) :
+${exercises.map(e=>`- id:${e.id} "${e.name}" (${e.muscle}, ${e.equipment})`).join("\n")}
+
+Format JSON du programme :
+{
+  "action": "create_program",
+  "program": {
+    "name": "Nom du programme",
+    "category": "Force|PPL|Full Body|CrossFit|Cardio|etc",
+    "level": "Débutant|Intermédiaire|Avancé",
+    "weeks": [
+      {
+        "label": "Semaine 1 — Description",
+        "days": [
+          {
+            "label": "Séance A",
+            "exercises": [
+              {"exId": 1, "sets": 4, "reps": "8", "rest": "90s", "targetLoad": "60kg"}
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+
+Règles importantes :
+- Utilise uniquement les IDs d'exercices listés ci-dessus
+- Le champ "rest" accepte : "30s", "60s", "90s", "2min", "3min"
+- Le champ "targetLoad" est optionnel (laisse "" si pas de charge)
+- Crée toujours plusieurs semaines avec progression
+- Réponds en français, sois précis et professionnel
+- TOUJOURS inclure le JSON si tu crées un programme`;
+
+  const send=async text=>{
+    const content=(text??input).trim();
+    if(!content||loading)return;
+    const newMsgs=[...messages,{role:"user",content}];
+    setMessages(newMsgs);setInput("");setLoading(true);scrollBottom();
+    try{
+      // Modèle et longueur de réponse sont fixés côté serveur ; l'accès est réservé au coach connecté
+      const idToken=await auth.currentUser?.getIdToken();
+      if(!idToken) throw new Error("Session expirée, reconnecte-toi");
+      const res=await fetch(`${API_BASE}/api/chat`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json",Authorization:`Bearer ${idToken}`},
+        body:JSON.stringify({system:SYSTEM,messages:newMsgs.map(m=>({role:m.role,content:m.content||"(programme créé)"}))}),
+      });
+      const resp=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(resp.error||"Erreur serveur");
+      const reply=resp.text||"Désolé, une erreur s'est produite.";
+      const jsonMatch=reply.match(/```json\s*([\s\S]*?)```/);
+      let programCreated=null;
+      if(jsonMatch){
+        try{
+          const parsed=JSON.parse(jsonMatch[1]);
+          if(parsed.action==="create_program"&&parsed.program){
+            programCreated={...parsed.program,id:Date.now()};
+            setPrograms(p=>[...p,programCreated]);
+          }
+        }catch(e){console.error("[IA] JSON invalide",e);}
+      }
+      setMessages(p=>[...p,{role:"assistant",content:reply.replace(/```json[\s\S]*?```/g,"").trim(),programCreated}]);
+    }catch(e){
+      setMessages(p=>[...p,{role:"assistant",content:`Erreur : ${e.message}`,error:true}]);
+    }
+    setLoading(false);scrollBottom();
+  };
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",height:wide?"100dvh":"100%"}}>
+      <div style={{flex:1,overflowY:"auto"}}>
+        <div style={{maxWidth:820,margin:"0 auto",padding:wide?"32px 36px 16px":"18px 16px 12px"}}>
+          <PageHeader title="IA Coach" sub="Décris le programme : il est créé directement dans ta bibliothèque, prêt à être ajusté."/>
+          {messages.length===0&&(
+            <div style={{display:"grid",gap:8}}>
+              {AI_EXAMPLES.map(ex=>(
+                <Card key={ex} onClick={()=>send(ex)} style={{display:"flex",alignItems:"center",gap:12,padding:14}}>
+                  <Icon name="sparkle" size={18} color={G.goldLight}/><div style={{flex:1,fontSize:14}}>{ex}</div><Icon name="right" size={16} color={C.dim}/>
+                </Card>
+              ))}
+            </div>
+          )}
+          {messages.map((m,i)=>(
+            <div key={i} style={{display:"flex",flexDirection:"column",alignItems:m.role==="user"?"flex-end":"flex-start",marginBottom:12}}>
+              <div style={{maxWidth:"88%",whiteSpace:"pre-wrap",fontSize:14,lineHeight:1.55,padding:"12px 15px",
+                background:m.role==="user"?C.goldGrad:"#141414",color:m.role==="user"?G.bg:m.error?G.red:G.white,
+                borderRadius:m.role==="user"?"18px 18px 6px 18px":"18px 18px 18px 6px",border:m.role==="user"?"none":`1px solid ${C.line}`}}>
+                {m.content}
               </div>
+              {m.programCreated&&(
+                <Card style={{marginTop:8,maxWidth:"88%",display:"flex",alignItems:"center",gap:12,padding:12,borderColor:G.green+"44"}}>
+                  <Icon name="check" size={18} color={G.green} sw={2.4}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:13.5,color:G.green}}>Programme créé</div>
+                    <div style={{fontSize:12.5,color:C.muted,...ellipsis}}>{m.programCreated.name}</div>
+                  </div>
+                  <Btn size="sm" variant="ghost" onClick={()=>go("programs",{programId:m.programCreated.id})}>Ouvrir</Btn>
+                </Card>
+              )}
             </div>
           ))}
+          {loading&&(
+            <div style={{display:"inline-flex",gap:6,padding:"14px 16px",background:"#141414",border:`1px solid ${C.line}`,borderRadius:"18px 18px 18px 6px"}}>
+              {[0,1,2].map(i=><span key={i} style={{width:6,height:6,borderRadius:99,background:G.gold,animation:"pulse 1.2s ease infinite",animationDelay:`${i*.2}s`}}/>)}
+            </div>
+          )}
+          <div ref={bottomRef}/>
         </div>
       </div>
-      <div style={{flex:1,overflow:"hidden",background:G.bg}}>
-        {subView==="new"&&(
-          <ProgramForm title="Nouveau programme"
-            init={{name:"",category:"",level:"Intermédiaire",weeks:[{label:"Semaine 1",days:[{label:"Séance A",exercises:[]}]}]}}
-            exercises={exercises}
-            onSave={form=>{const np={...form,id:Date.now()};setPrograms(p=>[...p,np]);setSel(np);setSubView("detail");}}
-            onCancel={()=>setSubView("empty")}/>
-        )}
-        {subView==="edit"&&cur&&(
-          <ProgramForm title="Modifier le programme"
-            init={JSON.parse(JSON.stringify(cur))}
-            exercises={exercises}
-            onSave={form=>{setPrograms(p=>p.map(x=>x.id===form.id?form:x));setSel(form);setSubView("detail");}}
-            onCancel={()=>setSubView("detail")}/>
-        )}
-        {subView==="detail"&&cur&&(
-          <ProgramDetailView program={cur} programs={programs} exercises={exercises}
-            onEdit={p=>{setSel(p);setSubView("edit");}} client={null}/>
-        )}
-        {(subView==="empty"||(!cur&&subView!=="new"))&&(
-          <Empty text="Sélectionne ou crée un programme" icon="▦"/>
-        )}
+      <div style={{flexShrink:0,borderTop:`1px solid ${C.line}`,background:"#0a0a0a"}}>
+        <form onSubmit={e=>{e.preventDefault();send();}} style={{maxWidth:820,margin:"0 auto",padding:wide?"14px 36px 18px":"10px 16px 12px",display:"flex",gap:10,alignItems:"flex-end"}}>
+          <textarea className="inp" value={input} onChange={e=>setInput(e.target.value)} rows={2} placeholder="Décris le programme à créer…"
+            onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
+            style={{...inputStyle,height:"auto",minHeight:52,maxHeight:160,padding:"12px 14px",resize:"none",lineHeight:1.45,flex:1}}/>
+          <IconBtn icon="send" label="Envoyer" variant="gold" size={52} disabled={!input.trim()||loading} style={{opacity:!input.trim()||loading?.4:1}} type="submit"/>
+        </form>
       </div>
-    </div>
-  );
-}
-
-// ─── EXERCISES VIEW ───────────────────────────────────────────────────────────
-function ExercisesView({exercises,setExercises}){
-  const [search,setSearch]=useState("");
-  const [filter,setFilter]=useState("Tous");
-  const [showNew,setShowNew]=useState(false);
-  const [playing,setPlaying]=useState(null);
-  const [newForm,setNewForm]=useState({name:"",muscle:"Jambes",equipment:"Barre",videoUrl:"",notes:""});
-
-  const filtered=exercises.filter(e=>{
-    const mok=filter==="Tous"||e.muscle===filter;
-    const sok=!search||e.name.toLowerCase().includes(search.toLowerCase())||e.muscle.toLowerCase().includes(search.toLowerCase());
-    return mok&&sok;
-  });
-  const createEx=()=>{
-    if(!newForm.name)return;
-    setExercises(p=>[...p,{...newForm,id:Date.now()}]);
-    setShowNew(false);
-    setNewForm({name:"",muscle:"Jambes",equipment:"Barre",videoUrl:"",notes:""});
-  };
-  const deleteEx=id=>{if(confirm("Supprimer cet exercice ?"))setExercises(p=>p.filter(e=>e.id!==id));};
-
-  return(
-    <div style={{padding:28,height:"100%",overflowY:"auto"}} className="fu">
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-        <div>
-          <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,letterSpacing:-.5}}>EXERCICES</div>
-          <div style={{fontSize:12,color:G.grey,marginTop:3}}>{filtered.length} sur {exercises.length}</div>
-        </div>
-        <BtnSm onClick={()=>setShowNew(true)}>+ Nouvel exercice</BtnSm>
-      </div>
-      <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..."
-          style={{background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"7px 14px",color:G.white,fontSize:13,outline:"none",width:240}}/>
-        {MUSCLES.map(m=>(
-          <button key={m} onClick={()=>setFilter(m)}
-            style={{padding:"6px 14px",background:filter===m?G.goldLight+"22":G.bg2,color:filter===m?G.goldLight:G.grey,border:`1px solid ${filter===m?G.goldLight+"44":G.border}`,borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-            {m}
-          </button>
-        ))}
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
-        {filtered.map(ex=>(
-          <div key={ex.id} style={{background:G.bg2,borderRadius:12,padding:16,border:`1px solid ${G.border}`}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:700,fontSize:14,marginBottom:6}}>{ex.name}</div>
-                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}><Tag text={ex.muscle} color={G.grey}/><Tag text={ex.equipment} color={G.greyDim}/></div>
-              </div>
-              <div style={{display:"flex",gap:5,marginLeft:8,flexShrink:0}}>
-                {ex.videoUrl&&<BtnSm variant="ghost" onClick={()=>setPlaying(playing===ex.id?null:ex.id)}>{playing===ex.id?"▼":"▶"}</BtnSm>}
-                <BtnSm variant="danger" onClick={()=>deleteEx(ex.id)}>✕</BtnSm>
-              </div>
-            </div>
-            {ex.notes&&<div style={{fontSize:12,color:G.grey,fontStyle:"italic",marginTop:6}}>📝 {ex.notes}</div>}
-            {playing===ex.id&&ex.videoUrl&&(
-              <div style={{position:"relative",paddingBottom:"56.25%",borderRadius:8,overflow:"hidden",background:"#000",marginTop:10}}>
-                <iframe style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} src={ex.videoUrl} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      {showNew&&(
-        <Modal onClose={()=>setShowNew(false)} title="Nouvel exercice">
-          <Inp label="Nom" placeholder="Squat Barre" value={newForm.name} onChange={e=>setNewForm(p=>({...p,name:e.target.value}))}/>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <div style={{marginBottom:14}}>
-              <Label>Muscle</Label>
-              <select value={newForm.muscle} onChange={e=>setNewForm(p=>({...p,muscle:e.target.value}))}
-                style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 14px",color:G.white,fontSize:13,outline:"none"}}>
-                {MUSCLES.filter(m=>m!=="Tous").map(m=><option key={m}>{m}</option>)}
-              </select>
-            </div>
-            <div style={{marginBottom:14}}>
-              <Label>Équipement</Label>
-              <select value={newForm.equipment} onChange={e=>setNewForm(p=>({...p,equipment:e.target.value}))}
-                style={{width:"100%",background:G.bg3,border:`1px solid ${G.border}`,borderRadius:8,padding:"10px 14px",color:G.white,fontSize:13,outline:"none"}}>
-                {EQUIPS.map(eq=><option key={eq}>{eq}</option>)}
-              </select>
-            </div>
-          </div>
-          <Inp label="URL vidéo YouTube (embed)" placeholder="https://www.youtube.com/embed/..." value={newForm.videoUrl} onChange={e=>setNewForm(p=>({...p,videoUrl:e.target.value}))}/>
-          <Txa label="Notes / conseils" placeholder="Conseils de technique..." value={newForm.notes} onChange={e=>setNewForm(p=>({...p,notes:e.target.value}))}/>
-          <div style={{display:"flex",gap:10,marginTop:4}}>
-            <Btn variant="ghost" onClick={()=>setShowNew(false)} style={{flex:1}}>Annuler</Btn>
-            <Btn onClick={createEx} disabled={!newForm.name} style={{flex:2}}>Créer l'exercice</Btn>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }
@@ -3184,88 +3699,64 @@ export default function CoachApp(){
 
 function LoadingScreen(){
   return(
-    <div style={{minHeight:"100vh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,fontFamily:G.font,color:G.white}}>
+    <div style={{minHeight:"100dvh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:18,fontFamily:G.font,color:G.white}}>
       <style>{css}</style>
-      <div style={{fontFamily:G.fontD,fontSize:28,fontWeight:800,color:G.goldLight}}>WANDY COACH</div>
-      <div style={{fontSize:13,color:G.grey}}>Connexion à la base de données…</div>
-      <div style={{width:36,height:36,border:`3px solid ${G.border}`,borderTop:`3px solid ${G.goldLight}`,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+      <Brand/>
+      <div style={{width:34,height:34,border:"3px solid #222",borderTop:`3px solid ${G.goldLight}`,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
     </div>
   );
 }
 
 function CoachMain({onLogout}){
-  const [view,setView]=useState("dashboard");
+  const wide=useWide();
   const [exercises,setExercises,exReady]=useFirestoreCollection("exercises",SEED_EX);
   const [programs,setPrograms,pgReady]=useFirestoreCollection("programs",SEED_PROGRAMS);
   const [clients,setClients,clReady]=useFirestoreCollection("clients",[]);
   const [foods,setFoods,foodsReady]=useFirestoreCollection("foods",FOODS_DB);
-  const dbReady=exReady&&pgReady&&clReady&&foodsReady;
+  const [mealTemplate,setMealTemplate]=useState(null);
+  useEffect(()=>{
+    getDoc(doc(db,"settings","mealTemplate")).then(s=>{if(s.exists())setMealTemplate(s.data().meals||null);}).catch(()=>{});
+  },[]);
+  const [nav,setNav]=useState({view:"home"});
+  const go=useCallback((view,extra={})=>{
+    setNav({view,...extra});
+    document.getElementById("coach-main")?.scrollTo(0,0);
+  },[]);
+  const [confirm,confirmNode]=useConfirmDialog();
+  const [toast,toastNode]=useToast();
+  const [videoEx,setVideoEx]=useState(null);
+  const ui=useMemo(()=>({wide,confirm,toast,openVideo:setVideoEx}),[wide,confirm,toast]);
 
-  // Cross-view navigation state
-  const [dashClient,setDashClient]=useState(null);
-  const [dashProgram,setDashProgram]=useState(null);
-  const [programFromClient,setProgramFromClient]=useState(null); // {program, client}
-  const navigateToClient=c=>{setDashClient(c);setView("clients");};
-  const navigateToProgram=p=>{setDashProgram(p);setView("programs");};
-  const viewProgramFromClient=(p,c)=>{setProgramFromClient({program:p,client:c});setView("program-from-client");};
+  if(!(exReady&&pgReady&&clReady&&foodsReady)) return <LoadingScreen/>;
 
-  const changeView=v=>{
-    setView(v);
-    if(v!=="clients")setDashClient(null);
-    if(v!=="programs")setDashProgram(null);
-    if(v!=="program-from-client")setProgramFromClient(null);
-  };
-
-  if(!dbReady)return <LoadingScreen/>;
+  const data={clients,setClients,programs,setPrograms,exercises,setExercises,foods,setFoods,mealTemplate,setMealTemplate};
+  const counts={clients:clients.length,programs:programs.length,library:exercises.length};
+  // La clé remonte la vue quand on change de section ou d'élément (état local remis à zéro)
+  const key=`${nav.view}-${nav.clientId??""}-${nav.programId??""}-${nav.mode??""}-${nav.newClient?1:0}-${nav.noVideo?1:0}`;
+  let content;
+  if(nav.view==="clients") content=<ClientsView key={nav.newClient?key:"clients"} data={data} nav={nav} go={go}/>;
+  else if(nav.view==="programs") content=<ProgramsView data={data} nav={nav} go={go}/>;
+  else if(nav.view==="library") content=<LibraryView key={key} data={data} nav={nav}/>;
+  else if(nav.view==="ai") content=<AIView data={data} go={go}/>;
+  else content=<HomeView data={data} go={go} onLogout={onLogout}/>;
 
   return(
-    <div style={{display:"flex",minHeight:"100vh",fontFamily:G.font,color:G.white}}>
+    <UI.Provider value={ui}>
       <style>{css}</style>
-      <Sidebar
-        view={view}
-        setView={changeView}
-        onLogout={onLogout}
-        counts={{clients:clients.length,programs:programs.length,exercises:exercises.length,foods:foods.length}}/>
-      <main style={{flex:1,height:"100vh",overflow:"hidden",display:"flex",flexDirection:"column"}}>
-        {view==="dashboard"&&(
-          <div style={{flex:1,overflowY:"auto"}}>
-            <Dashboard clients={clients} programs={programs} exercises={exercises}
-              onSelClient={navigateToClient} onSelProgram={navigateToProgram}/>
-          </div>
-        )}
-        {view==="clients"&&(
-          <div style={{flex:1,overflow:"hidden"}}>
-            <ClientsView clients={clients} setClients={setClients} programs={programs} setPrograms={setPrograms}
-              onViewProgram={viewProgramFromClient} initialClient={dashClient} foods={foods}/>
-          </div>
-        )}
-        {view==="foods"&&(
-          <div style={{flex:1,overflow:"hidden"}}>
-            <FoodsManager foods={foods} setFoods={setFoods}/>
-          </div>
-        )}
-        {view==="programs"&&(
-          <div style={{flex:1,overflow:"hidden"}}>
-            <ProgramsView programs={programs} setPrograms={setPrograms} exercises={exercises} initialProgram={dashProgram}/>
-          </div>
-        )}
-        {view==="program-from-client"&&programFromClient&&(
-          <div style={{flex:1,overflow:"hidden"}}>
-            <ProgramDetailView
-              program={programFromClient.program}
-              programs={programs}
-              exercises={exercises}
-              client={clients.find(c=>c.id===programFromClient.client.id)||programFromClient.client}
-              onEdit={p=>{setDashProgram(p);changeView("programs");}}
-              onBack={()=>{setProgramFromClient(null);setView("clients");}}/>
-          </div>
-        )}
-        {view==="exercises"&&(
-          <div style={{flex:1,overflow:"hidden"}}>
-            <ExercisesView exercises={exercises} setExercises={setExercises}/>
-          </div>
-        )}
-      </main>
-    </div>
+      {wide?(
+        <div style={{display:"flex",minHeight:"100dvh",background:G.bg,color:G.white,fontFamily:G.font}}>
+          <Sidebar view={nav.view} go={go} counts={counts} onLogout={onLogout}/>
+          <main id="coach-main" style={{flex:1,minWidth:0,height:"100dvh",overflowY:"auto"}}>{content}</main>
+        </div>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",height:"100dvh",background:G.bg,color:G.white,fontFamily:G.font}}>
+          <main id="coach-main" style={{flex:1,minHeight:0,overflowY:nav.view==="ai"?"hidden":"auto",paddingTop:"env(safe-area-inset-top)",WebkitOverflowScrolling:"touch"}}>{content}</main>
+          <BottomNav view={nav.view} go={go}/>
+        </div>
+      )}
+      <VideoModal ex={videoEx} onClose={()=>setVideoEx(null)}/>
+      {confirmNode}
+      {toastNode}
+    </UI.Provider>
   );
 }
