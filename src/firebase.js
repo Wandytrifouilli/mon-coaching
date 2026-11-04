@@ -4,7 +4,6 @@ import {
   connectAuthEmulator,
   onAuthStateChanged,
   signInWithCustomToken,
-  signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
 import {
@@ -63,28 +62,28 @@ if (USE_EMULATORS) {
 
 export const db = firestore;
 export { doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc, query, where };
-export { onAuthStateChanged, signInWithCustomToken, signInWithEmailAndPassword, signOut };
+export { onAuthStateChanged, signInWithCustomToken, signOut };
 
 // Fonctions serveur (Vercel). VITE_API_BASE permet d'appeler l'API Vercel depuis un autre hébergement.
 export const API_BASE = import.meta.env.VITE_API_BASE || "";
 
-// Vrai si l'utilisateur connecté porte la claim coach (posée par scripts/set-coach.mjs)
+// Vrai si l'utilisateur connecté porte la claim coach (token émis par api/login.js pour le code coach)
 export async function isCoachUser(user) {
   if (!user || user.uid.startsWith("client_")) return false;
   try {
     return (await user.getIdTokenResult()).claims.coach === true;
   } catch {
-    // Hors ligne avec un token expiré : on se fie au type de compte, les règles Firestore tranchent
-    return !!user.email;
+    // Hors ligne avec un token expiré : on se fie à l'identifiant, les règles Firestore tranchent
+    return user.uid === "coach";
   }
 }
 
-// Connexion client : le code est vérifié côté serveur, qui renvoie un custom token.
-// Retourne { status: "ok", clientId } | { status: "invalid" | "locked" | "network" }
-export async function loginClientWithCode(code) {
+// Connexion par code (coach ou adhérent) : le code est vérifié côté serveur, qui renvoie un custom token.
+// Retourne { status: "ok", role: "coach" | "client", clientId? } | { status: "invalid" | "locked" | "network" }
+export async function loginWithCode(code) {
   let res;
   try {
-    res = await fetch(`${API_BASE}/api/client-login`, {
+    res = await fetch(`${API_BASE}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),
@@ -96,23 +95,10 @@ export async function loginClientWithCode(code) {
   if (res.status === 429) return { status: "locked" };
   if (!res.ok) return { status: "network" };
   try {
-    const { token, clientId } = await res.json();
+    const { token, role, clientId } = await res.json();
     await signInWithCustomToken(auth, token);
-    return { status: "ok", clientId };
+    return { status: "ok", role, clientId };
   } catch {
     return { status: "network" };
-  }
-}
-
-// Connexion coach (compte e-mail). Retourne "ok" | "invalid" | "notcoach" | "network"
-export async function loginCoach(email, password) {
-  try {
-    const { user } = await signInWithEmailAndPassword(auth, email.trim(), password);
-    if (await isCoachUser(user)) return "ok";
-    await signOut(auth);
-    return "notcoach";
-  } catch (e) {
-    if (e?.code === "auth/network-request-failed") return "network";
-    return "invalid";
   }
 }

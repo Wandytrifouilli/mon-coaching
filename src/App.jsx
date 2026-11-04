@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
-import { db, doc, collection, onSnapshot, setDoc, deleteDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginClientWithCode, loginCoach, API_BASE } from "./firebase.js";
+import { db, doc, collection, onSnapshot, setDoc, deleteDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginWithCode } from "./firebase.js";
 
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -207,26 +207,25 @@ export default function App(){
   useEffect(()=>{
     if(user!==null||!client||migrationTried.current) return;
     migrationTried.current=true;
-    loginClientWithCode(client.code).then(r=>{
-      if(r.status==="invalid"){store.del(CLIENT_KEY);setClient(null);}
+    loginWithCode(client.code).then(r=>{
+      if(r.status==="invalid"||(r.status==="ok"&&r.role!=="client")){store.del(CLIENT_KEY);setClient(null);}
       setMigrationDone(true);
     });
   },[user,client]);
 
-  // Retourne "ok" | "invalid" | "locked" | "network"
+  // Un seul champ : code adhérent ou code coach (le serveur décide). Retourne "ok" | "invalid" | "locked" | "network"
+  // (pour le coach, la redirection vers /coach se fait au rendu une fois la session ouverte)
   const login=async raw=>{
     const code=raw.trim().toUpperCase();
     if(!code) return "invalid";
-    const r=await loginClientWithCode(code);
+    const r=await loginWithCode(code);
     if(r.status!=="ok") return r.status;
+    if(r.role==="coach") return "ok";
     const c={id:String(r.clientId),code};
     store.set(CLIENT_KEY,JSON.stringify(c));
     setClient(c);
     return "ok";
   };
-  // Retourne "ok" | "invalid" | "notcoach" | "network"
-  // (la redirection vers /coach se fait au rendu une fois la session ouverte)
-  const coachLogin=(email,password)=>loginCoach(email,password);
   const logout=()=>{
     store.del(CLIENT_KEY);
     setClient(null);
@@ -250,7 +249,7 @@ export default function App(){
     window.location.replace("/coach");
     return <Shell css={css}><Loading label="Ouverture de l'espace coach…"/></Shell>;
   }
-  return <LoginScreen onLogin={login} onCoachLogin={coachLogin}/>;
+  return <LoginScreen onLogin={login}/>;
 }
 
 // ─── CLIENT : chargement des données ──────────────────────────────────────────
@@ -329,29 +328,20 @@ const Shell=({children,css:c})=>IS_DESKTOP?(
 );
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
-function LoginScreen({onLogin,onCoachLogin}){
-  const [mode,setMode]=useState("client"); // "client" (code) | "coach" (e-mail + mot de passe)
+function LoginScreen({onLogin}){
   const [code,setCode]=useState("");
-  const [email,setEmail]=useState("");
-  const [password,setPassword]=useState("");
-  const [err,setErr]=useState(null); // null | "invalid" | "locked" | "network" | "notcoach"
+  const [err,setErr]=useState(null); // null | "invalid" | "locked" | "network"
   const [busy,setBusy]=useState(false);
   const [focused,setFocused]=useState(false);
-  const active=(mode==="client"?!!code.trim():!!email.trim()&&!!password)&&!busy;
   const attempt=async e=>{
     e?.preventDefault();
-    if(!active) return;
+    if(!code.trim()||busy) return;
     setBusy(true);
-    const r=mode==="client"?await onLogin(code):await onCoachLogin(email,password);
+    const r=await onLogin(code);
     setBusy(false);
     if(r!=="ok") setErr(r);
   };
-  const switchMode=m=>{setMode(m);setErr(null);};
-  const coachInput={
-    width:"100%",background:G.bg3,border:`1.5px solid ${err?G.red:G.border}`,
-    borderRadius:12,padding:"14px 16px",color:G.white,fontSize:16,outline:"none",
-    fontFamily:G.font,boxSizing:"border-box",marginBottom:10
-  };
+  const active=!!code.trim()&&!busy;
 
   const loginContent=(
     <div style={{width:"100%",display:"flex",flexDirection:"column",alignItems:"center",gap:0}}>
@@ -385,7 +375,6 @@ function LoginScreen({onLogin,onCoachLogin}){
         border:`1px solid ${G.border}`,
         boxShadow:"0 20px 60px #0008"
       }}>
-        {mode==="client"?(<>
         <label htmlFor="access-code" style={{display:"block",fontSize:12,color:G.grey,letterSpacing:.5,marginBottom:10,fontWeight:600,textTransform:"uppercase"}}>
           Code d'accès
         </label>
@@ -413,21 +402,8 @@ function LoginScreen({onLogin,onCoachLogin}){
             fontWeight:700,fontFamily:G.font,
             transition:"border .15s",boxSizing:"border-box"
           }}/>
-        </>):(<>
-        <label htmlFor="coach-email" style={{display:"block",fontSize:12,color:G.grey,letterSpacing:.5,marginBottom:10,fontWeight:600,textTransform:"uppercase"}}>
-          Espace coach
-        </label>
-        <input id="coach-email" name="email" type="email" value={email} placeholder="E-mail"
-          autoComplete="username" autoCapitalize="none" spellCheck={false}
-          onChange={e=>{setEmail(e.target.value);setErr(null);}} style={coachInput}/>
-        <input id="coach-password" name="password" type="password" value={password} placeholder="Mot de passe"
-          autoComplete="current-password" enterKeyHint="go"
-          onChange={e=>{setPassword(e.target.value);setErr(null);}} style={coachInput}/>
-        </>)}
         <div role="alert" style={{minHeight:26,display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center",margin:"6px 0 4px"}}>
-          {err==="invalid"&&mode==="client"&&<div style={{color:G.red,fontSize:12}}>Code invalide — vérifie-le ou contacte ton coach.</div>}
-          {err==="invalid"&&mode==="coach"&&<div style={{color:G.red,fontSize:12}}>E-mail ou mot de passe incorrect.</div>}
-          {err==="notcoach"&&<div style={{color:G.red,fontSize:12}}>Ce compte n'a pas accès à l'espace coach.</div>}
+          {err==="invalid"&&<div style={{color:G.red,fontSize:12}}>Code invalide — vérifie-le ou contacte ton coach.</div>}
           {err==="locked"&&<div style={{color:G.red,fontSize:12}}>Trop d'essais — réessaie dans 15 minutes.</div>}
           {err==="network"&&<div style={{color:G.red,fontSize:12}}>Connexion impossible — vérifie ton réseau et réessaie.</div>}
         </div>
@@ -449,16 +425,10 @@ function LoginScreen({onLogin,onCoachLogin}){
         </button>
       </form>
 
-      {mode==="client"&&(
-        <div style={{marginTop:28,fontSize:12,color:G.grey,textAlign:"center",lineHeight:1.6}}>
-          Tu n'as pas de code ?<br/>
-          <span style={{color:G.white+"bb"}}>Contacte ton coach pour en obtenir un.</span>
-        </div>
-      )}
-      <button type="button" onClick={()=>switchMode(mode==="client"?"coach":"client")}
-        style={{marginTop:mode==="client"?16:28,background:"none",border:"none",color:G.greyDim,fontSize:12,cursor:"pointer",fontFamily:G.font,textDecoration:"underline",padding:8}}>
-        {mode==="client"?"Accès coach":"← Connexion client"}
-      </button>
+      <div style={{marginTop:28,fontSize:12,color:G.grey,textAlign:"center",lineHeight:1.6}}>
+        Tu n'as pas de code ?<br/>
+        <span style={{color:G.white+"bb"}}>Contacte ton coach pour en obtenir un.</span>
+      </div>
     </div>
   );
 

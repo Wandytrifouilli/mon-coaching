@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
-import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginCoach, API_BASE } from "./firebase.js";
+import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginWithCode, API_BASE } from "./firebase.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
@@ -2257,32 +2257,40 @@ const Brand=()=>(
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 function CoachLogin({onLogin}){
-  const [email,setEmail]=useState("");
-  const [password,setPassword]=useState("");
-  const [err,setErr]=useState(null); // null | "invalid" | "notcoach" | "network"
+  const [code,setCode]=useState("");
+  const [err,setErr]=useState(null); // null | "invalid" | "notcoach" | "locked" | "network"
   const [busy,setBusy]=useState(false);
   const attempt=async e=>{
     e?.preventDefault();
-    if(!email.trim()||!password||busy)return;
+    if(!code.trim()||busy)return;
     setBusy(true);
-    const r=await onLogin(email,password);
+    const r=await onLogin(code);
     setBusy(false);
     if(r!=="ok")setErr(r);
   };
+  const msg={invalid:"Code incorrect",notcoach:"Ce code n'ouvre pas l'espace coach",locked:"Trop d'essais — réessaie dans 15 minutes",network:"Connexion impossible — vérifie ton réseau"}[err];
   return(
     <div style={{minHeight:"100dvh",background:G.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.font,color:G.white,padding:16}}>
       <style>{css}</style>
       <form onSubmit={attempt} className="fu" style={{width:"100%",maxWidth:400,padding:"34px 26px",background:"linear-gradient(180deg,#151515,#0e0e0e)",borderRadius:26,border:`1px solid ${C.line2}`,boxShadow:"0 30px 80px #000a"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:30}}><Brand/></div>
-        <Field label="E-mail"><TextInput type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr(null);}} autoComplete="username" autoFocus/></Field>
-        <Field label="Mot de passe"><TextInput type="password" value={password} onChange={e=>{setPassword(e.target.value);setErr(null);}} autoComplete="current-password"/></Field>
-        <div role="alert" style={{minHeight:20,color:G.red,fontSize:13,textAlign:"center",marginBottom:10}}>
-          {err&&(err==="notcoach"?"Ce compte n'a pas accès à l'espace coach":err==="network"?"Connexion impossible — vérifie ton réseau":"E-mail ou mot de passe incorrect")}
-        </div>
-        <Btn type="submit" disabled={!email.trim()||!password||busy} style={{width:"100%",height:50}}>{busy?"Connexion…":"Accéder à mon espace"}</Btn>
+        <Field label="Code coach">
+          <TextInput type="password" value={code} onChange={e=>{setCode(e.target.value);setErr(null);}} autoComplete="current-password" autoFocus
+            style={{height:54,textAlign:"center",fontSize:20,fontWeight:700,letterSpacing:4}}/>
+        </Field>
+        <div role="alert" style={{minHeight:20,color:G.red,fontSize:13,textAlign:"center",marginBottom:10}}>{msg}</div>
+        <Btn type="submit" disabled={!code.trim()||busy} style={{width:"100%",height:50}}>{busy?"Connexion…":"Accéder à mon espace"}</Btn>
       </form>
     </div>
   );
+}
+
+// Code coach vérifié par le serveur ; un code adhérent saisi ici ne donne pas accès à l'espace coach
+async function coachLoginWithCode(code){
+  const r=await loginWithCode(code.trim().toUpperCase());
+  if(r.status!=="ok") return r.status;
+  if(r.role!=="coach"){await signOut(auth).catch(()=>{});return "notcoach";}
+  return "ok";
 }
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
@@ -3693,7 +3701,7 @@ export default function CoachApp(){
   }),[]);
 
   if(status==="loading")return <LoadingScreen/>;
-  if(status==="login")return <CoachLogin onLogin={loginCoach}/>;
+  if(status==="login")return <CoachLogin onLogin={coachLoginWithCode}/>;
   return <CoachMain onLogout={()=>signOut(auth).catch(e=>console.error("[Auth] Déconnexion:",e))}/>;
 }
 
