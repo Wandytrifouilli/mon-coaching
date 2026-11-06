@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, createContext, useContext, Fragment } from "react";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginWithCode } from "./firebase.js";
+import { sessionMinutes, fmtMinutes } from "./sessionTime.js";
 
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -544,14 +545,6 @@ const logVolume=log=>(log.exercises||[]).reduce((a,ex)=>a+(ex.sets||[]).reduce((
   const l=parseKg(s.load),r=parseInt(s.reps);
   return b+(l>0&&r>0?l*r:0);
 },0),0);
-// Durée estimée d'une séance : temps d'effort (~40 s par série) + récupérations
-const estMinutes=day=>{
-  let s=0;
-  const list=day.exercises||[];
-  // Dans un superset, pas de repos entre les exercices liés
-  list.forEach((pe,i)=>{const n=Math.max(1,Number(pe.sets)||1);s+=n*((isTimed(pe.reps)?parseRest(pe.reps):40)+(pe.linkNext&&i<list.length-1?0:parseRest(pe.rest)));});
-  return Math.max(5,Math.round(s/300)*5);
-};
 
 // Les saisies manuelles du coach peuvent avoir weekIdx/dayIdx vides : on les ignore
 const sameIdx=(a,b)=>a!==""&&a!=null&&Number(a)===b;
@@ -787,7 +780,7 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
       return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",coachNote:pe.note||"",target:target.text,muscle:ex?.muscle||"",rest:String(pe.rest||""),linkNext:!!pe.linkNext,unit:target.unit||"kg",sensation:"",
         sets:Array.from({length:Math.max(1,Number(pe.sets)||1)},()=>({reps:String(pe.reps??""),load:target.load,done:false,actualReps:""}))};
     });
-    setSession({progId:prog.id,weekIdx,dayIdx,dayLabel:day.label,weekLabel:prog.weeks[weekIdx]?.label||"",exercises:exEntries,notes:"",startedAt:Date.now()});
+    setSession({progId:prog.id,weekIdx,dayIdx,dayLabel:day.label,weekLabel:prog.weeks[weekIdx]?.label||"",exercises:exEntries,notes:"",startedAt:Date.now(),estMin:sessionMinutes(day,exercises)});
     setWorkoutOpen(true);
   };
 
@@ -872,7 +865,7 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
 }
 
 // ─── ACCUEIL ──────────────────────────────────────────────────────────────────
-function HomeTab({live,logs,assigned,session,next,onStart,onResume,onOpenTrain,onProfile,setTab,programs}){
+function HomeTab({live,logs,assigned,session,exercises,next,onStart,onResume,onOpenTrain,onProfile,setTab,programs}){
   const now=new Date();
   const hour=now.getHours();
   const hello=hour<5||hour>=18?"Bonsoir":"Bonjour";
@@ -942,7 +935,7 @@ function HomeTab({live,logs,assigned,session,next,onStart,onResume,onOpenTrain,o
           cta={<PrimaryBtn onClick={onResume}><Icon name="play" size={16} fill="currentColor" sw={0}/>Reprendre la séance</PrimaryBtn>}/>
       ):next?(
         <HeroCard label="Prochaine séance" title={next.day.label} sub={`${next.prog.name} · ${next.week.label}`}
-          meta={[`${(next.day.exercises||[]).length} exercices`,`≈ ${estMinutes(next.day)} min`]}
+          meta={[`${(next.day.exercises||[]).length} exercices`,`≈ ${fmtMinutes(sessionMinutes(next.day,exercises))}`]}
           preview={(next.day.exercises||[]).map(pe=>pe.exId)}
           cta={<PrimaryBtn onClick={()=>onStart(next.prog,next.wi,next.day,next.di)}><Icon name="play" size={16} fill="currentColor" sw={0}/>Démarrer la séance</PrimaryBtn>}
           footer={<LinkBtn onClick={()=>onOpenTrain(next.prog.id,next.wi)} style={{margin:"12px auto 0"}}>Voir toute la semaine <Icon name="right" size={14}/></LinkBtn>}/>
@@ -1105,7 +1098,7 @@ function TrainTab({live,logs,assigned,session,exercises,sel,setSel,onStart,onRes
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:16,...ellipsis}}>{d.label}</div>
               <div style={{fontSize:12,marginTop:3,color:doneLog?G.green:inProgress?G.goldLight:C.muted}}>
-                {inProgress?"● En cours":doneLog?`Faite · ${fmtDate(doneLog.date)}`:`${(d.exercises||[]).length} exercices · ≈ ${estMinutes(d)} min`}
+                {inProgress?"● En cours":doneLog?`Faite · ${fmtDate(doneLog.date)}`:`${(d.exercises||[]).length} exercices · ≈ ${fmtMinutes(sessionMinutes(d,exercises))}`}
               </div>
             </div>
             <Icon name="down" size={18} color={C.muted} style={{transform:open?"rotate(180deg)":"none",transition:"transform .2s"}}/>
@@ -1207,7 +1200,7 @@ function WorkoutView({session,setSession,updateSet,updateEx,logs,rest,restOwner,
           <div style={{flex:1,minWidth:0,textAlign:"center"}}>
             <div style={{fontFamily:G.fontD,fontSize:19,fontWeight:800,letterSpacing:-.3,...ellipsis}}>{session.dayLabel}</div>
             <div style={{fontSize:12,color:C.muted,display:"flex",gap:6,justifyContent:"center",alignItems:"center",marginTop:1}}>
-              <Icon name="clock" size={12}/><Elapsed since={session.startedAt}/><span>·</span><span style={{color:done===total?G.green:G.goldLight,fontWeight:700}}>{done}/{total} séries</span>
+              <Icon name="clock" size={12}/><Elapsed since={session.startedAt}/>{session.estMin>0&&<span style={{color:C.dim}}>/ ≈ {fmtMinutes(session.estMin)}</span>}<span>·</span><span style={{color:done===total?G.green:G.goldLight,fontWeight:700}}>{done}/{total} séries</span>
             </div>
           </div>
           <button onClick={onFinish} style={{height:42,padding:"0 14px",borderRadius:14,border:"none",background:done===total?C.goldGrad:G.gold+"22",color:done===total?G.bg:G.goldLight,fontWeight:800,fontSize:13,cursor:"pointer",flexShrink:0}}>Terminer</button>

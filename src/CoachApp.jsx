@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginWithCode, API_BASE } from "./firebase.js";
+import { estimateSecPerRep, customSecPerRep, secPerRepOf, sessionBreakdown, fmtMinutes } from "./sessionTime.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
@@ -3208,6 +3209,7 @@ function ProgramDetail({data,program,client,go,onBack,backLabel}){
         </Card>
       )}
 
+      {day&&(day.exercises||[]).length>0&&<SessionDuration day={day} exercises={exercises} style={{marginBottom:12}}/>}
       {(!day||!(day.exercises||[]).length)&&<EmptyState icon="dumbbell" title="Séance vide" text="Ajoute des exercices en modifiant le programme."/>}
       <div style={{display:"grid",gridTemplateColumns:wide?"1fr 1fr":"1fr",gap:10}}>
         {(()=>{
@@ -3258,6 +3260,18 @@ function ProgramDetail({data,program,client,go,onBack,backLabel}){
         })()}
       </div>
     </Pad>
+  );
+}
+
+// Durée estimée d'une séance : effort (reps × temps par rép. ou durée) + récupérations
+function SessionDuration({day,exercises,style}){
+  const b=sessionBreakdown(day,exercises);
+  return(
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:14,background:G.gold+"0f",border:`1px solid ${G.gold}33`,...style}}>
+      <Icon name="clock" size={18} color={G.goldLight}/>
+      <span style={{fontSize:14,fontWeight:700}}>Durée estimée <span style={{color:G.goldLight,fontFamily:G.fontD,fontSize:18,fontWeight:800,marginLeft:4}}>≈ {fmtMinutes(b.total/60)}</span></span>
+      <span style={{fontSize:12.5,color:C.muted}}>{fmtMinutes(b.work/60)} d'effort · {fmtMinutes(b.rest/60)} de récupération</span>
+    </div>
   );
 }
 
@@ -3395,11 +3409,12 @@ function ProgramEditor({data,init,title,onSave,onCancel}){
 
             {day&&(
               <>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:day.exercises.length?8:12}}>
                   <input className="inp" value={day.label} aria-label="Nom de la séance" onChange={e=>setDay(d=>({...d,label:e.target.value}))}
                     style={{...inputStyle,flex:1,height:40,fontWeight:700,fontSize:15}}/>
                   {week.days.length>1&&<IconBtn icon="trash" label="Supprimer la séance" variant="quiet" size={36} onClick={removeDay}/>}
                 </div>
+                {day.exercises.length>0&&<SessionDuration day={day} exercises={exercises} style={{marginBottom:12}}/>}
                 {(()=>{
                   const labels=blockLabels(day.exercises);
                   const last=day.exercises.length-1;
@@ -3417,6 +3432,7 @@ function ProgramEditor({data,init,title,onSave,onCancel}){
                       </div>
                     );
                   };
+                  const dur=sessionBreakdown(day,exercises).rows;
                   const card=(pe,i,group)=>{
                   const ex=exercises.find(e=>e.id===pe.exId);
                   const showNote=openNotes[`${wi}-${di}-${i}`]||!!pe.note;
@@ -3426,6 +3442,7 @@ function ProgramEditor({data,init,title,onSave,onCancel}){
                       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
                         <div style={{minWidth:26,height:26,padding:"0 4px",borderRadius:8,background:G.gold+"18",color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:13,flexShrink:0}}>{labels[i]}</div>
                         <div style={{flex:1,minWidth:0,fontWeight:700,fontSize:14,...ellipsis}}>{ex?.name||"Exercice supprimé"}</div>
+                        <span title="Durée estimée de l'exercice, récupérations comprises" style={{fontSize:12,color:C.muted,fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>≈ {fmtMinutes(dur[i].total/60)}</span>
                         {ex&&<VideoBtn ex={ex} size={30}/>}
                         <IconBtn icon="up" label="Monter" variant="quiet" size={30} disabled={i===0} style={{opacity:i===0?.3:1}} onClick={()=>i>0&&moveEx(i,-1)}/>
                         <IconBtn icon="down" label="Descendre" variant="quiet" size={30} disabled={i===last} style={{opacity:i===last?.3:1}} onClick={()=>i<last&&moveEx(i,1)}/>
@@ -3573,7 +3590,7 @@ function ExercisesPanel({data,initialNoVideo}){
           <Card key={ex.id} onClick={()=>setEditing(ex)} style={{display:"flex",alignItems:"center",gap:12,padding:12}}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,fontSize:14.5,...ellipsis}}>{ex.name}</div>
-              <div style={{fontSize:12,color:C.muted,marginTop:3,...ellipsis}}>{ex.muscle} · {ex.equipment}</div>
+              <div style={{fontSize:12,color:C.muted,marginTop:3,...ellipsis}}>{ex.muscle} · {ex.equipment} · <span title={customSecPerRep(ex)?"Temps par répétition saisi":"Temps par répétition estimé automatiquement"}>{customSecPerRep(ex)?"":"≈ "}{secPerRepOf(ex)} s/rép.</span></div>
             </div>
             {ex.videoUrl?<VideoBtn ex={ex}/>:<Chip color={ORANGE}>Sans vidéo</Chip>}
           </Card>
@@ -3589,7 +3606,14 @@ function ExerciseModal({init,usage,onSave,onDelete,onClose,preset,title,saveLabe
   const {confirm}=useUI();
   const [f,setF]=useState(init?{...init}:{name:preset?.name||"",muscle:preset?.muscle||"Jambes",equipment:"Barre",videoUrl:"",notes:""});
   const embedOk=!!ytId(f.videoUrl);
-  const save=()=>{if(!f.name.trim())return;onSave({...f,name:f.name.trim(),videoUrl:normalizeVideo(f.videoUrl)});};
+  const autoSec=estimateSecPerRep(f);
+  const save=()=>{
+    if(!f.name.trim())return;
+    const {secPerRep,...rest}=f;
+    const spr=Number(String(secPerRep??"").replace(",","."));
+    // Vide = estimation automatique (le champ n'est pas enregistré)
+    onSave({...rest,name:f.name.trim(),videoUrl:normalizeVideo(f.videoUrl),...(spr>0?{secPerRep:Math.round(spr*10)/10}:{})});
+  };
   const remove=async()=>{
     const ok=await confirm({title:`Supprimer ${init.name} ?`,danger:true,confirm:"Supprimer",
       text:usage?`Il est utilisé dans ${usage} programme(s) : il y apparaîtra comme « Exercice supprimé ».`:"Cette action est définitive."});
@@ -3613,6 +3637,12 @@ function ExerciseModal({init,usage,onSave,onDelete,onClose,preset,title,saveLabe
       {f.videoUrl&&(embedOk
         ?<div style={{marginBottom:14}}><VideoFrame url={f.videoUrl} title={`Aperçu — ${f.name}`}/></div>
         :<div style={{fontSize:12.5,color:ORANGE,margin:"-6px 0 14px"}}>Lien non reconnu comme une vidéo YouTube : il sera enregistré tel quel.</div>)}
+      <Field label="Temps moyen par répétition" hint={<>Sert à calculer la durée des séances. Laisse vide pour l'estimation automatique : <b style={{color:G.goldLight}}>{autoSec} s</b> pour ce type d'exercice.</>}>
+        <div style={{position:"relative"}}>
+          <TextInput value={f.secPerRep??""} onChange={e=>setF(p=>({...p,secPerRep:e.target.value.replace(/[^\d.,]/g,"")}))} placeholder={`${autoSec} (auto)`} inputMode="decimal" style={{paddingRight:90}}/>
+          <span style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",fontSize:13,color:C.muted,pointerEvents:"none"}}>sec / rép.</span>
+        </div>
+      </Field>
       <Field label="Conseils techniques"><TextArea value={f.notes||""} onChange={e=>setF(p=>({...p,notes:e.target.value}))} placeholder="Dos droit, genoux alignés…"/></Field>
       {init&&usage>0&&<div style={{fontSize:12.5,color:C.muted}}>Utilisé dans {usage} programme{usage>1?"s":""}.</div>}
     </Modal>
