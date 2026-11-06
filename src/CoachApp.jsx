@@ -1955,6 +1955,32 @@ const nextSessionOf=(prog,logs)=>{
   return null;
 };
 const exCount=p=>(p.weeks||[]).reduce((a,w)=>a+(w.days||[]).reduce((b,d)=>b+(d.exercises||[]).length,0),0);
+
+// Supersets / trisets : un exercice marqué linkNext s'enchaîne sans repos avec le suivant.
+// Les exercices liés forment un bloc ; le repos du dernier exercice du bloc est pris après le tour.
+// Renvoie [{start, items:[{pe,i}]}] (un bloc d'un seul exercice = exercice classique).
+const exBlocks=list=>{
+  const out=[];
+  (list||[]).forEach((pe,i)=>{
+    if(i>0&&list[i-1]?.linkNext) out[out.length-1].items.push({pe,i});
+    else out.push({start:i,items:[{pe,i}]});
+  });
+  return out;
+};
+const blockKind=n=>n===2?"Superset":n===3?"Triset":"Circuit";
+// Numéro affiché : « 3 » pour un exercice seul, « 2A », « 2B »… dans un superset
+const blockLabels=list=>{
+  const labels=[];
+  exBlocks(list).forEach((b,bi)=>b.items.forEach((x,k)=>{labels[x.i]=b.items.length>1?`${bi+1}${"ABCDEFGH"[k]||k+1}`:String(bi+1);}));
+  return labels;
+};
+// Retire l'exercice i sans souder le bloc précédent au bloc suivant
+const dropExAt=(list,i)=>{
+  const a=list.map(e=>({...e}));
+  if(i>0&&a[i-1].linkNext&&!a[i].linkNext) a[i-1].linkNext=false;
+  a.splice(i,1);
+  return a;
+};
 const usesExercise=(p,exId)=>(p.weeks||[]).some(w=>(w.days||[]).some(d=>(d.exercises||[]).some(e=>e.exId===exId)));
 
 // Statut de suivi d'un client (accueil + liste clients)
@@ -2162,15 +2188,21 @@ function Pad({children,max=1080}){
 // Rendue dans <body> : les animations des pages (transform) fausseraient le positionnement fixe.
 function Modal({onClose,title,children,footer,width=540}){
   const {wide}=useUI();
+  const box=useRef(null);
   useEffect(()=>{
-    const k=e=>{if(e.key==="Escape")onClose?.();};
+    // Échap ne ferme que la fenêtre du dessus (ex. création d'exercice ouverte par-dessus le sélecteur)
+    const k=e=>{
+      if(e.key!=="Escape")return;
+      const all=document.querySelectorAll('[role="dialog"]');
+      if(all[all.length-1]===box.current) onClose?.();
+    };
     window.addEventListener("keydown",k);
     return()=>window.removeEventListener("keydown",k);
   },[onClose]);
   return createPortal(
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:500,background:"#000000b3",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)",
       display:"flex",alignItems:wide?"center":"flex-end",justifyContent:"center",padding:wide?24:0,animation:"fadeIn .18s ease"}}>
-      <div role="dialog" aria-modal="true" aria-label={typeof title==="string"?title:undefined} onClick={e=>e.stopPropagation()}
+      <div ref={box} role="dialog" aria-modal="true" aria-label={typeof title==="string"?title:undefined} onClick={e=>e.stopPropagation()}
         style={{width:"100%",maxWidth:wide?width:"100%",maxHeight:wide?"88vh":"92dvh",display:"flex",flexDirection:"column",background:"#111",border:`1px solid ${C.line2}`,
           borderRadius:wide?22:"24px 24px 0 0",boxShadow:"0 30px 80px #000c",animation:wide?"popIn .2s ease":"sheetUp .28s cubic-bezier(.2,.9,.3,1)"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,padding:"18px 20px 10px",flexShrink:0}}>
@@ -3178,18 +3210,22 @@ function ProgramDetail({data,program,client,go,onBack,backLabel}){
 
       {(!day||!(day.exercises||[]).length)&&<EmptyState icon="dumbbell" title="Séance vide" text="Ajoute des exercices en modifiant le programme."/>}
       <div style={{display:"grid",gridTemplateColumns:wide?"1fr 1fr":"1fr",gap:10}}>
-        {(day?.exercises||[]).map((pe,i)=>{
+        {(()=>{
+        const list=day?.exercises||[];
+        const labels=blockLabels(list);
+        const card=(pe,i)=>{
           const ex=exercises.find(e=>e.id===pe.exId);
           const comp=computeLoad(pe,client?.tests);
           const ref=LOAD_REFS.find(r=>r.id===pe.loadRef&&r.id!=="none");
           const res=dayLog?.exercises?.find(e=>e.exId===pe.exId);
+          const chained=!!pe.linkNext&&i<list.length-1;
           return(
             <Card key={i} style={{padding:14,borderColor:res?G.green+"33":C.line}}>
               <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
-                <div style={{width:30,height:30,borderRadius:10,background:G.gold+"18",color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:15,flexShrink:0}}>{i+1}</div>
+                <div style={{minWidth:30,height:30,padding:"0 4px",borderRadius:10,background:G.gold+"18",color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:15,flexShrink:0}}>{labels[i]}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:15}}>{ex?.name||"Exercice supprimé"}</div>
-                  <div style={{fontSize:13,color:"#c8c8c8",marginTop:4}}>{pe.sets} × {pe.reps}{pe.rest?<span style={{color:C.muted}}> · repos {pe.rest}</span>:null}</div>
+                  <div style={{fontSize:13,color:"#c8c8c8",marginTop:4}}>{pe.sets} × {pe.reps}{chained?<span style={{color:G.goldLight}}> · enchaîner sans repos</span>:pe.rest?<span style={{color:C.muted}}> · repos {pe.rest}</span>:null}</div>
                   {pe.targetLoad&&<div style={{fontSize:12.5,color:G.goldLight,marginTop:4}}>🎯 {comp?`${comp.value} ${comp.unit} (${comp.pct}% ${comp.label.replace("% ","")})`:`${pe.targetLoad}${ref?` · ${ref.label}`:""}`}</div>}
                   {pe.note&&<div style={{fontSize:12.5,color:"#bbb",marginTop:6,lineHeight:1.45}}>📝 {pe.note}</div>}
                 </div>
@@ -3205,7 +3241,21 @@ function ProgramDetail({data,program,client,go,onBack,backLabel}){
               )}
             </Card>
           );
-        })}
+        };
+        return exBlocks(list).map(b=>{
+          if(b.items.length===1) return card(b.items[0].pe,b.start);
+          const tail=b.items[b.items.length-1].pe;
+          return(
+            <div key={`grp-${b.start}`} style={{gridColumn:"1 / -1",border:`1.5px solid ${G.gold}66`,borderRadius:20,padding:10,background:`linear-gradient(180deg,${G.gold}12,transparent 70%)`}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"2px 4px 10px"}}>
+                <Chip gold><Icon name="link" size={12}/>{blockKind(b.items.length)}</Chip>
+                <span style={{fontSize:12.5,color:"#ccc"}}>À enchaîner sans repos{tail.rest?<> · repos <b style={{color:G.goldLight}}>{tail.rest}</b> après le tour</>:""}</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:wide?"1fr 1fr":"1fr",gap:8}}>{b.items.map(x=>card(x.pe,x.i))}</div>
+            </div>
+          );
+        });
+        })()}
       </div>
     </Pad>
   );
@@ -3213,12 +3263,13 @@ function ProgramDetail({data,program,client,go,onBack,backLabel}){
 
 const LEVELS=["Débutant","Intermédiaire","Avancé","Tous niveaux"];
 function ProgramEditor({data,init,title,onSave,onCancel}){
-  const {exercises}=data;
-  const {wide,confirm}=useUI();
+  const {exercises,setExercises}=data;
+  const {wide,confirm,toast}=useUI();
   const [form,setForm]=useState(init);
   const [wi,setWi]=useState(0);
   const [di,setDi]=useState(0);
   const [picker,setPicker]=useState(false);
+  const [creating,setCreating]=useState(null); // {name, muscle} : création rapide d'un exercice manquant
   const [openNotes,setOpenNotes]=useState({});
   const initial=useRef(JSON.stringify(init));
   const week=form.weeks[wi];
@@ -3240,10 +3291,43 @@ function ProgramEditor({data,init,title,onSave,onCancel}){
     if(day.exercises.length&&!(await confirm({title:`Supprimer ${day.label} ?`,text:`${day.exercises.length} exercice(s) seront retirés.`,confirm:"Supprimer",danger:true})))return;
     setWeeks(ws=>ws.map((w,i)=>i!==wi?w:{...w,days:w.days.filter((_,j)=>j!==di)}));setDi(Math.max(0,di-1));
   };
-  const toggleEx=ex=>setDay(d=>({...d,exercises:d.exercises.some(e=>e.exId===ex.id)?d.exercises.filter(e=>e.exId!==ex.id):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:"",loadRef:"none",note:""}]}));
+  const toggleEx=ex=>setDay(d=>{
+    const at=d.exercises.findIndex(e=>e.exId===ex.id);
+    return {...d,exercises:at>=0?dropExAt(d.exercises,at):[...d.exercises,{exId:ex.id,sets:3,reps:"10",rest:"60s",targetLoad:"",loadRef:"none",note:""}]};
+  });
   const updEx=(i,field,val)=>setDay(d=>({...d,exercises:d.exercises.map((e,j)=>j===i?{...e,[field]:val}:e)}));
-  const moveEx=(from,to)=>setDay(d=>{const a=[...d.exercises];const [it]=a.splice(from,1);a.splice(to,0,it);return {...d,exercises:a};});
-  const removeEx=i=>setDay(d=>({...d,exercises:d.exercises.filter((_,j)=>j!==i)}));
+  // Monter / descendre : dans un superset on échange l'ordre sans casser le groupe ;
+  // à la limite du groupe, l'exercice en sort et passe de l'autre côté du bloc voisin.
+  const moveEx=(i,dir)=>setDay(d=>{
+    const a=d.exercises.map(e=>({...e}));
+    const blocks=exBlocks(a);
+    const bi=blocks.findIndex(b=>b.items.some(x=>x.i===i));
+    const b=blocks[bi];
+    const k=b.items.findIndex(x=>x.i===i);
+    if(dir<0?k>0:k<b.items.length-1){
+      const j=i+dir,fi=!!a[i].linkNext,fj=!!a[j].linkNext;
+      [a[i],a[j]]=[a[j],a[i]];
+      a[i].linkNext=fi;a[j].linkNext=fj;
+      return {...d,exercises:a};
+    }
+    const nb=blocks[bi+dir];
+    if(!nb) return d;
+    if(b.items.length>1&&k===b.items.length-1) a[i-1].linkNext=false;
+    const [it]=a.splice(i,1);
+    it.linkNext=false;
+    a.splice(dir<0?nb.start:nb.start-1+nb.items.length,0,it);
+    return {...d,exercises:a};
+  });
+  const removeEx=i=>setDay(d=>({...d,exercises:dropExAt(d.exercises,i)}));
+  // Exercice manquant : créé dans la bibliothèque et ajouté directement à la séance en cours
+  const createEx=f=>{
+    const ex={...f,id:Date.now()};
+    setExercises(p=>[...p,ex]);
+    toggleEx(ex);
+    setCreating(null);
+    toast(`« ${ex.name} » créé et ajouté à ${day?.label||"la séance"}`);
+  };
+  const toggleLink=i=>setDay(d=>({...d,exercises:d.exercises.map((e,j)=>j===i?{...e,linkNext:!e.linkNext}:e)}));
   const cancel=async()=>{
     if(JSON.stringify(form)!==initial.current&&!(await confirm({title:"Abandonner les modifications ?",text:"Les changements non enregistrés seront perdus.",confirm:"Abandonner",danger:true})))return;
     onCancel();
@@ -3316,25 +3400,45 @@ function ProgramEditor({data,init,title,onSave,onCancel}){
                     style={{...inputStyle,flex:1,height:40,fontWeight:700,fontSize:15}}/>
                   {week.days.length>1&&<IconBtn icon="trash" label="Supprimer la séance" variant="quiet" size={36} onClick={removeDay}/>}
                 </div>
-                {day.exercises.map((pe,i)=>{
+                {(()=>{
+                  const labels=blockLabels(day.exercises);
+                  const last=day.exercises.length-1;
+                  // Bouton entre deux exercices : lier (superset) ou délier
+                  const linker=i=>{
+                    const on=!!day.exercises[i].linkNext;
+                    return(
+                      <div key={`lk-${i}`} style={{display:"flex",justifyContent:"center",margin:"-2px 0 6px"}}>
+                        <button type="button" onClick={()=>toggleLink(i)} aria-pressed={on}
+                          title={on?"Séparer ces deux exercices":"Enchaîner ces deux exercices sans repos (superset)"}
+                          style={{display:"inline-flex",alignItems:"center",gap:6,height:28,padding:"0 12px",borderRadius:99,cursor:"pointer",fontSize:12,fontWeight:700,
+                            background:on?G.gold+"22":"transparent",color:on?G.goldLight:C.muted,border:`1px ${on?"solid":"dashed"} ${on?G.gold+"88":C.line2}`}}>
+                          <Icon name="link" size={13}/>{on?"Enchaîné sans repos · délier":"Lier au suivant (superset)"}
+                        </button>
+                      </div>
+                    );
+                  };
+                  const card=(pe,i,group)=>{
                   const ex=exercises.find(e=>e.id===pe.exId);
                   const showNote=openNotes[`${wi}-${di}-${i}`]||!!pe.note;
+                  const chained=!!pe.linkNext&&i<last;
                   return(
-                    <div key={`${pe.exId}-${i}`} style={{background:"#0b0b0b",border:`1px solid ${C.line}`,borderRadius:14,padding:12,marginBottom:8}}>
+                    <div key={`${pe.exId}-${i}`} style={{background:"#0b0b0b",border:`1px solid ${group?G.gold+"33":C.line}`,borderRadius:14,padding:12,marginBottom:8}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                        <div style={{width:26,height:26,borderRadius:8,background:G.gold+"18",color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:13,flexShrink:0}}>{i+1}</div>
+                        <div style={{minWidth:26,height:26,padding:"0 4px",borderRadius:8,background:G.gold+"18",color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:13,flexShrink:0}}>{labels[i]}</div>
                         <div style={{flex:1,minWidth:0,fontWeight:700,fontSize:14,...ellipsis}}>{ex?.name||"Exercice supprimé"}</div>
                         {ex&&<VideoBtn ex={ex} size={30}/>}
-                        <IconBtn icon="up" label="Monter" variant="quiet" size={30} disabled={i===0} style={{opacity:i===0?.3:1}} onClick={()=>i>0&&moveEx(i,i-1)}/>
-                        <IconBtn icon="down" label="Descendre" variant="quiet" size={30} disabled={i===day.exercises.length-1} style={{opacity:i===day.exercises.length-1?.3:1}} onClick={()=>i<day.exercises.length-1&&moveEx(i,i+1)}/>
+                        <IconBtn icon="up" label="Monter" variant="quiet" size={30} disabled={i===0} style={{opacity:i===0?.3:1}} onClick={()=>i>0&&moveEx(i,-1)}/>
+                        <IconBtn icon="down" label="Descendre" variant="quiet" size={30} disabled={i===last} style={{opacity:i===last?.3:1}} onClick={()=>i<last&&moveEx(i,1)}/>
                         <IconBtn icon="x" label="Retirer" variant="quiet" size={30} onClick={()=>removeEx(i)}/>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:wide?"repeat(4,1fr) 1.3fr":"1fr 1fr",gap:8}}>
-                        {[["Séries","sets","number"],["Reps / durée","reps","text"],["Repos","rest","text"],["Charge","targetLoad","text"]].map(([l,k,t])=>(
+                        {[["Séries","sets","number"],["Reps / durée","reps","text"],[group&&!chained?"Repos après le tour":"Repos","rest","text"],["Charge","targetLoad","text"]].map(([l,k,t])=>(
                           <label key={k} style={{display:"block"}}>
-                            <div style={{fontSize:10.5,color:C.muted,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",marginBottom:4}}>{l}</div>
-                            <input className="inp" type={t} inputMode={t==="number"?"numeric":undefined} value={pe[k]??""} placeholder={k==="targetLoad"?"60kg ou %":""}
-                              onChange={e=>updEx(i,k,t==="number"?Number(e.target.value):e.target.value)} style={{...inputStyle,height:38,fontSize:15,padding:"0 10px"}}/>
+                            <div style={{fontSize:10.5,color:k==="rest"&&group&&!chained?G.goldLight:C.muted,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",marginBottom:4,...ellipsis}}>{l}</div>
+                            {k==="rest"&&chained
+                              ?<div title="Pas de repos : on enchaîne directement l'exercice suivant" style={{...inputStyle,height:38,fontSize:13,padding:"0 10px",display:"flex",alignItems:"center",gap:6,color:G.goldLight,background:G.gold+"10",borderColor:G.gold+"33"}}><Icon name="link" size={13}/>Enchaîner</div>
+                              :<input className="inp" type={t} inputMode={t==="number"?"numeric":undefined} value={pe[k]??""} placeholder={k==="targetLoad"?"60kg ou %":""}
+                                onChange={e=>updEx(i,k,t==="number"?Number(e.target.value):e.target.value)} style={{...inputStyle,height:38,fontSize:15,padding:"0 10px"}}/>}
                           </label>
                         ))}
                         <label style={{display:"block",gridColumn:wide?"auto":"1 / -1"}}>
@@ -3349,19 +3453,41 @@ function ProgramEditor({data,init,title,onSave,onCancel}){
                         :<Btn size="sm" variant="quiet" icon="plus" style={{marginTop:6,paddingLeft:2,color:C.muted}} onClick={()=>setOpenNotes(o=>({...o,[`${wi}-${di}-${i}`]:true}))}>Consigne</Btn>}
                     </div>
                   );
-                })}
-                <Btn variant="ghost" icon="plus" style={{width:"100%",borderStyle:"dashed",marginTop:4}} onClick={()=>setPicker(true)}>Ajouter des exercices</Btn>
+                  };
+                  return exBlocks(day.exercises).flatMap(b=>{
+                    const endI=b.items[b.items.length-1].i;
+                    const after=endI<last?linker(endI):null;
+                    if(b.items.length===1) return [card(b.items[0].pe,b.start,false),after];
+                    const tail=b.items[b.items.length-1].pe;
+                    return [
+                      <div key={`grp-${b.start}`} style={{border:`1.5px solid ${G.gold}66`,borderRadius:18,padding:"10px 8px 2px",marginBottom:8,background:`linear-gradient(180deg,${G.gold}12,transparent 70%)`}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"0 4px 10px"}}>
+                          <Chip gold><Icon name="link" size={12}/>{blockKind(b.items.length)}</Chip>
+                          <span style={{fontSize:12.5,color:"#ccc"}}>{b.items.length} exercices à la suite, sans repos{tail.rest?<> · repos <b style={{color:G.goldLight}}>{tail.rest}</b> après le tour</>:""}</span>
+                        </div>
+                        {b.items.flatMap((x,k)=>[card(x.pe,x.i,true),k<b.items.length-1?linker(x.i):null])}
+                      </div>,
+                      after,
+                    ];
+                  });
+                })()}
+                <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
+                  <Btn variant="ghost" icon="plus" style={{flex:"2 1 200px",borderStyle:"dashed"}} onClick={()=>setPicker(true)}>Ajouter des exercices</Btn>
+                  <Btn variant="quiet" icon="edit" style={{flex:"1 1 160px",color:G.goldLight}} onClick={()=>setCreating({})}>Créer un exercice</Btn>
+                </div>
               </>
             )}
           </Card>
         )}
       </Pad>
-      {picker&&day&&<ExercisePickerModal exercises={exercises} selected={day.exercises.map(e=>e.exId)} title={`Exercices — ${day.label}`} onToggle={toggleEx} onClose={()=>setPicker(false)}/>}
+      {picker&&day&&<ExercisePickerModal exercises={exercises} selected={day.exercises.map(e=>e.exId)} title={`Exercices — ${day.label}`} onToggle={toggleEx} onClose={()=>setPicker(false)}
+        onCreate={pre=>setCreating(pre)}/>}
+      {creating&&day&&<ExerciseModal init={null} preset={creating} title={`Nouvel exercice → ${day.label}`} saveLabel="Créer et ajouter" onSave={createEx} onClose={()=>setCreating(null)}/>}
     </div>
   );
 }
 
-function ExercisePickerModal({exercises,selected,title,onToggle,onClose}){
+function ExercisePickerModal({exercises,selected,title,onToggle,onClose,onCreate}){
   const {wide}=useUI();
   const [search,setSearch]=useState("");
   const [muscle,setMuscle]=useState("Tous");
@@ -3369,9 +3495,13 @@ function ExercisePickerModal({exercises,selected,title,onToggle,onClose}){
   return(
     <Modal onClose={onClose} title={title} width={620}
       footer={<Btn icon="check" style={{flex:1}} onClick={onClose}>Terminé · {selected.length} exercice{selected.length>1?"s":""}</Btn>}>
-      <SearchBox value={search} onChange={setSearch} placeholder="Squat, tirage, haltères…" style={{marginBottom:10}} autoFocus={wide}/>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <SearchBox value={search} onChange={setSearch} placeholder="Squat, tirage, haltères…" style={{flex:1,minWidth:0}} autoFocus={wide}/>
+        {onCreate&&<Btn variant="ghost" icon="plus" onClick={()=>onCreate({name:search.trim(),muscle:muscle!=="Tous"?muscle:undefined})}>{wide?"Nouvel exercice":"Créer"}</Btn>}
+      </div>
       <div style={{marginBottom:12}}><FilterChips value={muscle} onChange={setMuscle} options={MUSCLES.map(m=>[m,m])}/></div>
-      {shown.length===0&&<EmptyState icon="dumbbell" title="Aucun exercice" text="Crée-le dans Bibliothèque → Exercices."/>}
+      {shown.length===0&&<EmptyState icon="dumbbell" title="Aucun exercice" text={onCreate?"Il manque dans ta bibliothèque ? Crée-le, il sera ajouté à la séance.":"Crée-le dans Bibliothèque → Exercices."}
+        action={onCreate&&<Btn icon="plus" onClick={()=>onCreate({name:search.trim(),muscle:muscle!=="Tous"?muscle:undefined})}>{search.trim()?`Créer « ${search.trim()} »`:"Créer un exercice"}</Btn>}/>}
       {shown.map(ex=>{
         const on=selected.includes(ex.id);
         return(
@@ -3455,9 +3585,9 @@ function ExercisesPanel({data,initialNoVideo}){
   );
 }
 
-function ExerciseModal({init,usage,onSave,onDelete,onClose}){
+function ExerciseModal({init,usage,onSave,onDelete,onClose,preset,title,saveLabel="Enregistrer"}){
   const {confirm}=useUI();
-  const [f,setF]=useState(init?{...init}:{name:"",muscle:"Jambes",equipment:"Barre",videoUrl:"",notes:""});
+  const [f,setF]=useState(init?{...init}:{name:preset?.name||"",muscle:preset?.muscle||"Jambes",equipment:"Barre",videoUrl:"",notes:""});
   const embedOk=!!ytId(f.videoUrl);
   const save=()=>{if(!f.name.trim())return;onSave({...f,name:f.name.trim(),videoUrl:normalizeVideo(f.videoUrl)});};
   const remove=async()=>{
@@ -3466,11 +3596,11 @@ function ExerciseModal({init,usage,onSave,onDelete,onClose}){
     if(ok) onDelete(init);
   };
   return(
-    <Modal onClose={onClose} title={init?"Modifier l'exercice":"Nouvel exercice"} width={600}
+    <Modal onClose={onClose} title={title||(init?"Modifier l'exercice":"Nouvel exercice")} width={600}
       footer={<>
         {init&&<IconBtn icon="trash" label="Supprimer l'exercice" variant="danger" size={44} onClick={remove}/>}
         <Btn variant="ghost" style={{flex:1}} onClick={onClose}>Annuler</Btn>
-        <Btn style={{flex:2}} disabled={!f.name.trim()} onClick={save}>Enregistrer</Btn>
+        <Btn style={{flex:2}} disabled={!f.name.trim()} onClick={save}>{saveLabel}</Btn>
       </>}>
       <Field label="Nom"><TextInput value={f.name} onChange={e=>setF(p=>({...p,name:e.target.value}))} placeholder="Squat barre" autoFocus={!init}/></Field>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -3597,6 +3727,7 @@ Règles importantes :
 - Utilise uniquement les IDs d'exercices listés ci-dessus
 - Le champ "rest" accepte : "30s", "60s", "90s", "2min", "3min"
 - Le champ "targetLoad" est optionnel (laisse "" si pas de charge)
+- Superset / triset : ajoute "linkNext": true sur un exercice pour l'enchaîner sans repos avec l'exercice suivant (2 exercices liés = superset, 3 = triset). Le "rest" du dernier exercice du groupe est le repos pris après le tour ; n'écris pas "SUPERSET" dans les consignes
 - Crée toujours plusieurs semaines avec progression
 - Réponds en français, sois précis et professionnel
 - TOUJOURS inclure le JSON si tu crées un programme`;

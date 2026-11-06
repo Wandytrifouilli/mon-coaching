@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
+import { useState, useRef, useEffect, useCallback, createContext, useContext, Fragment } from "react";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginWithCode } from "./firebase.js";
 
 
@@ -547,7 +547,9 @@ const logVolume=log=>(log.exercises||[]).reduce((a,ex)=>a+(ex.sets||[]).reduce((
 // Durée estimée d'une séance : temps d'effort (~40 s par série) + récupérations
 const estMinutes=day=>{
   let s=0;
-  (day.exercises||[]).forEach(pe=>{const n=Math.max(1,Number(pe.sets)||1);s+=n*((isTimed(pe.reps)?parseRest(pe.reps):40)+parseRest(pe.rest));});
+  const list=day.exercises||[];
+  // Dans un superset, pas de repos entre les exercices liés
+  list.forEach((pe,i)=>{const n=Math.max(1,Number(pe.sets)||1);s+=n*((isTimed(pe.reps)?parseRest(pe.reps):40)+(pe.linkNext&&i<list.length-1?0:parseRest(pe.rest)));});
   return Math.max(5,Math.round(s/300)*5);
 };
 
@@ -569,6 +571,23 @@ const nextSessionOf=(prog,logs)=>{
   return null;
 };
 const isSameSession=(s,progId,wi,di)=>!!s&&String(s.progId)===String(progId)&&s.weekIdx===wi&&s.dayIdx===di;
+// Supersets / trisets : un exercice marqué linkNext s'enchaîne sans repos avec le suivant.
+// Renvoie les blocs [{start, items:[{pe,i}]}] ; le repos du dernier exercice du bloc est pris après le tour.
+const exBlocks=list=>{
+  const out=[];
+  (list||[]).forEach((pe,i)=>{
+    if(i>0&&list[i-1]?.linkNext) out[out.length-1].items.push({pe,i});
+    else out.push({start:i,items:[{pe,i}]});
+  });
+  return out;
+};
+const blockKind=n=>n===2?"Superset":n===3?"Triset":"Circuit";
+// Numéro affiché : « 3 » pour un exercice seul, « 2A », « 2B »… dans un superset
+const blockLabels=list=>{
+  const labels=[];
+  exBlocks(list).forEach((b,bi)=>b.items.forEach((x,k)=>{labels[x.i]=b.items.length>1?`${bi+1}${"ABCDEFGH"[k]||k+1}`:String(bi+1);}));
+  return labels;
+};
 const countSets=s=>s?s.exercises.reduce((a,ex)=>({done:a.done+ex.sets.filter(x=>x.done).length,total:a.total+ex.sets.length}),{done:0,total:0}):{done:0,total:0};
 
 // ─── CLIENT : UI ──────────────────────────────────────────────────────────────
@@ -601,6 +620,7 @@ const ICONS={
   target:"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
   calendar:"M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
   weight:"M6 8h12l2 12H4zM9 8a3 3 0 0 1 6 0",
+  link:"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
 };
 const Icon=({name,size=20,color="currentColor",sw=1.9,fill="none",style})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,display:"block",...style}} aria-hidden="true"><path d={ICONS[name]}/></svg>
@@ -764,7 +784,7 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
     const exEntries=(day.exercises||[]).map(pe=>{
       const ex=exercises.find(e=>e.id===pe.exId);
       const target=slotTarget(pe,live.tests);
-      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",coachNote:pe.note||"",target:target.text,muscle:ex?.muscle||"",rest:String(pe.rest||""),unit:target.unit||"kg",sensation:"",
+      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",coachNote:pe.note||"",target:target.text,muscle:ex?.muscle||"",rest:String(pe.rest||""),linkNext:!!pe.linkNext,unit:target.unit||"kg",sensation:"",
         sets:Array.from({length:Math.max(1,Number(pe.sets)||1)},()=>({reps:String(pe.reps??""),load:target.load,done:false,actualReps:""}))};
     });
     setSession({progId:prog.id,weekIdx,dayIdx,dayLabel:day.label,weekLabel:prog.weeks[weekIdx]?.label||"",exercises:exEntries,notes:"",startedAt:Date.now()});
@@ -1092,12 +1112,14 @@ function TrainTab({live,logs,assigned,session,exercises,sel,setSel,onStart,onRes
           </button>
           {open&&(
             <div style={{padding:"0 16px 16px",animation:"fadeIn .2s ease"}}>
-              {(d.exercises||[]).map((pe,i)=>{
+              {(()=>{
+              const labels=blockLabels(d.exercises);
+              const row=(pe,i)=>{
                 const ex=exercises.find(e=>e.id===pe.exId);
                 const t=slotTarget(pe,live.tests).text;
                 return(
                   <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:`1px solid ${C.line}`}}>
-                    <div style={{width:24,fontFamily:G.fontD,fontWeight:800,color:C.dim,fontSize:14}}>{i+1}</div>
+                    <div style={{width:24,fontFamily:G.fontD,fontWeight:800,color:/[A-Z]/.test(labels[i])?G.goldLight:C.dim,fontSize:14}}>{labels[i]}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:14,fontWeight:600}}>{ex?.name||"Exercice"}</div>
                       {t&&<div style={{fontSize:12,color:G.gold,marginTop:2}}>{t}</div>}
@@ -1106,7 +1128,23 @@ function TrainTab({live,logs,assigned,session,exercises,sel,setSel,onStart,onRes
                     {ex&&<VideoBtn ex={ex} size={34}/>}
                   </div>
                 );
-              })}
+              };
+              return exBlocks(d.exercises).map(b=>{
+                if(b.items.length===1) return row(b.items[0].pe,b.start);
+                const tail=b.items[b.items.length-1].pe;
+                return(
+                  <div key={`g${b.start}`} style={{borderTop:`1px solid ${C.line}`,padding:"10px 0 2px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      <Chip gold style={{height:24,fontSize:11}}><Icon name="link" size={12}/>{blockKind(b.items.length)}</Chip>
+                      <span style={{fontSize:12,color:C.muted}}>à la suite, sans repos{tail.rest?` · récup ${tail.rest} après le tour`:""}</span>
+                    </div>
+                    <div style={{borderLeft:`2px solid ${G.gold}88`,paddingLeft:10,marginTop:8}}>
+                      {b.items.map(x=>row(x.pe,x.i))}
+                    </div>
+                  </div>
+                );
+              });
+              })()}
               <div style={{marginTop:12}}>
                 {inProgress
                   ?<PrimaryBtn onClick={onResume}><Icon name="play" size={16} fill="currentColor" sw={0}/>Reprendre</PrimaryBtn>
@@ -1132,10 +1170,35 @@ const PageTitle=({children,sub})=>(
 // ─── MODE SÉANCE (plein écran) ────────────────────────────────────────────────
 function WorkoutView({session,setSession,updateSet,updateEx,logs,rest,restOwner,startRest,onMinimize,onFinish,onAbandon}){
   const {done,total}=countSets(session);
-  const goNext=ei=>{
-    const el=document.getElementById(`ex-${ei+1}`);
-    if(el) el.scrollIntoView({behavior:"smooth",block:"start"});
+  const exs=session.exercises;
+  const blocks=exBlocks(exs);
+  const labels=blockLabels(exs);
+  const scrollToEx=(i,delay)=>setTimeout(()=>document.getElementById(`ex-${i}`)?.scrollIntoView({behavior:"smooth",block:"start"}),delay);
+  // Après une série validée : récupération, ou enchaînement direct vers l'exercice suivant d'un superset
+  const afterSet=(ei,si)=>{
+    const isDone=(i,j)=>exs[i].sets[j]?.done||(i===ei&&j===si);
+    const allDone=i=>exs[i].sets.every((_,j)=>isDone(i,j));
+    const bi=blocks.findIndex(b=>b.items.some(x=>x.i===ei));
+    const b=blocks[bi];
+    if(b.items.length===1){
+      const secs=parseRest(exs[ei].rest);
+      if(secs>0) startRest(ei,secs,exs[ei].name);
+      if(allDone(ei)) scrollToEx(ei+1,380);
+      return;
+    }
+    const k=b.items.findIndex(x=>x.i===ei);
+    const nextInRound=b.items.slice(k+1).find(x=>!allDone(x.i));
+    if(nextInRound){scrollToEx(nextInRound.i,250);return;}
+    // Fin du tour : repos du dernier exercice du groupe, puis retour au premier exercice qui reste
+    const secs=parseRest(exs[b.items[b.items.length-1].i].rest);
+    const left=b.items.find(x=>!allDone(x.i));
+    if(secs>0) startRest(ei,secs,left?`${blockKind(b.items.length)} ${bi+1} · tour suivant`:`Fin du ${blockKind(b.items.length).toLowerCase()} ${bi+1}`);
+    scrollToEx(left?left.i:b.start+b.items.length,380);
   };
+  const block=(ei,extra)=>(
+    <ExerciseBlock key={ei} ex={exs[ei]} ei={ei} label={labels[ei]} logs={logs} onSetChange={updateSet} onExChange={updateEx}
+      restActive={rest.running&&restOwner?.ei===ei} onStartRest={startRest} onCompleted={afterSet} {...extra}/>
+  );
   return(
     <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",background:G.bg,animation:"fadeIn .2s ease"}}>
       <header style={{flexShrink:0,padding:"10px 14px 0",background:"linear-gradient(180deg,#101010,#0a0a0a)",borderBottom:`1px solid ${C.line}`}}>
@@ -1156,10 +1219,35 @@ function WorkoutView({session,setSession,updateSet,updateEx,logs,rest,restOwner,
 
       <div style={{flex:1,minHeight:0,overflowY:"auto",overscrollBehavior:"contain",WebkitOverflowScrolling:"touch"}}>
         <div style={{maxWidth:640,margin:"0 auto",padding:`14px 12px ${rest.running?150:40}px`}}>
-          {session.exercises.map((ex,ei)=>(
-            <ExerciseBlock key={ei} ex={ex} ei={ei} logs={logs} onSetChange={updateSet} onExChange={updateEx}
-              restActive={rest.running&&restOwner?.ei===ei} onStartRest={startRest} onDone={goNext}/>
-          ))}
+          {blocks.map(b=>{
+            if(b.items.length===1) return block(b.start);
+            const n=b.items.length;
+            const rounds=Math.max(...b.items.map(x=>exs[x.i].sets.length));
+            const restS=parseRest(exs[b.items[n-1].i].rest);
+            return(
+              <div key={`g${b.start}`} style={{border:`1.5px solid ${G.gold}77`,borderRadius:26,padding:"14px 8px 8px",marginBottom:12,background:`linear-gradient(180deg,${G.gold}17,${G.gold}05 60%)`}}>
+                <div style={{padding:"0 8px 12px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <Chip gold><Icon name="link" size={13}/>{blockKind(n)}</Chip>
+                    <span style={{fontSize:12,color:C.muted,fontWeight:700}}>{rounds} tour{rounds>1?"s":""}</span>
+                  </div>
+                  <div style={{fontSize:14,color:"#ddd",lineHeight:1.45,marginTop:9}}>
+                    Fais <b style={{color:G.white}}>{b.items.map(x=>labels[x.i]).join(" → ")}</b> à la suite, <b style={{color:G.goldLight}}>sans repos</b>{restS>0?<>, puis récupère <b style={{color:G.white}}>{fmtClock(restS)}</b></>:""}. {rounds>1?`Répète ${rounds} fois.`:""}
+                  </div>
+                </div>
+                {b.items.map((x,k)=>(
+                  <Fragment key={x.i}>
+                    {block(x.i,{chainNext:k<n-1?exs[b.items[k+1].i].name:null,roundEnd:k===n-1,style:{marginBottom:0}})}
+                    {k<n-1&&(
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,height:34,fontSize:12,fontWeight:800,letterSpacing:.6,textTransform:"uppercase",color:G.goldLight}}>
+                        <Icon name="down" size={14} sw={2.4}/>Enchaîne sans repos
+                      </div>
+                    )}
+                  </Fragment>
+                ))}
+              </div>
+            );
+          })}
           <div style={{background:C.card,border:`1px solid ${C.line}`,borderRadius:22,padding:16,marginTop:4}}>
             <div style={{...eyebrow,marginBottom:10}}>Notes de séance</div>
             <textarea value={session.notes} onChange={e=>{const v=e.target.value;setSession(s=>({...s,notes:v}));}} placeholder="Ressenti, observations pour ton coach…" rows={3}
@@ -1186,7 +1274,7 @@ function Elapsed({since}){
 const cellInput={width:"100%",height:42,background:C.soft,border:`1px solid ${C.line}`,borderRadius:12,color:G.white,fontSize:16,fontWeight:700,textAlign:"center",outline:"none",padding:0,fontVariantNumeric:"tabular-nums"};
 const stripKg=v=>String(v??"").replace(/\s*kg$/i,"");
 
-function ExerciseBlock({ex,ei,logs,onSetChange,onExChange,restActive,onStartRest,onDone}){
+function ExerciseBlock({ex,ei,label,logs,onSetChange,onExChange,restActive,onStartRest,onCompleted,chainNext,roundEnd,style}){
   const allDone=ex.sets.every(s=>s.done);
   const [open,setOpen]=useState(!allDone);
   const openVideo=useContext(VideoCtx);
@@ -1210,8 +1298,8 @@ function ExerciseBlock({ex,ei,logs,onSetChange,onExChange,restActive,onStartRest
     const carried=!String(ex.sets[si].load||"").trim()&&si>0?ex.sets[si-1].load:"";
     onSetChange(ei,si,carried?{done:true,load:carried}:{done:true});
     try{navigator.vibrate?.(12);}catch{/* non supporté */}
-    if(restSecs>0) onStartRest(ei,restSecs,ex.name);
-    if(willAllDone) setTimeout(()=>{setOpen(false);onDone(ei);},380);
+    onCompleted(ei,si);
+    if(willAllDone) setTimeout(()=>setOpen(false),380);
   };
 
   // Chrono de travail (exercices en temps) : à la fin, la série est validée automatiquement
@@ -1226,12 +1314,12 @@ function ExerciseBlock({ex,ei,logs,onSetChange,onExChange,restActive,onStartRest
   });
 
   return(
-    <div id={`ex-${ei}`} style={{scrollMarginTop:12,background:C.card,border:`1px solid ${allDone?G.green+"44":C.line}`,borderRadius:22,marginBottom:12,overflow:"hidden",transition:"border .3s"}}>
+    <div id={`ex-${ei}`} style={{scrollMarginTop:12,background:C.card,border:`1px solid ${allDone?G.green+"44":C.line}`,borderRadius:22,marginBottom:12,overflow:"hidden",transition:"border .3s",...style}}>
       <div style={{display:"flex",alignItems:"center"}}>
       <button onClick={()=>setOpen(!open)} aria-expanded={open} style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:12,padding:14,background:"none",border:"none",color:G.white,textAlign:"left",cursor:"pointer"}}>
         <div style={{width:40,height:40,borderRadius:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:G.fontD,fontWeight:800,fontSize:17,
           background:allDone?G.green+"22":G.gold+"18",color:allDone?G.green:G.goldLight}}>
-          {allDone?<Icon name="check" size={20} sw={2.6}/>:ei+1}
+          {allDone?<Icon name="check" size={20} sw={2.6}/>:label||ei+1}
         </div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontWeight:700,fontSize:16,lineHeight:1.25}}>{ex.name}</div>
@@ -1247,7 +1335,9 @@ function ExerciseBlock({ex,ei,logs,onSetChange,onExChange,restActive,onStartRest
           {/* Infos et raccourcis */}
           <div style={{display:"flex",flexWrap:"wrap",gap:6,margin:"0 2px 12px"}}>
             {ex.target&&<Chip gold><Icon name="target" size={13}/>{ex.target}</Chip>}
-            {restSecs>0&&<button aria-label="Lancer la récupération" onClick={()=>onStartRest(ei,restSecs,ex.name)} style={{all:"unset",cursor:"pointer"}}><Chip gold={restActive}><Icon name="clock" size={13}/>Récup {fmtClock(restSecs)}</Chip></button>}
+            {chainNext
+              ?<Chip gold style={{maxWidth:"100%"}}><Icon name="link" size={13}/><span style={ellipsis}>Sans repos → {chainNext}</span></Chip>
+              :restSecs>0&&<button aria-label="Lancer la récupération" onClick={()=>onStartRest(ei,restSecs,ex.name)} style={{all:"unset",cursor:"pointer"}}><Chip gold={restActive}><Icon name="clock" size={13}/>Récup {fmtClock(restSecs)}{roundEnd?" après le tour":""}</Chip></button>}
             <label style={{position:"relative",display:"inline-flex"}}>
               <Chip style={{paddingRight:26}}><Icon name="weight" size={13}/>{unit}</Chip>
               <Icon name="down" size={12} color="#999" style={{position:"absolute",right:9,top:8,pointerEvents:"none"}}/>
