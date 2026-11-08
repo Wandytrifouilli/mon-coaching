@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, createContext, useContext, Fragment } from "react";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginWithCode } from "./firebase.js";
-import { sessionMinutes, fmtMinutes } from "./sessionTime.js";
+import { sessionMinutes, fmtMinutes, isTextBlock, isChained, textMinutes } from "./sessionTime.js";
 
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -569,7 +569,7 @@ const isSameSession=(s,progId,wi,di)=>!!s&&String(s.progId)===String(progId)&&s.
 const exBlocks=list=>{
   const out=[];
   (list||[]).forEach((pe,i)=>{
-    if(i>0&&list[i-1]?.linkNext) out[out.length-1].items.push({pe,i});
+    if(i>0&&isChained(list,i-1)) out[out.length-1].items.push({pe,i});
     else out.push({start:i,items:[{pe,i}]});
   });
   return out;
@@ -774,10 +774,14 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
     if(isSameSession(session,prog.id,weekIdx,dayIdx)){setWorkoutOpen(true);return;}
     if(session&&!(await confirm({title:"Une séance est en cours",text:`« ${session.dayLabel} » n'est pas terminée. L'abandonner pour commencer « ${day.label} » ?`,confirm:"Commencer la nouvelle",cancel:"Garder l'actuelle",danger:true}))) return;
     rest.stop();
-    const exEntries=(day.exercises||[]).map(pe=>{
+    const list=day.exercises||[];
+    const exEntries=list.map((pe,i)=>{
+      // Bloc texte libre : une seule case « fait »
+      if(isTextBlock(pe)) return{kind:"text",name:pe.title||"Bloc libre",text:pe.text||"",minutes:textMinutes(pe),rest:"",unit:"",sensation:"",
+        sets:[{reps:"",load:"",done:false,actualReps:""}]};
       const ex=exercises.find(e=>e.id===pe.exId);
       const target=slotTarget(pe,live.tests);
-      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",coachNote:pe.note||"",target:target.text,muscle:ex?.muscle||"",rest:String(pe.rest||""),linkNext:!!pe.linkNext,unit:target.unit||"kg",sensation:"",
+      return{exId:pe.exId,name:ex?.name||"",videoUrl:ex?.videoUrl||"",notes:ex?.notes||"",coachNote:pe.note||"",target:target.text,muscle:ex?.muscle||"",rest:String(pe.rest||""),linkNext:isChained(list,i),unit:target.unit||"kg",sensation:"",
         sets:Array.from({length:Math.max(1,Number(pe.sets)||1)},()=>({reps:String(pe.reps??""),load:target.load,done:false,actualReps:""}))};
     });
     setSession({progId:prog.id,weekIdx,dayIdx,dayLabel:day.label,weekLabel:prog.weeks[weekIdx]?.label||"",exercises:exEntries,notes:"",startedAt:Date.now(),estMin:sessionMinutes(day,exercises)});
@@ -798,7 +802,9 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
     const duration=session.startedAt?Math.max(1,Math.round((Date.now()-session.startedAt)/60000)):null;
     const log={id:uid(),date:todayISO(),programId:session.progId,weekIdx:session.weekIdx,dayIdx:session.dayIdx,dayLabel:session.dayLabel,weekLabel:session.weekLabel,completed:true,notes:session.notes||"",
       ...(duration?{duration}:{}),
-      exercises:session.exercises.map(ex=>({exId:ex.exId,name:ex.name,sensation:ex.sensation||"",sets:ex.sets.map(s=>({reps:s.actualReps||s.reps,load:withUnit(s.load,ex.unit)}))}))};
+      exercises:session.exercises.map(ex=>ex.kind==="text"
+        ?{kind:"text",name:ex.name,done:!!ex.sets[0]?.done,sensation:ex.sensation||"",sets:[]}
+        :({exId:ex.exId,name:ex.name,sensation:ex.sensation||"",sets:ex.sets.map(s=>({reps:s.actualReps||s.reps,load:withUnit(s.load,ex.unit)}))}))};
     updateClient(c=>({...c,sessions:(Number(c.sessions)||0)+1,sessionLogs:[log,...(c.sessionLogs||[])]}));
     // Volume = charge × reps des séries validées en kg
     const volume=session.exercises.reduce((a,ex)=>ex.unit!=="kg"?a:a+ex.sets.filter(s=>s.done).reduce((b,s)=>{
@@ -1108,6 +1114,16 @@ function TrainTab({live,logs,assigned,session,exercises,sel,setSel,onStart,onRes
               {(()=>{
               const labels=blockLabels(d.exercises);
               const row=(pe,i)=>{
+                if(isTextBlock(pe)) return(
+                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"10px 0",borderTop:`1px solid ${C.line}`}}>
+                    <div style={{width:24,fontFamily:G.fontD,fontWeight:800,color:C.dim,fontSize:14}}>{labels[i]}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:600}}>{pe.title||"Bloc libre"}</div>
+                      {pe.text&&<div style={{fontSize:12.5,color:"#aaa",marginTop:3,lineHeight:1.45,whiteSpace:"pre-wrap",display:"-webkit-box",WebkitLineClamp:4,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{pe.text}</div>}
+                    </div>
+                    {textMinutes(pe)>0&&<div style={{fontSize:13,color:"#bbb",fontWeight:700,flexShrink:0}}>{fmtMinutes(textMinutes(pe))}</div>}
+                  </div>
+                );
                 const ex=exercises.find(e=>e.id===pe.exId);
                 const t=slotTarget(pe,live.tests).text;
                 return(
@@ -1188,7 +1204,9 @@ function WorkoutView({session,setSession,updateSet,updateEx,logs,rest,restOwner,
     if(secs>0) startRest(ei,secs,left?`${blockKind(b.items.length)} ${bi+1} · tour suivant`:`Fin du ${blockKind(b.items.length).toLowerCase()} ${bi+1}`);
     scrollToEx(left?left.i:b.start+b.items.length,380);
   };
-  const block=(ei,extra)=>(
+  const block=(ei,extra)=>exs[ei].kind==="text"
+    ?<TextBlock key={ei} ex={exs[ei]} ei={ei} label={labels[ei]} onSetChange={updateSet} onCompleted={afterSet}/>
+    :(
     <ExerciseBlock key={ei} ex={exs[ei]} ei={ei} label={labels[ei]} logs={logs} onSetChange={updateSet} onExChange={updateEx}
       restActive={rest.running&&restOwner?.ei===ei} onStartRest={startRest} onCompleted={afterSet} {...extra}/>
   );
@@ -1411,6 +1429,35 @@ function ExerciseBlock({ex,ei,label,logs,onSetChange,onExChange,restActive,onSta
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Bloc texte libre écrit par le coach (circuit, EMOM…) : on lit la consigne et on coche quand c'est fait
+function TextBlock({ex,ei,label,onSetChange,onCompleted}){
+  const done=!!ex.sets[0]?.done;
+  const toggle=()=>{
+    onSetChange(ei,0,{done:!done});
+    if(!done){try{navigator.vibrate?.(12);}catch{/* non supporté */}onCompleted(ei,0);}
+  };
+  return(
+    <div id={`ex-${ei}`} style={{scrollMarginTop:12,background:C.card,border:`1px solid ${done?G.green+"44":G.gold+"40"}`,borderRadius:22,marginBottom:12,padding:14,transition:"border .3s"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+        <div style={{width:40,height:40,borderRadius:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:G.fontD,fontWeight:800,fontSize:17,
+          background:done?G.green+"22":G.gold+"18",color:done?G.green:G.goldLight}}>
+          {done?<Icon name="check" size={20} sw={2.6}/>:label||ei+1}
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:16,lineHeight:1.25}}>{ex.name}</div>
+          <div style={{fontSize:12,color:done?G.green:C.muted,marginTop:3}}>{done?"Fait":"Consigne du coach"}{ex.minutes>0?` · ≈ ${fmtMinutes(ex.minutes)}`:""}</div>
+        </div>
+      </div>
+      {ex.text&&<div style={{fontSize:15,lineHeight:1.6,color:"#e8e8e8",whiteSpace:"pre-wrap",padding:"12px 14px",background:G.gold+"0d",borderRadius:14,borderLeft:`3px solid ${G.gold}`,marginBottom:12}}>{ex.text}</div>}
+      <button onClick={toggle} aria-pressed={done}
+        style={{width:"100%",height:48,borderRadius:14,cursor:"pointer",fontWeight:800,fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+          border:done?`1px solid ${G.green}55`:"none",background:done?G.green+"18":C.goldGrad,color:done?G.green:G.bg}}>
+        <Icon name="check" size={18} sw={2.6}/>{done?"Fait · annuler":"Marquer comme fait"}
+      </button>
     </div>
   );
 }
@@ -1692,6 +1739,7 @@ function HistoryItem({log,programs}){
             <div key={i} style={{padding:"10px 0",borderTop:`1px solid ${C.line}`}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                 <div style={{fontWeight:700,fontSize:14,color:G.goldLight}}>{ex.name}</div>
+                {ex.kind==="text"&&<span style={{fontSize:12,fontWeight:700,color:ex.done?G.green:C.muted}}>{ex.done?"✓ fait":"non fait"}</span>}
                 {ex.sensation&&<span style={{fontSize:15}}>{ex.sensation}</span>}
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>

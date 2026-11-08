@@ -3,6 +3,13 @@
 // Dans un superset (exercice marqué linkNext), pas de repos entre les exercices liés ;
 // le repos du dernier exercice du groupe est compté après chaque tour.
 
+// Bloc texte libre (circuit, consignes complexes…) : { kind:"text", title, text, minutes }
+export const isTextBlock = pe => pe?.kind === "text";
+// Vrai si l'exercice i s'enchaîne sans repos avec le suivant (superset) ; jamais avec un bloc texte
+export const isChained = (list, i) =>
+  !!list?.[i]?.linkNext && i < list.length - 1 && !isTextBlock(list[i]) && !isTextBlock(list[i + 1]);
+export const textMinutes = pe => Math.max(0, Number(String(pe?.minutes ?? "").replace(",", ".")) || 0);
+
 // Temps moyen d'une répétition, estimé d'après le nom, puis le groupe musculaire.
 // Le coach peut le remplacer par sa propre valeur (champ secPerRep de l'exercice).
 const NAME_RULES = [
@@ -72,10 +79,12 @@ export function setWorkSeconds(reps, secPerRep) {
 export function sessionBreakdown(day, exercises = []) {
   const list = day?.exercises || [];
   const rows = list.map((pe, i) => {
+    // Bloc texte : durée indiquée par le coach (en minutes), sinon non comptée
+    if (isTextBlock(pe)) { const w = textMinutes(pe) * 60; return { work: w, rest: 0, total: w }; }
     const ex = exercises.find(e => e.id === pe.exId);
     const sets = Math.max(1, Number(pe.sets) || 1);
     const work = sets * setWorkSeconds(pe.reps, secPerRepOf(ex));
-    const chained = !!pe.linkNext && i < list.length - 1;
+    const chained = isChained(list, i);
     // Pas de récupération après la toute dernière série de la séance
     const restSets = i === list.length - 1 ? sets - 1 : sets;
     const rest = chained ? 0 : restSets * parseDuration(pe.rest);

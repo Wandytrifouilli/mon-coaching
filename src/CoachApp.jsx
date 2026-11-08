@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginWithCode, API_BASE } from "./firebase.js";
-import { estimateSecPerRep, customSecPerRep, secPerRepOf, sessionBreakdown, fmtMinutes } from "./sessionTime.js";
+import { estimateSecPerRep, customSecPerRep, secPerRepOf, sessionBreakdown, fmtMinutes, isTextBlock, isChained, textMinutes } from "./sessionTime.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const G = {
@@ -1963,7 +1963,7 @@ const exCount=p=>(p.weeks||[]).reduce((a,w)=>a+(w.days||[]).reduce((b,d)=>b+(d.e
 const exBlocks=list=>{
   const out=[];
   (list||[]).forEach((pe,i)=>{
-    if(i>0&&list[i-1]?.linkNext) out[out.length-1].items.push({pe,i});
+    if(i>0&&isChained(list,i-1)) out[out.length-1].items.push({pe,i});
     else out.push({start:i,items:[{pe,i}]});
   });
   return out;
@@ -1978,7 +1978,7 @@ const blockLabels=list=>{
 // Retire l'exercice i sans souder le bloc précédent au bloc suivant
 const dropExAt=(list,i)=>{
   const a=list.map(e=>({...e}));
-  if(i>0&&a[i-1].linkNext&&!a[i].linkNext) a[i-1].linkNext=false;
+  if(i>0&&isChained(a,i-1)&&!isChained(a,i)) a[i-1].linkNext=false;
   a.splice(i,1);
   return a;
 };
@@ -2767,7 +2767,8 @@ function LogCard({log,programs,onDelete}){
           {log.notes&&<div style={{fontSize:13,color:"#ccc",lineHeight:1.5,padding:"10px 12px",background:"#0b0b0b",borderRadius:12,marginBottom:12,borderLeft:`3px solid ${G.gold}`}}>« {log.notes} »</div>}
           {(log.exercises||[]).map((ex,i)=>(
             <div key={i} style={{marginBottom:12}}>
-              <div style={{fontWeight:700,fontSize:13.5,color:G.goldLight,marginBottom:7}}>{ex.name}{ex.sensation?` ${ex.sensation}`:""}</div>
+              <div style={{fontWeight:700,fontSize:13.5,color:G.goldLight,marginBottom:7}}>{ex.name}{ex.sensation?` ${ex.sensation}`:""}
+                {ex.kind==="text"&&<span style={{marginLeft:8,fontSize:12,color:ex.done?G.green:C.muted}}>{ex.done?"✓ fait":"non fait"}</span>}</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                 {(ex.sets||[]).map((s,j)=>(
                   <span key={j} style={{fontSize:12.5,fontWeight:700,padding:"6px 10px",borderRadius:10,background:"#0b0b0b",border:`1px solid ${C.line}`,color:s.load?G.white:C.muted}}>
@@ -2793,7 +2794,7 @@ function ManualLogModal({data,client:c,upd,onClose}){
   const week=prog?.weeks?.[Number(f.weekIdx)];
   const day=f.dayIdx!==""?week?.days?.[Number(f.dayIdx)]:null;
   const save=()=>{
-    const exEntries=(day?.exercises||[]).map(pe=>({exId:pe.exId,name:exercises.find(e=>e.id===pe.exId)?.name||"",
+    const exEntries=(day?.exercises||[]).map(pe=>isTextBlock(pe)?{kind:"text",name:pe.title||"Bloc libre",done:true,sets:[]}:({exId:pe.exId,name:exercises.find(e=>e.id===pe.exId)?.name||"",
       sets:Array.from({length:Number(pe.sets)||1},()=>({reps:pe.reps,load:pe.targetLoad||""}))}));
     const log={id:uid(),date:f.date,programId:prog?prog.id:"",weekIdx:f.weekIdx===""?"":Number(f.weekIdx),dayIdx:f.dayIdx===""?"":Number(f.dayIdx),
       dayLabel:day?.label||"Séance",weekLabel:week?.label||"",completed:f.completed,notes:f.notes,exercises:exEntries,manual:true};
@@ -3216,11 +3217,22 @@ function ProgramDetail({data,program,client,go,onBack,backLabel}){
         const list=day?.exercises||[];
         const labels=blockLabels(list);
         const card=(pe,i)=>{
+          if(isTextBlock(pe)) return(
+            <Card key={i} style={{padding:14,gridColumn:"1 / -1",borderColor:G.gold+"33"}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                <div style={{minWidth:30,height:30,padding:"0 4px",borderRadius:10,background:G.gold+"18",color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:15,flexShrink:0}}>{labels[i]}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:15}}>{pe.title||"Bloc libre"}{textMinutes(pe)>0&&<span style={{fontSize:13,color:C.muted,fontWeight:600}}> · ≈ {fmtMinutes(textMinutes(pe))}</span>}</div>
+                  <div style={{fontSize:13.5,color:"#d0d0d0",marginTop:6,lineHeight:1.55,whiteSpace:"pre-wrap"}}>{pe.text||"—"}</div>
+                </div>
+              </div>
+            </Card>
+          );
           const ex=exercises.find(e=>e.id===pe.exId);
           const comp=computeLoad(pe,client?.tests);
           const ref=LOAD_REFS.find(r=>r.id===pe.loadRef&&r.id!=="none");
           const res=dayLog?.exercises?.find(e=>e.exId===pe.exId);
-          const chained=!!pe.linkNext&&i<list.length-1;
+          const chained=isChained(list,i);
           return(
             <Card key={i} style={{padding:14,borderColor:res?G.green+"33":C.line}}>
               <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
@@ -3341,6 +3353,7 @@ function ProgramEditor({data,init,title,onSave,onCancel}){
     setCreating(null);
     toast(`« ${ex.name} » créé et ajouté à ${day?.label||"la séance"}`);
   };
+  const addText=()=>setDay(d=>({...d,exercises:[...d.exercises,{kind:"text",title:"",text:"",minutes:""}]}));
   const toggleLink=i=>setDay(d=>({...d,exercises:d.exercises.map((e,j)=>j===i?{...e,linkNext:!e.linkNext}:e)}));
   const cancel=async()=>{
     if(JSON.stringify(form)!==initial.current&&!(await confirm({title:"Abandonner les modifications ?",text:"Les changements non enregistrés seront perdus.",confirm:"Abandonner",danger:true})))return;
@@ -3433,10 +3446,37 @@ function ProgramEditor({data,init,title,onSave,onCancel}){
                     );
                   };
                   const dur=sessionBreakdown(day,exercises).rows;
+                  const moveBtns=i=>(<>
+                    <IconBtn icon="up" label="Monter" variant="quiet" size={30} disabled={i===0} style={{opacity:i===0?.3:1}} onClick={()=>i>0&&moveEx(i,-1)}/>
+                    <IconBtn icon="down" label="Descendre" variant="quiet" size={30} disabled={i===last} style={{opacity:i===last?.3:1}} onClick={()=>i<last&&moveEx(i,1)}/>
+                    <IconBtn icon="x" label="Retirer" variant="quiet" size={30} onClick={()=>removeEx(i)}/>
+                  </>);
+                  // Bloc texte libre : le coach décrit le travail comme il veut (circuit, EMOM…)
+                  const textCard=(pe,i)=>(
+                    <div key={`txt-${i}`} style={{background:"#0b0b0b",border:`1px solid ${G.gold}33`,borderRadius:14,padding:12,marginBottom:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                        <div style={{minWidth:26,height:26,padding:"0 4px",borderRadius:8,background:G.gold+"18",color:G.goldLight,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:G.fontD,fontWeight:800,fontSize:13,flexShrink:0}}>{labels[i]}</div>
+                        <input className="inp" value={pe.title||""} onChange={e=>updEx(i,"title",e.target.value)} placeholder="Titre — ex : Circuit final" aria-label="Titre du bloc"
+                          style={{...inputStyle,flex:1,minWidth:0,height:34,fontSize:14,fontWeight:700,padding:"0 10px"}}/>
+                        {dur[i].total>0&&<span style={{fontSize:12,color:C.muted,fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>≈ {fmtMinutes(dur[i].total/60)}</span>}
+                        {moveBtns(i)}
+                      </div>
+                      <TextArea value={pe.text||""} onChange={e=>updEx(i,"text",e.target.value)} aria-label="Ce que le client doit faire"
+                        placeholder={"Écris librement ce que le client doit faire. Ex :\n3 tours, 1 min de repos entre les tours :\n- 10 burpees\n- 15 squats sautés\n- 20 mountain climbers"}
+                        style={{minHeight:130,fontSize:14.5}}/>
+                      <label style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                        <span style={{fontSize:10.5,color:C.muted,fontWeight:700,letterSpacing:.6,textTransform:"uppercase"}}>Durée estimée</span>
+                        <input className="inp" value={pe.minutes??""} onChange={e=>updEx(i,"minutes",e.target.value.replace(/[^\d.,]/g,""))} inputMode="decimal" placeholder="—"
+                          style={{...inputStyle,width:70,height:34,fontSize:15,padding:"0 10px",textAlign:"center"}}/>
+                        <span style={{fontSize:13,color:C.muted}}>min <span style={{color:C.dim}}>· comptée dans la durée de la séance</span></span>
+                      </label>
+                    </div>
+                  );
                   const card=(pe,i,group)=>{
+                  if(isTextBlock(pe)) return textCard(pe,i);
                   const ex=exercises.find(e=>e.id===pe.exId);
                   const showNote=openNotes[`${wi}-${di}-${i}`]||!!pe.note;
-                  const chained=!!pe.linkNext&&i<last;
+                  const chained=isChained(day.exercises,i);
                   return(
                     <div key={`${pe.exId}-${i}`} style={{background:"#0b0b0b",border:`1px solid ${group?G.gold+"33":C.line}`,borderRadius:14,padding:12,marginBottom:8}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -3444,9 +3484,7 @@ function ProgramEditor({data,init,title,onSave,onCancel}){
                         <div style={{flex:1,minWidth:0,fontWeight:700,fontSize:14,...ellipsis}}>{ex?.name||"Exercice supprimé"}</div>
                         <span title="Durée estimée de l'exercice, récupérations comprises" style={{fontSize:12,color:C.muted,fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>≈ {fmtMinutes(dur[i].total/60)}</span>
                         {ex&&<VideoBtn ex={ex} size={30}/>}
-                        <IconBtn icon="up" label="Monter" variant="quiet" size={30} disabled={i===0} style={{opacity:i===0?.3:1}} onClick={()=>i>0&&moveEx(i,-1)}/>
-                        <IconBtn icon="down" label="Descendre" variant="quiet" size={30} disabled={i===last} style={{opacity:i===last?.3:1}} onClick={()=>i<last&&moveEx(i,1)}/>
-                        <IconBtn icon="x" label="Retirer" variant="quiet" size={30} onClick={()=>removeEx(i)}/>
+                        {moveBtns(i)}
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:wide?"repeat(4,1fr) 1.3fr":"1fr 1fr",gap:8}}>
                         {[["Séries","sets","number"],["Reps / durée","reps","text"],[group&&!chained?"Repos après le tour":"Repos","rest","text"],["Charge","targetLoad","text"]].map(([l,k,t])=>(
@@ -3473,7 +3511,8 @@ function ProgramEditor({data,init,title,onSave,onCancel}){
                   };
                   return exBlocks(day.exercises).flatMap(b=>{
                     const endI=b.items[b.items.length-1].i;
-                    const after=endI<last?linker(endI):null;
+                    const canLink=endI<last&&!isTextBlock(day.exercises[endI])&&!isTextBlock(day.exercises[endI+1]);
+                    const after=canLink?linker(endI):null;
                     if(b.items.length===1) return [card(b.items[0].pe,b.start,false),after];
                     const tail=b.items[b.items.length-1].pe;
                     return [
@@ -3491,6 +3530,7 @@ function ProgramEditor({data,init,title,onSave,onCancel}){
                 <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
                   <Btn variant="ghost" icon="plus" style={{flex:"2 1 200px",borderStyle:"dashed"}} onClick={()=>setPicker(true)}>Ajouter des exercices</Btn>
                   <Btn variant="quiet" icon="edit" style={{flex:"1 1 160px",color:G.goldLight}} onClick={()=>setCreating({})}>Créer un exercice</Btn>
+                  <Btn variant="quiet" icon="clipboard" style={{flex:"1 1 160px",color:G.goldLight}} onClick={addText}>Bloc texte libre</Btn>
                 </div>
               </>
             )}
@@ -3758,6 +3798,7 @@ Règles importantes :
 - Le champ "rest" accepte : "30s", "60s", "90s", "2min", "3min"
 - Le champ "targetLoad" est optionnel (laisse "" si pas de charge)
 - Superset / triset : ajoute "linkNext": true sur un exercice pour l'enchaîner sans repos avec l'exercice suivant (2 exercices liés = superset, 3 = triset). Le "rest" du dernier exercice du groupe est le repos pris après le tour ; n'écris pas "SUPERSET" dans les consignes
+- Bloc libre (circuit, EMOM, AMRAP…) : à la place d'un exercice, tu peux mettre {"kind": "text", "title": "Circuit final", "text": "3 tours :\n- 10 burpees\n- 15 squats sautés", "minutes": 12}
 - Crée toujours plusieurs semaines avec progression
 - Réponds en français, sois précis et professionnel
 - TOUJOURS inclure le JSON si tu crées un programme`;
