@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginWithCode, API_BASE } from "./firebase.js";
+import { REMUSC_CF_PROG, REMUSC_CF_EXERCISES } from "./seedRemuscCrossfit.js";
 import { estimateSecPerRep, customSecPerRep, secPerRepOf, sessionBreakdown, fmtMinutes, isTextBlock, isChained, textMinutes } from "./sessionTime.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -1844,6 +1845,10 @@ const CYCLE1_WILLIAM={id:"cycle1_william_fb3j",_v:2,name:"Cycle 1 William — Fu
   ]},
 ]};
 SEED_PROGRAMS.push(CYCLE1_WILLIAM);
+
+// Remusculation & retour CrossFit — 9 semaines (voir src/seedRemuscCrossfit.js)
+SEED_EX.push(...REMUSC_CF_EXERCISES.filter(e=>!SEED_EX.some(x=>x.id===e.id)));
+SEED_PROGRAMS.push(REMUSC_CF_PROG);
 
 // Pas de fiches clients de démonstration : leurs codes seraient des accès valides lisibles dans le bundle.
 
