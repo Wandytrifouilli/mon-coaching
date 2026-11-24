@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, createContext, useCo
 import { createPortal } from "react-dom";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginWithCode, API_BASE } from "./firebase.js";
 import { REMUSC_CF_PROG, REMUSC_CF_EXERCISES } from "./seedRemuscCrossfit.js";
+import { PREPA_PL_PROG, PREPA_PL_EXERCISES } from "./seedPrepaPowerlifting.js";
 import { estimateSecPerRep, customSecPerRep, secPerRepOf, sessionBreakdown, fmtMinutes, isTextBlock, isChained, textMinutes } from "./sessionTime.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ const genCode=(n,existing=[])=>{
 };
 const uid = ()=>Math.random().toString(36).slice(2,9);
 const MUSCLES = ["Tous","Cardio","Jambes","Pectoraux","Dos","Épaules","Biceps","Triceps","Abdominaux","Avant-bras"];
-const EQUIPS = ["Aucun","Barre","Haltères","Poulie","Barre fixe","Machine","Élastique","Kettlebell","Poids du corps"];
+const EQUIPS = ["Aucun","Barre","Haltères","Poulie","Barre fixe","Machine","Élastique","Kettlebell","Sandbag","GHD","Poids du corps"];
 const MEAL_SLOTS=[
   {id:"breakfast",icon:"🌅",label:"Petit déjeuner"},
   {id:"snack1",icon:"🍎",label:"Collation matin"},
@@ -1849,6 +1850,10 @@ SEED_PROGRAMS.push(CYCLE1_WILLIAM);
 // Remusculation & retour CrossFit — 9 semaines (voir src/seedRemuscCrossfit.js)
 SEED_EX.push(...REMUSC_CF_EXERCISES.filter(e=>!SEED_EX.some(x=>x.id===e.id)));
 SEED_PROGRAMS.push(REMUSC_CF_PROG);
+
+// Prépa générale avant powerlifting — 7 semaines (voir src/seedPrepaPowerlifting.js)
+SEED_EX.push(...PREPA_PL_EXERCISES.filter(e=>!SEED_EX.some(x=>x.id===e.id)));
+SEED_PROGRAMS.push(PREPA_PL_PROG);
 
 // Pas de fiches clients de démonstration : leurs codes seraient des accès valides lisibles dans le bundle.
 
