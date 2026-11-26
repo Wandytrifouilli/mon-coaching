@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs, getDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginWithCode, API_BASE } from "./firebase.js";
 import { REMUSC_CF_PROG, REMUSC_CF_EXERCISES } from "./seedRemuscCrossfit.js";
 import { PREPA_PL_PROG, PREPA_PL_EXERCISES } from "./seedPrepaPowerlifting.js";
+import PerfBoard from "./PerfBoard.jsx";
 import { estimateSecPerRep, customSecPerRep, secPerRepOf, sessionBreakdown, fmtMinutes, isTextBlock, isChained, textMinutes } from "./sessionTime.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -2892,6 +2893,12 @@ function ClientPerfsTab({client:c,upd}){
       {editing
         ?<TextArea value={form.notes||""} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="Conditions des tests, dates, observations…"/>
         :<Card style={{fontSize:14,color:t.notes?"#ddd":C.dim,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{t.notes||"Aucune note"}</Card>}
+
+      <SectionTitle>Performances de l'athlète</SectionTitle>
+      <div style={{fontSize:13,color:C.muted,lineHeight:1.5,marginBottom:12}}>
+        Saisies par l'athlète dans son app (ou par toi ici). Un nouveau record de 1RM squat, couché, soulevé, de VMA, de tractions, de pompes ou de gainage met à jour les valeurs ci-dessus s'il les dépasse.
+      </div>
+      <PerfBoard client={c} update={upd} wide={wide} coach/>
     </>
   );
 }

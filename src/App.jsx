@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, createContext, useContext, Fragment } from "react";
 import { db, doc, collection, onSnapshot, setDoc, deleteDoc, auth, onAuthStateChanged, signOut, isCoachUser, loginWithCode } from "./firebase.js";
 import { sessionMinutes, fmtMinutes, isTextBlock, isChained, textMinutes } from "./sessionTime.js";
+import PerfBoard from "./PerfBoard.jsx";
 
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -738,7 +739,7 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
   // à la fermeture de l'onglet ou à un passage sur un autre onglet de l'app.
   // activeSession: { progId, weekIdx, dayIdx, dayLabel, weekLabel, startedAt, notes, exercises:[{exId,name,unit,sets:[{reps,load,done,actualReps}]}] }
   const [session,setSession]=useState(()=>{try{const s=JSON.parse(store.get(SESSION_KEY)||"null");return s?.exercises?s:null;}catch{return null;}});
-  const [tab,setTab]=useState("home"); // home | train | food | progress
+  const [tab,setTab]=useState("home"); // home | train | food | progress | perf
   const [workoutOpen,setWorkoutOpen]=useState(()=>!!session);
   const [doneInfo,setDoneInfo]=useState(null);
   const [profileOpen,setProfileOpen]=useState(false);
@@ -843,7 +844,8 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
           {tab==="home"&&<HomeTab {...common} next={next} onOpenTrain={openTrain} onProfile={()=>setProfileOpen(true)} setTab={setTab}/>}
           {tab==="train"&&<TrainTab {...common} sel={trainSel} setSel={setTrainSel}/>}
           {tab==="food"&&<NutritionTab live={live} foods={foods}/>}
-          {tab==="progress"&&<ProgressTab logs={logs} programs={programs}/>}
+          {tab==="progress"&&<ProgressTab logs={logs} programs={programs} onPerf={()=>setTab("perf")}/>}
+          {tab==="perf"&&<PerfTab live={live} updateClient={updateClient}/>}
         </div>
       </div>
       <BottomDock tab={tab} setTab={setTab} session={session} rest={rest} onResume={()=>setWorkoutOpen(true)}/>
@@ -863,6 +865,7 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
             {live.since&&<div style={{fontSize:12,color:C.dim,marginTop:2}}>Suivi depuis {live.since}</div>}
           </div>
         </div>
+        <PrimaryBtn onClick={()=>{setProfileOpen(false);setTab("perf");}} style={{marginBottom:10}}><Icon name="trophy" size={19}/>Mes performances</PrimaryBtn>
         <GhostBtn onClick={logout} style={{color:G.red}}><Icon name="logout" size={18}/>Se déconnecter</GhostBtn>
       </Sheet>
       {confirmNode}
@@ -1532,7 +1535,7 @@ function BottomDock({tab,setTab,session,rest,onResume}){
         )}
         <nav style={{display:"flex",gap:4,background:"rgba(24,24,24,.88)",backdropFilter:"blur(22px)",WebkitBackdropFilter:"blur(22px)",border:`1px solid ${C.line2}`,borderRadius:26,padding:6,boxShadow:"0 14px 40px #000c"}}>
           {items.map(([key,icon,label])=>{
-            const a=tab===key;
+            const a=tab===key||(key==="progress"&&tab==="perf");
             return(
               <button key={key} onClick={()=>setTab(key)} aria-current={a?"page":undefined}
                 style={{flex:1,height:54,borderRadius:20,border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,
@@ -1644,7 +1647,15 @@ function MealCard({meal,foods}){
 }
 
 // ─── PROGRÈS ──────────────────────────────────────────────────────────────────
-function ProgressTab({logs,programs}){
+// Performances : RM, haltéro, gym, ergos, course, benchmarks (accessible depuis le profil et l'onglet Progrès)
+function PerfTab({live,updateClient}){
+  return(<>
+    <PageTitle sub="Tes records : RM, haltérophilie, gym, ergos, course et benchmarks CrossFit.">Performances</PageTitle>
+    <PerfBoard client={live} update={updateClient}/>
+  </>);
+}
+
+function ProgressTab({logs,programs,onPerf}){
   const completed=logs.filter(l=>l.completed);
   const volume=completed.reduce((a,l)=>a+logVolume(l),0);
   const minutes=completed.reduce((a,l)=>a+(Number(l.duration)||0),0);
@@ -1673,6 +1684,15 @@ function ProgressTab({logs,programs}){
   ];
   return(<>
     <PageTitle>Progrès</PageTitle>
+    <button onClick={onPerf} style={{width:"100%",display:"flex",alignItems:"center",gap:14,textAlign:"left",cursor:"pointer",color:G.white,
+      background:`linear-gradient(135deg,${G.gold}1f,${G.gold}08)`,border:`1px solid ${G.gold}44`,borderRadius:22,padding:"16px 18px",marginBottom:12}}>
+      <div style={{width:42,height:42,borderRadius:14,background:C.goldGrad,color:G.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name="trophy" size={21}/></div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontWeight:800,fontSize:16}}>Mes performances</div>
+        <div style={{fontSize:12.5,color:C.muted,marginTop:2}}>RM, haltéro, gym, ergos, course, benchmarks</div>
+      </div>
+      <Icon name="right" size={18} color={G.goldLight}/>
+    </button>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
       {stats.map(([v,l,ic])=>(
         <Card key={l} style={{padding:16}}>
