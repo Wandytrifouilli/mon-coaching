@@ -1,9 +1,9 @@
 // ─── VIDÉOS DU COACH (playlist YouTube « Vidéo app », non répertoriée) ─────────
-// 1. Vidéos associées à des exercices déjà dans la bibliothèque : elles remplacent la vidéo
-//    générique d'origine, mais jamais une vidéo que le coach a lui-même changée.
+// 1. Vidéos associées à des exercices déjà dans la bibliothèque (par id).
 // 2. Nouveaux exercices créés avec leur vidéo.
-// 3. Un exercice créé par le coach dont le nom correspond à un titre (alias) reçoit la vidéo,
-//    seulement s'il n'en a pas encore.
+// 3. Un exercice créé par le coach dont le nom correspond à un titre (alias) reçoit aussi la vidéo.
+// La vidéo est posée UNE seule fois (marqueur coachVideo sur l'exercice) : si le coach la change
+// ensuite dans l'app, son choix est conservé.
 const yt = id => `https://www.youtube.com/embed/${id}`;
 
 // [id de l'exercice existant, id YouTube, alias]
@@ -66,7 +66,8 @@ const NEW = [
   [180, "Flutter Kicks (Ciseaux)", "Abdominaux", "Poids du corps", "Nmrjc6I_-1s", ["flutter kicks", "ciseaux abdos", "les ciseaux abdos"]],
 ];
 
-export const COACH_VIDEO_EXERCISES = NEW.map(([id, name, muscle, equipment, v]) => ({ id, name, muscle, equipment, videoUrl: yt(v), notes: "" }));
+export const COACH_VIDEO_MARK = 1;
+export const COACH_VIDEO_EXERCISES = NEW.map(([id, name, muscle, equipment, v]) => ({ id, name, muscle, equipment, videoUrl: yt(v), notes: "", coachVideo: COACH_VIDEO_MARK }));
 export const COACH_VIDEO_LINKS = LINKS.map(([exId, v]) => ({ exId, url: yt(v) }));
 
 // Nom normalisé : minuscules, sans accents ni ponctuation
@@ -77,11 +78,8 @@ const byName = new Map();
 for (const [, name, , , v, aliases] of NEW) for (const n of [name, ...aliases]) byName.set(normName(n), yt(v));
 for (const [, v, aliases] of LINKS) for (const n of aliases) if (!byName.has(normName(n))) byName.set(normName(n), yt(v));
 
-// Vidéo du coach à appliquer à un exercice déjà en base, ou null.
-// seedDefault = vidéo d'origine de l'exercice dans la bibliothèque fournie (pour savoir si le coach l'a changée).
-export function coachVideoFor(ex, seedDefault) {
-  const url = byId.get(String(ex?.id));
-  if (url) return ex.videoUrl === url ? null : !ex.videoUrl || ex.videoUrl === seedDefault ? url : null;
-  if (ex?.videoUrl) return null;
-  return byName.get(normName(ex?.name)) || null;
+// Vidéo du coach à poser sur un exercice déjà en base, ou null (déjà fait, ou aucune correspondance)
+export function coachVideoFor(ex) {
+  if (!ex || ex.coachVideo >= COACH_VIDEO_MARK) return null;
+  return byId.get(String(ex.id)) || byName.get(normName(ex.name)) || null;
 }

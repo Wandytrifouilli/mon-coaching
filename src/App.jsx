@@ -829,11 +829,17 @@ function ClientPortal({client:live,clientId,updateClient,programs,exercises,onLo
   };
   const openTrain=(progId,wi)=>{setTrainSel({progId,wi});setTab("train");};
 
+  // Séance en cours : la vidéo suit la bibliothèque (le coach peut la changer après le début de la séance)
+  const liveSession=session&&{...session,exercises:session.exercises.map(e=>{
+    const x=e.exId!=null&&exercises.find(y=>y.id===e.exId);
+    return x&&(x.videoUrl||"")!==(e.videoUrl||"")?{...e,videoUrl:x.videoUrl||""}:e;
+  })};
+
   let screen;
   if(doneInfo){
     screen=<DoneView info={doneInfo} name={firstName(live.name)} onHome={()=>{setDoneInfo(null);setTab("home");}} onProgress={()=>{setDoneInfo(null);setTab("progress");}}/>;
   }else if(workoutOpen&&session){
-    screen=<WorkoutView session={session} setSession={setSession} updateSet={updateSet} updateEx={updateEx} logs={logs}
+    screen=<WorkoutView session={liveSession} setSession={setSession} updateSet={updateSet} updateEx={updateEx} logs={logs}
       rest={rest} restOwner={restOwner} startRest={startRest}
       onMinimize={()=>setWorkoutOpen(false)} onFinish={finishSession} onAbandon={abandonSession}/>;
   }else{
