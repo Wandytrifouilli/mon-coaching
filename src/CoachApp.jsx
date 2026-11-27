@@ -4,6 +4,7 @@ import { db, doc, collection, onSnapshot, setDoc, deleteDoc, writeBatch, getDocs
 import { REMUSC_CF_PROG, REMUSC_CF_EXERCISES } from "./seedRemuscCrossfit.js";
 import { PREPA_PL_PROG, PREPA_PL_EXERCISES } from "./seedPrepaPowerlifting.js";
 import PerfBoard from "./PerfBoard.jsx";
+import { COACH_VIDEO_EXERCISES, COACH_VIDEO_LINKS, coachVideoFor } from "./seedCoachVideos.js";
 import { estimateSecPerRep, customSecPerRep, secPerRepOf, sessionBreakdown, fmtMinutes, isTextBlock, isChained, textMinutes } from "./sessionTime.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -1856,10 +1857,21 @@ SEED_PROGRAMS.push(REMUSC_CF_PROG);
 SEED_EX.push(...PREPA_PL_EXERCISES.filter(e=>!SEED_EX.some(x=>x.id===e.id)));
 SEED_PROGRAMS.push(PREPA_PL_PROG);
 
+// Vidéos du coach (playlist YouTube, voir src/seedCoachVideos.js).
+// On garde la vidéo d'origine de chaque exercice fourni pour savoir si le coach l'a changée depuis.
+const SEED_VIDEO_DEFAULTS=new Map(SEED_EX.map(e=>[String(e.id),e.videoUrl||""]));
+COACH_VIDEO_LINKS.forEach(l=>{const e=SEED_EX.find(x=>x.id===l.exId);if(e)e.videoUrl=l.url;});
+SEED_EX.push(...COACH_VIDEO_EXERCISES.filter(e=>!SEED_EX.some(x=>x.id===e.id)));
+// Exercices déjà en base qui doivent recevoir une vidéo du coach (écrit une seule fois : ensuite la vidéo est déjà en place)
+const exerciseVideoPatch=existing=>[...existing.values()]
+  .map(ex=>{const url=coachVideoFor(ex,SEED_VIDEO_DEFAULTS.get(String(ex.id)));return url?{...ex,videoUrl:url}:null;})
+  .filter(Boolean);
+
 // Pas de fiches clients de démonstration : leurs codes seraient des accès valides lisibles dans le bundle.
 
 // ─── FIRESTORE HOOK ───────────────────────────────────────────────────────────
-function useFirestoreCollection(collectionName, seed) {
+// patch (facultatif) : reçoit les documents existants et renvoie ceux à réécrire (ex. ajout de vidéos)
+function useFirestoreCollection(collectionName, seed, patch) {
   const [data, setDataLocal] = useState([]);
   const [ready, setReady] = useState(false);
 
@@ -1885,7 +1897,9 @@ function useFirestoreCollection(collectionName, seed) {
         const ex=existingMap.get(String(item.id));
         return ex&&item._v&&ex._v!==item._v;
       });
-      const toWrite=[...missing,...outdated];
+      const seeded=[...missing,...outdated];
+      const patched=patch?patch(existingMap).filter(p=>!seeded.some(w=>String(w.id)===String(p.id))):[];
+      const toWrite=[...seeded,...patched];
       if(toWrite.length>0){
         const BATCH_SIZE=499;
         const batches=[];
@@ -3936,7 +3950,7 @@ function LoadingScreen(){
 
 function CoachMain({onLogout}){
   const wide=useWide();
-  const [exercises,setExercises,exReady]=useFirestoreCollection("exercises",SEED_EX);
+  const [exercises,setExercises,exReady]=useFirestoreCollection("exercises",SEED_EX,exerciseVideoPatch);
   const [programs,setPrograms,pgReady]=useFirestoreCollection("programs",SEED_PROGRAMS);
   const [clients,setClients,clReady]=useFirestoreCollection("clients",[]);
   const [foods,setFoods,foodsReady]=useFirestoreCollection("foods",FOODS_DB);
